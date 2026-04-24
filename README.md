@@ -108,7 +108,39 @@ swift test
 
 ## Distribution
 
-This repository ships as source. To install on another Mac:
+### Build a DMG
+
+```sh
+./scripts/make-dmg.sh
+# → dist/Vox.dmg (drag-to-Applications installer)
+```
+
+Open the DMG, drag **Vox.app** onto the **Applications** alias. No admin password required for users in the `admin` group (Finder's drag-drop path, unlike `cp` from Terminal which sometimes triggers auth).
+
+### Publish a GitHub release
+
+```sh
+gh release create v0.1.0 --title "Vox 0.1.0" \
+    --notes "Initial release." dist/Vox.dmg
+```
+
+### First-launch on another Mac
+
+The DMG is **self-signed**, not Apple-notarized. Gatekeeper will say *"Vox.app cannot be opened because Apple cannot check it for malicious software."* Bypass once:
+
+1. Right-click **Vox.app** in `/Applications` → **Open** → **Open Anyway**.
+
+   *or equivalently from Terminal:*
+
+   ```sh
+   xattr -d com.apple.quarantine /Applications/Vox.app
+   ```
+
+After the first launch, macOS remembers the exemption. Later launches open normally.
+
+Notarization ($99/yr Apple Developer Program) removes that first-launch friction — skip for now, add later if distributing widely.
+
+### Build from source (alternative)
 
 ```sh
 git clone git@github.com:andykumeda/vox.git
@@ -117,8 +149,6 @@ cd vox
 ./scripts/build-app.sh
 open build/Vox.app
 ```
-
-Prebuilt binaries are not published. The self-signed `vox-dev` identity is machine-local and would not be trusted elsewhere without Apple notarization (Apple Developer Program, \$99/yr). Building from source is the current distribution path.
 
 ## Roadmap (not yet)
 
