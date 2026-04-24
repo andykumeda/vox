@@ -51,16 +51,23 @@ extendedKeyUsage       = critical, codeSigning
 subjectKeyIdentifier   = hash
 EOF
 
+# Pin to /usr/bin/openssl (LibreSSL) to avoid Homebrew OpenSSL 3 mismatches
+# that cause "MAC verification failed" on import.
+OPENSSL=/usr/bin/openssl
+
 echo "→ generating RSA key"
-openssl genrsa -out "$KEY" 2048 2>/dev/null
+"$OPENSSL" genrsa -out "$KEY" 2048 2>/dev/null
 
 echo "→ self-signing certificate (10 years)"
-openssl req -x509 -new -key "$KEY" -out "$CRT" -days 3650 \
+"$OPENSSL" req -x509 -new -key "$KEY" -out "$CRT" -days 3650 \
     -config "$CONFIG" -extensions v3_ext 2>/dev/null
 
-echo "→ bundling into PKCS#12"
-openssl pkcs12 -export -inkey "$KEY" -in "$CRT" -out "$P12" \
-    -name "$IDENT_NAME" -password "pass:$P12_PASS"
+echo "→ bundling into PKCS#12 (3DES + SHA1, broadly compatible)"
+"$OPENSSL" pkcs12 -export \
+    -inkey "$KEY" -in "$CRT" -out "$P12" \
+    -name "$IDENT_NAME" \
+    -passin "pass:" -passout "pass:$P12_PASS" \
+    -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg SHA1
 
 echo "→ importing into login keychain (will prompt for keychain access)"
 security import "$P12" -k "$KEYCHAIN" -P "$P12_PASS" \
