@@ -77,9 +77,9 @@ echo "→ setting partition list so codesign can use the key without prompts"
 security set-key-partition-list -S apple-tool:,apple:,codesign: \
     -s -k "" "$KEYCHAIN" >/dev/null 2>&1 || true
 
-echo "→ trusting certificate for code signing (best-effort, may need admin)"
-if sudo -n true 2>/dev/null || sudo true; then
-    if sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+echo "→ trusting certificate for code signing (optional, skipped without cached sudo)"
+if sudo -n true 2>/dev/null; then
+    if sudo -n security add-trusted-cert -d -r trustRoot -p codeSign \
         -k /Library/Keychains/System.keychain "$CRT" 2>/dev/null; then
         echo "  ✓ trusted in System keychain"
     else
@@ -87,7 +87,8 @@ if sudo -n true 2>/dev/null || sudo true; then
         echo "    codesign will still work because the private key is in your login keychain."
     fi
 else
-    echo "  ⚠ sudo unavailable, skipping trust step. codesign will still work."
+    echo "  skipped — run 'sudo -v' first if you want System-keychain trust."
+    echo "  Not required: codesign works fine without it."
 fi
 
 echo
