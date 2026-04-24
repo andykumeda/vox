@@ -12,8 +12,8 @@ set -euo pipefail
 IDENT_NAME="vox-dev"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
-if security find-identity -v -p codesigning | grep -q "\"$IDENT_NAME\""; then
-    echo "✓ '$IDENT_NAME' already exists and is trusted. Nothing to do."
+if security find-identity -v | grep -q "\"$IDENT_NAME\""; then
+    echo "✓ '$IDENT_NAME' already exists in the keychain. Nothing to do."
     exit 0
 fi
 
@@ -77,11 +77,20 @@ echo "→ setting partition list so codesign can use the key without prompts"
 security set-key-partition-list -S apple-tool:,apple:,codesign: \
     -s -k "" "$KEYCHAIN" >/dev/null 2>&1 || true
 
-echo "→ trusting certificate for code signing (requires admin password)"
-sudo security add-trusted-cert -d -r trustRoot -p codeSign \
-    -k /Library/Keychains/System.keychain "$CRT"
+echo "→ trusting certificate for code signing (best-effort, may need admin)"
+if sudo -n true 2>/dev/null || sudo true; then
+    if sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+        -k /Library/Keychains/System.keychain "$CRT" 2>/dev/null; then
+        echo "  ✓ trusted in System keychain"
+    else
+        echo "  ⚠ couldn't write System keychain trust (MDM-managed Mac?)"
+        echo "    codesign will still work because the private key is in your login keychain."
+    fi
+else
+    echo "  ⚠ sudo unavailable, skipping trust step. codesign will still work."
+fi
 
 echo
-echo "✓ identity '$IDENT_NAME' created and trusted."
+echo "✓ identity '$IDENT_NAME' created."
 echo "  Rerun ./scripts/build-app.sh — it will now sign with this identity."
 echo "  Grant TCC permissions once; they persist across rebuilds."
