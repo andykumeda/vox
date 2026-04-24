@@ -12,7 +12,8 @@ set -euo pipefail
 IDENT_NAME="vox-dev"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
-if security find-identity -v | grep -q "\"$IDENT_NAME\""; then
+EXISTING="$(security find-identity -v -p codesigning 2>/dev/null; security find-identity -v 2>/dev/null)"
+if printf '%s\n' "$EXISTING" | grep -q "\"$IDENT_NAME\""; then
     echo "✓ '$IDENT_NAME' already exists in the keychain. Nothing to do."
     exit 0
 fi

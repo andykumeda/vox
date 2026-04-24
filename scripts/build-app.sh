@@ -32,7 +32,8 @@ cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
 # scripts/create-dev-cert.sh) so TCC permissions stick across rebuilds.
 # Fall back to ad-hoc if the identity isn't installed.
 SIGN_IDENTITY="-"
-if security find-identity -v 2>/dev/null | grep -q '"vox-dev"'; then
+IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null; security find-identity -v 2>/dev/null)"
+if printf '%s\n' "$IDENTITIES" | grep -q '"vox-dev"'; then
     SIGN_IDENTITY="vox-dev"
     echo "→ codesign (vox-dev — permissions will persist)"
 else
