@@ -6,17 +6,30 @@ Context-aware: when the frontmost app is a terminal (`Terminal.app`, `iTerm2`, `
 
 ## Requirements
 
-- macOS 13+ on Apple Silicon
+- macOS 13+ on Apple Silicon (M1/M2/M3/M4)
 - Xcode 16+ command-line tools (`xcode-select --install`) — ships with Swift 6
 - An [OpenAI API key](https://platform.openai.com/api-keys)
+- `git` (preinstalled on macOS)
+- *Optional but watch out:* if you have Homebrew OpenSSL 3 on `PATH` ahead of `/usr/bin/openssl`, `create-dev-cert.sh` may fail with `MAC verification failed` during the PKCS#12 import. The script pins `/usr/bin/openssl` internally to avoid this; if you still see it, run `which openssl` to confirm.
 
 ## Quick start (recommended)
 
+From a fresh Mac, end to end:
+
 ```sh
+xcode-select --install                          # if not already installed
+git clone https://github.com/andykumeda/vox.git
+cd vox
 ./scripts/setup.sh
 ```
 
-One-shot bootstrap: preflight checks (Xcode tools, Swift, OpenSSL), creates the `vox-dev` signing identity if missing, builds, launches, and prints the permission-grant checklist. Idempotent — safe to re-run.
+`setup.sh` is one-shot bootstrap. Preflight checks (Xcode tools, Swift, `/usr/bin/openssl`, `security` CLI, arch), creates the `vox-dev` signing identity if missing (will prompt for your **login keychain password**), builds, kills any old running Vox, launches the new build, and prints the permission-grant checklist. Idempotent — safe to re-run.
+
+After `setup.sh` finishes:
+
+1. Grant **Microphone**, **Input Monitoring**, **Accessibility** when macOS prompts (or in System Settings → Privacy & Security if a prompt was missed).
+2. Click the menu-bar bubble icon → **Settings…** → paste OpenAI API key → **Save** → click **Always Allow** on the keychain prompt.
+3. Hold **Fn**, speak, release.
 
 ## Manual build
 

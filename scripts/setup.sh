@@ -47,6 +47,12 @@ if ! command -v /usr/bin/openssl >/dev/null 2>&1; then
 fi
 green "✓ /usr/bin/openssl present"
 
+WHICH_OPENSSL="$(command -v openssl 2>/dev/null || true)"
+if [[ -n "$WHICH_OPENSSL" && "$WHICH_OPENSSL" != "/usr/bin/openssl" ]]; then
+    yellow "  note: openssl on PATH is $WHICH_OPENSSL (not /usr/bin/openssl)"
+    yellow "  create-dev-cert.sh pins /usr/bin/openssl explicitly, so this is fine."
+fi
+
 if ! command -v security >/dev/null 2>&1; then
     red "security command missing. macOS install is broken."
     exit 1
