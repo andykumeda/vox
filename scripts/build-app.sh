@@ -40,8 +40,24 @@ cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
 #      making `--sign vox-dev` ambiguous. Sign by SHA-1 hash to disambiguate.
 SIGN_IDENTITY="-"
 LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
-VOX_SHA="$(security find-identity "$LOGIN_KC" 2>/dev/null \
-    | awk '/"vox-dev"/ {print $2; exit}')"
+# Probe in two phases:
+#   (a) default search list with -v — catches the common case where cert lives
+#       in System.keychain (System-trusted) and key in login.keychain.
+#   (b) login keychain alone, no -v — catches MDM-managed Macs where the
+#       cert can't reach System.keychain and lists as CSSMERR_TP_NOT_TRUSTED
+#       (filtered by -v) but the private key + cert are in login.keychain.
+VOX_MATCHES="$(security find-identity -v -p codesigning 2>/dev/null \
+    | awk '/"vox-dev"/ {print $2}')"
+if [ -z "$VOX_MATCHES" ]; then
+    VOX_MATCHES="$(security find-identity "$LOGIN_KC" 2>/dev/null \
+        | awk '/"vox-dev"/ {print $2}')"
+fi
+VOX_MATCH_COUNT="$(printf '%s\n' "$VOX_MATCHES" | grep -c . || true)"
+if [ "$VOX_MATCH_COUNT" -gt 1 ]; then
+    echo "⚠ found $VOX_MATCH_COUNT 'vox-dev' identities; using first."
+    echo "  consider re-running ./scripts/create-dev-cert.sh to dedupe."
+fi
+VOX_SHA="$(printf '%s\n' "$VOX_MATCHES" | head -n 1)"
 BUNDLE_ID="com.andykumeda.vox"
 REQ_ARG=()
 if [ -n "$VOX_SHA" ]; then
