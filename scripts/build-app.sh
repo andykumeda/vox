@@ -31,11 +31,20 @@ cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
 # Prefer the persistent "vox-dev" self-signed identity (created by
 # scripts/create-dev-cert.sh) so TCC permissions stick across rebuilds.
 # Fall back to ad-hoc if the identity isn't installed.
+#
+# Probe the login keychain directly (not `find-identity -v`) for two reasons:
+#   1. On MDM-managed Macs the self-signed cert can't reach the System
+#      keychain, so it lists as CSSMERR_TP_NOT_TRUSTED and `-v` filters it
+#      out — but codesign can still sign with the private key just fine.
+#   2. Prior runs sometimes left duplicate "vox-dev" certs in System.keychain
+#      making `--sign vox-dev` ambiguous. Sign by SHA-1 hash to disambiguate.
 SIGN_IDENTITY="-"
-IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null; security find-identity -v 2>/dev/null)"
-if printf '%s\n' "$IDENTITIES" | grep -q '"vox-dev"'; then
-    SIGN_IDENTITY="vox-dev"
-    echo "→ codesign (vox-dev — permissions will persist)"
+LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
+VOX_SHA="$(security find-identity "$LOGIN_KC" 2>/dev/null \
+    | awk '/"vox-dev"/ {print $2; exit}')"
+if [ -n "$VOX_SHA" ]; then
+    SIGN_IDENTITY="$VOX_SHA"
+    echo "→ codesign (vox-dev $VOX_SHA — permissions will persist)"
 else
     echo "→ codesign (ad-hoc — permissions will reset on each rebuild)"
     echo "   run ./scripts/create-dev-cert.sh once to make permissions persistent"

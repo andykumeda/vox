@@ -19,12 +19,27 @@ if printf '%s\n' "$EXISTING" | grep -q "\"$IDENT_NAME\""; then
 fi
 
 # Clean any partial/untrusted leftovers from prior runs (delete each by SHA-1).
-echo "→ cleaning any leftover '$IDENT_NAME' certs"
+echo "→ cleaning any leftover '$IDENT_NAME' certs from login keychain"
 security find-certificate -a -c "$IDENT_NAME" -Z "$KEYCHAIN" 2>/dev/null \
     | awk '/SHA-1 hash:/ {print $NF}' \
     | while read -r h; do
         security delete-certificate -Z "$h" "$KEYCHAIN" >/dev/null 2>&1 || true
     done
+
+# Also sweep System.keychain duplicates — prior runs that *did* get a
+# System-keychain trust grant leave certs there, and multiple "vox-dev"
+# entries make `codesign --sign vox-dev` ambiguous. Best-effort with
+# cached sudo; silent skip if not.
+if sudo -n true 2>/dev/null; then
+    echo "→ cleaning any '$IDENT_NAME' certs from System keychain"
+    sudo -n security find-certificate -a -c "$IDENT_NAME" -Z \
+        /Library/Keychains/System.keychain 2>/dev/null \
+        | awk '/SHA-1 hash:/ {print $NF}' \
+        | while read -r h; do
+            sudo -n security delete-certificate -Z "$h" \
+                /Library/Keychains/System.keychain >/dev/null 2>&1 || true
+        done
+fi
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT

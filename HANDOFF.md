@@ -59,6 +59,33 @@ things happened:
    If they built before pulling the fix, they got an ad-hoc binary
    and the cached app reflects that.
 
+### Actual root cause found on 2026-04-24 session
+
+Both of the above were red herrings on this MDM-managed Mac.
+The real failure mode is two-layered:
+
+1. **`find-identity -v` filters out untrusted self-signed certs.**
+   Without a System-keychain trust root (which MDM prevents writing),
+   the cert lists as `CSSMERR_TP_NOT_TRUSTED` and `-v` filters it.
+   The old probe `security find-identity -v | grep '"vox-dev"'`
+   therefore returns nothing → ad-hoc fallback, even with a perfectly
+   usable private key sitting in the login keychain.
+2. **`create-dev-cert.sh` only cleaned the login keychain.** Prior
+   runs that *did* manage to add System-keychain trust left stale
+   certs there. Seven accumulated on this Mac. That made
+   `codesign --sign vox-dev` ambiguous.
+
+Fix (committed this session):
+- `build-app.sh` now probes `security find-identity ~/Library/Keychains/login.keychain-db`
+  (no `-v`) and signs by SHA-1 hash — unambiguous, works whether
+  the cert is System-trusted or not.
+- `create-dev-cert.sh` now sweeps System-keychain duplicates
+  (best-effort with cached sudo).
+
+If you land fresh on this Mac and see adhoc output from `build-app.sh`
+despite `vox-dev` existing in `~/Library/Keychains/login.keychain-db`,
+you have an old build script. Pull.
+
 ## What to do — in order
 
 ### 1. Pull latest
