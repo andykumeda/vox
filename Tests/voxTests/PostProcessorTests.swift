@@ -242,11 +242,12 @@ final class PostProcessorTests: XCTestCase {
     }
 
     func testCommandLoneTabStaysAsText() {
-        // Single-word "tab" — too risky to interpret, leave as text.
+        // Single-word "tab" — too risky to interpret, leave as text. Trailing
+        // Space is added by command-mode default (no other suffix keys).
         let p = PostProcessor(mode: .command)
         let r = p.process("tab")
         XCTAssertEqual(r.text, "tab")
-        XCTAssertEqual(r.suffixKeys, [])
+        XCTAssertEqual(r.suffixKeys, [.space])
     }
 
     func testCommandLoneReturnFiresKey() {
@@ -270,11 +271,14 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(r.suffixKeys, [.escape])
     }
 
-    func testCommandNoSuffixWhenAbsent() {
+    func testCommandTrailingSpaceWhenNoOtherKeys() {
+        // Command mode appends a Space keystroke when no other suffix key was
+        // extracted, so back-to-back command-mode dictations get a separator.
+        // Shells ignore the trailing space before Enter.
         let p = PostProcessor(mode: .command)
         let r = p.process("ls -la")
         XCTAssertEqual(r.text, "ls -la")
-        XCTAssertEqual(r.suffixKeys, [])
+        XCTAssertEqual(r.suffixKeys, [.space])
     }
 
     func testProseDoesNotStripTrailingTab() {
@@ -321,7 +325,7 @@ final class PostProcessorTests: XCTestCase {
         let p = PostProcessor(mode: .command)
         let r = p.process("echo C")
         XCTAssertEqual(r.text, "echo C")
-        XCTAssertEqual(r.suffixKeys, [])
+        XCTAssertEqual(r.suffixKeys, [.space])
     }
 
     // MARK: - Escape

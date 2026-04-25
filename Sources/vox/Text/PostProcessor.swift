@@ -45,6 +45,14 @@ public struct PostProcessor {
             let extracted = extractTrailingSuffixKeys(s)
             s = extracted.text
             suffixKeys = extracted.keys
+            // If no other keys were extracted and we did paste something, send
+            // a Space keystroke so back-to-back command-mode dictations are
+            // separated. Skipped when tab/return/escape/control was already
+            // attached (those have specific semantics that shouldn't get an
+            // extra space prefix).
+            if suffixKeys.isEmpty && !s.isEmpty {
+                suffixKeys = [.space]
+            }
         }
 
         return (restoreURLs(s, urlMap), suffixKeys)
