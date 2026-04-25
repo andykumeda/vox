@@ -4,8 +4,13 @@ import XCTest
 final class NumberNormalizerTests: XCTestCase {
     let n = NumberNormalizer()
 
-    func testSingleDigit() {
-        XCTAssertEqual(n.normalize("I have three apples"), "I have 3 apples")
+    func testSingleSmallNumberStaysAsWord() {
+        // Spelled-out 1–9 in prose reads better as a word.
+        XCTAssertEqual(n.normalize("I have three apples"), "I have three apples")
+    }
+
+    func testSingleTenOrAboveConverts() {
+        XCTAssertEqual(n.normalize("I have twenty apples"), "I have 20 apples")
     }
 
     func testTeens() {
@@ -37,14 +42,15 @@ final class NumberNormalizerTests: XCTestCase {
     }
 
     func testPreservesSurroundingPunctuation() {
-        XCTAssertEqual(n.normalize("bought three. sold five."), "bought 3. sold 5.")
+        // Single-digit words left as words, but multi-word runs still convert.
+        XCTAssertEqual(n.normalize("bought three. sold twenty."), "bought three. sold 20.")
     }
 
-    func testLeadingNumberWord() {
-        XCTAssertEqual(n.normalize("five apples"), "5 apples")
+    func testLeadingSmallNumberWordStays() {
+        XCTAssertEqual(n.normalize("five apples"), "five apples")
     }
 
-    func testTrailingNumberWord() {
-        XCTAssertEqual(n.normalize("apples five"), "apples 5")
+    func testTrailingSmallNumberWordStays() {
+        XCTAssertEqual(n.normalize("apples five"), "apples five")
     }
 }

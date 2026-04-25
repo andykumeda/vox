@@ -20,9 +20,14 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(p.apply("hello. how are you"), "Hello. How are you. ")
     }
 
-    func testProseConvertsNumbers() {
+    func testProseConvertsCompoundNumbers() {
         let p = PostProcessor(mode: .prose)
         XCTAssertEqual(p.apply("i have twenty three apples"), "I have 23 apples. ")
+    }
+
+    func testProseLeavesSingleDigitWordAsWord() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("i have three apples"), "I have three apples. ")
     }
 
     func testProseMultiSentenceCombined() {
@@ -31,6 +36,37 @@ final class PostProcessorTests: XCTestCase {
             p.apply("hello world. this is a test. i have twenty three apples"),
             "Hello world. This is a test. I have 23 apples. "
         )
+    }
+
+    // MARK: - URL / domain / filename shielding
+
+    func testProsePreservesBareDomain() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("check out youtube.com"), "Check out youtube.com. ")
+    }
+
+    func testProsePreservesURLWithPath() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(
+            p.apply("see https://github.com/user/repo for details"),
+            "See https://github.com/user/repo for details. "
+        )
+    }
+
+    func testProsePreservesIPAddress() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("ping 192.168.1.1"), "Ping 192.168.1.1. ")
+    }
+
+    func testProsePreservesFilename() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("open README.md"), "Open README.md. ")
+    }
+
+    func testProseStillAddsSpaceForRegularSentenceEnd() {
+        // Shielding must not leak into normal sentence boundaries.
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("hello.how are you"), "Hello. How are you. ")
     }
 
     func testProseCollapsesWhitespace() {

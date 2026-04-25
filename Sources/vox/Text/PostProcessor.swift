@@ -14,6 +14,13 @@ public struct PostProcessor {
         s = s.trimmingCharacters(in: .whitespacesAndNewlines)
         s = collapseInternalWhitespace(s)
         s = numberNormalizer.normalize(s)
+
+        // Shield URLs, domains, IPs, version strings, and common file names from
+        // sentence-splitting + capitalization so "youtube.com" doesn't become
+        // "Youtube. Com." after post-processing.
+        let (shielded, urlMap) = shieldURLs(s)
+        s = shielded
+
         s = ensureSpaceAfterSentenceEnd(s)
 
         switch mode {
@@ -26,7 +33,7 @@ public struct PostProcessor {
             s = stripTrailingSentencePunctuation(s)
         }
 
-        return s
+        return restoreURLs(s, urlMap)
     }
 
     // Prose mode: guarantee output ends with . ! or ? so the next dictation starts a new sentence.
@@ -103,5 +110,57 @@ public struct PostProcessor {
             s.removeLast()
         }
         return s
+    }
+
+    // MARK: - URL / filename shielding
+
+    // Private-Use-Area markers — unlikely to collide with any speech output.
+    private static let shieldOpen = "\u{E000}"
+    private static let shieldClose = "\u{E001}"
+
+    private static let shieldRegex: NSRegularExpression? = {
+        // Ordered alternation: explicit schemes first, then bare domains,
+        // IPs, versions, file names.
+        let tlds = "com|org|net|io|dev|app|co|edu|gov|uk|us|me|ai|xyz|site|tech|blog|news|info|biz|cloud|tv|fm|jp|de|fr|ca|eu|sh|re|to|ly"
+        let exts = "txt|md|pdf|swift|js|ts|tsx|jsx|json|yaml|yml|sh|zsh|bash|log|py|rb|rs|go|java|cpp|c|h|hpp|html|css|scss|png|jpg|jpeg|gif|svg|mp3|mp4|wav|zip|tar|gz|csv|xml|toml"
+        // TLDs and file extensions are intentionally lowercase-only (no
+        // caseInsensitive flag). Whisper capitalizes sentence starts, so
+        // "Sentence one. Org members arrived." would otherwise false-match
+        // "one. Org" as a domain. URLs/filenames almost always appear in
+        // lowercase — accept the rare "PHOTO.JPG" miss to avoid that.
+        let parts = [
+            "https?://[^\\s]+",
+            "\\b[a-zA-Z0-9][a-zA-Z0-9-]*\\.(?:\(tlds))(?:\\.[a-z]{2,})?(?:/[^\\s]*)?\\b",
+            "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b",
+            "\\bv\\d+(?:\\.\\d+)+\\b",
+            "\\b[a-zA-Z0-9_-]+\\.(?:\(exts))\\b",
+        ]
+        let pattern = parts.joined(separator: "|")
+        return try? NSRegularExpression(pattern: pattern)
+    }()
+
+    private func shieldURLs(_ input: String) -> (String, [(String, String)]) {
+        guard let re = Self.shieldRegex else { return (input, []) }
+        let nsInput = input as NSString
+        let matches = re.matches(in: input, options: [], range: NSRange(location: 0, length: nsInput.length))
+        guard !matches.isEmpty else { return (input, []) }
+
+        var map: [(String, String)] = []
+        var result = nsInput.copy() as! NSString
+        for (i, m) in matches.enumerated().reversed() {
+            let original = nsInput.substring(with: m.range)
+            let token = "\(Self.shieldOpen)\(i)\(Self.shieldClose)"
+            map.append((token, original))
+            result = result.replacingCharacters(in: m.range, with: token) as NSString
+        }
+        return (result as String, map)
+    }
+
+    private func restoreURLs(_ input: String, _ map: [(String, String)]) -> String {
+        var result = input
+        for (token, original) in map {
+            result = result.replacingOccurrences(of: token, with: original)
+        }
+        return result
     }
 }

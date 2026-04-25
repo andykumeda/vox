@@ -66,6 +66,12 @@ public struct NumberNormalizer {
             // Not a parseable number run — keep originals.
             return tokens.map { $0.original }
         }
+        // Single spelled-out word < 10 is almost always better left as a word
+        // in prose ("I have three apples"). Compound runs like "twenty-three"
+        // or "two thousand" clearly want digits — convert those.
+        if words.count == 1 && n < 10 {
+            return tokens.map { $0.original }
+        }
         // Preserve leading whitespace of first token, trailing of last token.
         let leading = tokens.first.map { String($0.leadingWhitespace) } ?? ""
         let trailing = tokens.last.map { String($0.trailingWhitespace) } ?? ""
