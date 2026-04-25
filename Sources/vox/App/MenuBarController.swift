@@ -52,7 +52,7 @@ final class MenuBarController: NSObject {
     private let hotkey = HotkeyMonitor()
     private let injector = TextInjector()
     private let sound = SoundPlayer()
-    private lazy var groq = GroqClient { [keychain] in keychain.read() }
+    private lazy var transcriber = OpenAITranscriber { [keychain] in keychain.read() }
     private lazy var settingsController = SettingsWindowController(keychain: keychain)
 
     private var currentMode: TranscriptionMode = .prose
@@ -145,7 +145,7 @@ final class MenuBarController: NSObject {
         sound.play(.stop)
         let mode = currentMode
 
-        // Silence gate: skip Groq if too short or too quiet.
+        // Silence gate: skip the transcription API if too short or too quiet.
         // Whisper hallucinates / echoes the system prompt when fed silence.
         let (durationSec, rms) = wavStats(wav)
         dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) mode=\(mode)")
@@ -160,8 +160,8 @@ final class MenuBarController: NSObject {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let raw = try await self.groq.transcribe(wav: wav, mode: mode)
-                dlog("groq raw=\(raw)")
+                let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
+                dlog("raw=\(raw)")
                 let processed = PostProcessor(mode: mode).apply(raw)
                 dlog("processed=\(processed)")
                 await MainActor.run {

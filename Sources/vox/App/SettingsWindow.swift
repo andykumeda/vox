@@ -15,19 +15,19 @@ struct SettingsView: View {
                 .fontWeight(.semibold)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Groq API key")
+                Text("OpenAI API key")
                     .font(.headline)
                 HStack {
                     if showKey {
-                        TextField("gsk_…", text: $apiKey)
+                        TextField("sk-…", text: $apiKey)
                             .textFieldStyle(.roundedBorder)
                     } else {
-                        SecureField("gsk_…", text: $apiKey)
+                        SecureField("sk-…", text: $apiKey)
                             .textFieldStyle(.roundedBorder)
                     }
                     Button(showKey ? "Hide" : "Show") { showKey.toggle() }
                 }
-                Text("Stored in macOS Keychain. Get a free key at console.groq.com.")
+                Text("Stored in macOS Keychain. Get a key at platform.openai.com/api-keys.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -9,8 +9,8 @@ then act.
 
 ## What Vox is
 
-macOS Apple-Silicon push-to-talk dictation app. Hold Fn → record → Groq
-`whisper-large-v3` → paste at cursor. Two modes (prose / command,
+macOS Apple-Silicon push-to-talk dictation app. Hold Fn → record → OpenAI
+`gpt-4o-transcribe` → paste at cursor. Two modes (prose / command,
 chosen by frontmost-app bundle ID). Menu-bar app
 (`LSUIElement=true`), no Dock icon. Repo:
 [github.com/andykumeda/vox](https://github.com/andykumeda/vox).
@@ -173,7 +173,7 @@ Then hold **Fn** for ~2 s and speak. You should see a sequence like:
 [vox] Fn press
 [vox] Fn release
 [vox] wav bytes=... duration=...s rms=... mode=prose
-[vox] groq raw=...
+[vox] raw=...
 [vox] processed=...
 ```
 
@@ -191,7 +191,7 @@ Accessibility grant). If it stays `false`, see *Known gotchas* below.
 - **Fn key may not fire** if "Press 🌐 key to" is set to anything
   other than *Do Nothing* in System Settings → Keyboard. macOS
   intercepts before our `CGEventTap` sees it.
-- **First-time Groq API key save** triggers a Keychain prompt. Click
+- **First-time OpenAI API key save** triggers a Keychain prompt. Click
   **Always Allow** (not "Allow") — otherwise it re-prompts every
   launch.
 - **Self-relocator** triggers when running from `/Volumes/*` (mounted

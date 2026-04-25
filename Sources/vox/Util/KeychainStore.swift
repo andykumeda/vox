@@ -10,7 +10,7 @@ public struct KeychainStore: Sendable {
     public let service: String
     public let account: String
 
-    public init(service: String = "com.andykumeda.vox", account: String = "groq-api-key") {
+    public init(service: String = "com.andykumeda.vox", account: String = "openai-api-key") {
         self.service = service
         self.account = account
     }

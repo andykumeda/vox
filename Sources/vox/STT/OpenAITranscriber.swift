@@ -1,6 +1,6 @@
 import Foundation
 
-public enum GroqError: Error, CustomStringConvertible {
+public enum TranscriptionError: Error, CustomStringConvertible {
     case missingAPIKey
     case httpError(Int, String)
     case invalidResponse
@@ -8,22 +8,22 @@ public enum GroqError: Error, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .missingAPIKey: return "Groq API key missing — set it in Settings."
-        case .httpError(let code, let body): return "Groq HTTP \(code): \(body)"
-        case .invalidResponse: return "Invalid response from Groq"
+        case .missingAPIKey: return "OpenAI API key missing — set it in Settings."
+        case .httpError(let code, let body): return "OpenAI HTTP \(code): \(body)"
+        case .invalidResponse: return "Invalid response from OpenAI"
         case .transportError(let e): return "Transport error: \(e.localizedDescription)"
         }
     }
 }
 
-public struct GroqClient {
+public struct OpenAITranscriber {
     public let endpoint: URL
     public let model: String
     public let apiKeyProvider: () -> String?
 
     public init(
-        endpoint: URL = URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!,
-        model: String = "whisper-large-v3",
+        endpoint: URL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
+        model: String = "gpt-4o-transcribe",
         apiKeyProvider: @escaping () -> String?
     ) {
         self.endpoint = endpoint
@@ -32,9 +32,9 @@ public struct GroqClient {
     }
 
     public func transcribe(wav: Data, mode: TranscriptionMode) async throws -> String {
-        guard let raw = apiKeyProvider() else { throw GroqError.missingAPIKey }
+        guard let raw = apiKeyProvider() else { throw TranscriptionError.missingAPIKey }
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { throw GroqError.missingAPIKey }
+        guard !key.isEmpty else { throw TranscriptionError.missingAPIKey }
 
         let boundary = "vox-\(UUID().uuidString)"
         var request = URLRequest(url: endpoint)
@@ -47,15 +47,15 @@ public struct GroqClient {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            throw GroqError.transportError(error)
+            throw TranscriptionError.transportError(error)
         }
 
-        guard let http = response as? HTTPURLResponse else { throw GroqError.invalidResponse }
+        guard let http = response as? HTTPURLResponse else { throw TranscriptionError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw GroqError.httpError(http.statusCode, body)
+            throw TranscriptionError.httpError(http.statusCode, body)
         }
-        guard let text = String(data: data, encoding: .utf8) else { throw GroqError.invalidResponse }
+        guard let text = String(data: data, encoding: .utf8) else { throw TranscriptionError.invalidResponse }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

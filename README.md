@@ -1,6 +1,6 @@
 # Vox
 
-Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn** to speak, release to transcribe with Groq's `whisper-large-v3`. Output is pasted at the cursor in whichever app has focus.
+Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn** to speak, release to transcribe with OpenAI's `gpt-4o-transcribe`. Output is pasted at the cursor in whichever app has focus.
 
 Context-aware: when the frontmost app is a terminal (`Terminal.app`, `iTerm2`, `Warp`, `Ghostty`, `Alacritty`, `kitty`, `WezTerm`, `Hyper`, `Wave`), Vox switches to **command mode** — no auto-capitalize, no trailing period, Whisper prompted with common shell vocabulary. Otherwise, **prose mode** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, and appends a terminal period + trailing space if missing.
 
@@ -8,7 +8,7 @@ Context-aware: when the frontmost app is a terminal (`Terminal.app`, `iTerm2`, `
 
 - macOS 13+ on Apple Silicon
 - Xcode 16+ command-line tools (`xcode-select --install`) — ships with Swift 6
-- A [Groq API key](https://console.groq.com) (free tier is sufficient)
+- An [OpenAI API key](https://platform.openai.com/api-keys) (`gpt-4o-transcribe`, ~$0.006/minute)
 
 ## Build
 
@@ -46,7 +46,7 @@ If Fn doesn't trigger: **System Settings → Keyboard → "Press 🌐 key to"** 
 
 Click the menu bar mic icon → **Settings…**
 
-- **Groq API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `groq-api-key`). Click **Always Allow** on the keychain prompt the first time.
+- **OpenAI API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `openai-api-key`). Click **Always Allow** on the keychain prompt the first time.
 - **Keep transcription on clipboard after paste** — when on, the transcribed text remains on your clipboard so you can Cmd+V again if focus moved. When off (default), your prior clipboard is restored ~400 ms after paste.
 
 ## Usage
@@ -65,7 +65,7 @@ Hold **Fn**, speak, release. The menu bar icon goes red while recording, animate
 
 ### Silence gate
 
-Empty or very quiet recordings are dropped before hitting Groq. Whisper tends to hallucinate or echo the system prompt when given silence, so Vox requires at least ~0.35 s of audio and a minimum RMS.
+Empty or very quiet recordings are dropped before hitting the transcription API. Speech models tend to hallucinate or echo the system prompt when given silence, so Vox requires at least ~0.35 s of audio and a minimum RMS.
 
 ## Log file
 
@@ -75,7 +75,7 @@ Vox always appends to `~/Library/Logs/vox.log`:
 tail -f ~/Library/Logs/vox.log
 ```
 
-You'll see Fn press/release, WAV byte counts, Groq responses, and post-processor output.
+You'll see Fn press/release, WAV byte counts, API responses, and post-processor output.
 
 ## Project layout
 
@@ -92,7 +92,7 @@ Sources/vox/
   Audio/                 AudioRecorder — AVAudioEngine → 16 kHz mono 16-bit WAV
   Context/               ContextDetector — NSWorkspace frontmost → prose/command
   Hotkey/                HotkeyMonitor — CGEventTap on Fn (kCGEventFlagMaskSecondaryFn)
-  STT/                   GroqClient, TranscriptionMode
+  STT/                   OpenAITranscriber, TranscriptionMode
   Text/                  PostProcessor, NumberNormalizer, TextInjector
   Util/                  KeychainStore, SoundPlayer, AppSettings
 Tests/voxTests/          Unit tests for PostProcessor, NumberNormalizer, ContextDetector
