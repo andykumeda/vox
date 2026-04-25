@@ -101,12 +101,4 @@ enum Relocator {
         guard parts.count >= 3, parts[1] == "Volumes" else { return nil }
         return "/Volumes/" + parts[2]
     }
-
-    private static func presentError(_ error: Error, note: String) {
-        let alert = NSAlert()
-        alert.messageText = "Couldn't move Vox"
-        alert.informativeText = "\(note)\n\n\(error.localizedDescription)"
-        alert.alertStyle = .warning
-        alert.runModal()
-    }
 }

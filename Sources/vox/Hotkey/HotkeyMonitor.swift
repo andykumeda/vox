@@ -15,7 +15,7 @@ public final class HotkeyMonitor {
     public init() {}
 
     public func start() -> Bool {
-        let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
+        let mask: CGEventMask = 1 << CGEventType.flagsChanged.rawValue
 
         let userInfo = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
