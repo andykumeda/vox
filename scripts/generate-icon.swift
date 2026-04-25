@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
 // Renders a 1024x1024 PNG AppIcon: blue→purple gradient rounded-square with
-// white SF Symbol `mic.fill` centered. Output: Resources/AppIcon.png.
+// white SF Symbol `text.bubble.fill` centered. Output: Resources/AppIcon.png.
 // A subsequent `iconutil` pass builds the .icns.
 
 import AppKit
@@ -63,11 +63,11 @@ ctx.drawLinearGradient(
 )
 ctx.restoreGState()
 
-// SF Symbol mic.fill in white
+// SF Symbol text.bubble.fill in white
 let symbolConfig = NSImage.SymbolConfiguration(pointSize: size * 0.58, weight: .semibold)
-guard let sym = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)?
+guard let sym = NSImage(systemSymbolName: "text.bubble.fill", accessibilityDescription: nil)?
     .withSymbolConfiguration(symbolConfig) else {
-    fputs("failed to load SF Symbol mic.fill — need macOS 11+\n", stderr)
+    fputs("failed to load SF Symbol text.bubble.fill — need macOS 11+\n", stderr)
     exit(1)
 }
 
