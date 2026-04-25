@@ -10,7 +10,15 @@ Context-aware: when the frontmost app is a terminal (`Terminal.app`, `iTerm2`, `
 - Xcode 16+ command-line tools (`xcode-select --install`) — ships with Swift 6
 - An [OpenAI API key](https://platform.openai.com/api-keys)
 
-## Build
+## Quick start (recommended)
+
+```sh
+./scripts/setup.sh
+```
+
+One-shot bootstrap: preflight checks (Xcode tools, Swift, OpenSSL), creates the `vox-dev` signing identity if missing, builds, launches, and prints the permission-grant checklist. Idempotent — safe to re-run.
+
+## Manual build
 
 ```sh
 ./scripts/create-dev-cert.sh   # ONE TIME — persistent self-signed identity
