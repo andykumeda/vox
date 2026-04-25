@@ -36,9 +36,9 @@ enum MenuIconState {
 
     var symbolName: String {
         switch self {
-        case .idle: return "mic"
-        case .recording: return "mic.fill"
-        case .transcribing: return "waveform"
+        case .idle: return "text.bubble"
+        case .recording: return "text.bubble.fill"
+        case .transcribing: return "text.bubble.fill"
         case .error: return "exclamationmark.triangle"
         }
     }
@@ -52,10 +52,14 @@ final class MenuBarController: NSObject {
     private let hotkey = HotkeyMonitor()
     private let injector = TextInjector()
     private let sound = SoundPlayer()
-    private lazy var transcriber = OpenAITranscriber { [keychain] in keychain.read() }
+    private lazy var transcriber = OpenAITranscriber(
+        modelProvider: { AppSettings.transcriptionModel.rawValue },
+        apiKeyProvider: { [keychain] in keychain.read() }
+    )
     private lazy var settingsController = SettingsWindowController(keychain: keychain)
 
     private var currentMode: TranscriptionMode = .prose
+    private var pulseTimer: Timer?
     private var state: MenuIconState = .idle {
         didSet { refreshIcon() }
     }
@@ -106,9 +110,31 @@ final class MenuBarController: NSObject {
 
     private func refreshIcon() {
         guard let button = statusItem.button else { return }
-        let image = NSImage(systemSymbolName: state.symbolName, accessibilityDescription: "Vox")
-        image?.isTemplate = (state != .recording)
-        button.image = image
+        let base = NSImage(systemSymbolName: state.symbolName, accessibilityDescription: "Vox")
+        switch state {
+        case .recording:
+            // Palette config bakes the color into the rendered SF Symbol.
+            // NSStatusBarButton's contentTintColor is unreliable in the menubar,
+            // so apply the color directly to the image.
+            let cfg = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            let tinted = base?.withSymbolConfiguration(cfg)
+            tinted?.isTemplate = false
+            button.image = tinted
+        case .transcribing:
+            let cfg = NSImage.SymbolConfiguration(paletteColors: [.systemOrange])
+            let tinted = base?.withSymbolConfiguration(cfg)
+            tinted?.isTemplate = false
+            button.image = tinted
+        case .idle, .error:
+            base?.isTemplate = true
+            button.image = base
+        }
+        button.contentTintColor = nil
+        if state == .transcribing {
+            startPulsing()
+        } else {
+            stopPulsing()
+        }
         button.toolTip = {
             switch state {
             case .idle: return "Vox — idle"
@@ -127,7 +153,7 @@ final class MenuBarController: NSObject {
 
     private func beginRecording() {
         guard state == .idle else { return }
-        currentMode = contextDetector.modeForFrontmost()
+        currentMode = AppSettings.forceProseMode ? .prose : contextDetector.modeForFrontmost()
         do {
             try recorder.start()
             state = .recording
@@ -162,10 +188,25 @@ final class MenuBarController: NSObject {
             do {
                 let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
                 dlog("raw=\(raw)")
-                let processed = PostProcessor(mode: mode).apply(raw)
-                dlog("processed=\(processed)")
+                let processed = PostProcessor(mode: mode).process(raw)
+                let wordCount = processed.text.split(whereSeparator: { $0.isWhitespace }).count
+                let model = AppSettings.transcriptionModel
+                let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
+                UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model)
+                dlog("processed=\(processed.text) keys=\(processed.suffixKeys) words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
                 await MainActor.run {
-                    self.injector.paste(processed, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
+                    let pasteDelay: Double
+                    if processed.text.isEmpty {
+                        pasteDelay = 0
+                    } else {
+                        self.injector.paste(processed.text, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
+                        pasteDelay = 0.2
+                    }
+                    for (i, key) in processed.suffixKeys.enumerated() {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + pasteDelay + 0.18 * Double(i)) {
+                            self.injector.sendKey(key)
+                        }
+                    }
                     self.state = .idle
                 }
             } catch {
@@ -179,6 +220,25 @@ final class MenuBarController: NSObject {
                 }
             }
         }
+    }
+
+    private func startPulsing() {
+        guard pulseTimer == nil, let button = statusItem.button else { return }
+        var dim = false
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.55, repeats: true) { [weak button] _ in
+            guard let button else { return }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.5
+                button.animator().alphaValue = dim ? 1.0 : 0.35
+            }
+            dim.toggle()
+        }
+    }
+
+    private func stopPulsing() {
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        statusItem.button?.alphaValue = 1.0
     }
 
     private func wavStats(_ wav: Data) -> (durationSec: Double, rms: Double) {

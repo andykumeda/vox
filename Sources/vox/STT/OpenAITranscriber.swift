@@ -18,20 +18,21 @@ public enum TranscriptionError: Error, CustomStringConvertible {
 
 public struct OpenAITranscriber {
     public let endpoint: URL
-    public let model: String
+    public let modelProvider: () -> String
     public let apiKeyProvider: () -> String?
 
     public init(
         endpoint: URL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
-        model: String = "gpt-4o-transcribe",
+        modelProvider: @escaping () -> String = { "gpt-4o-mini-transcribe" },
         apiKeyProvider: @escaping () -> String?
     ) {
         self.endpoint = endpoint
-        self.model = model
+        self.modelProvider = modelProvider
         self.apiKeyProvider = apiKeyProvider
     }
 
     public func transcribe(wav: Data, mode: TranscriptionMode) async throws -> String {
+        let model = modelProvider()
         guard let raw = apiKeyProvider() else { throw TranscriptionError.missingAPIKey }
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw TranscriptionError.missingAPIKey }
@@ -41,7 +42,7 @@ public struct OpenAITranscriber {
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode)
+        request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode, model: model)
 
         let (data, response): (Data, URLResponse)
         do {
@@ -59,7 +60,7 @@ public struct OpenAITranscriber {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func buildBody(boundary: String, wav: Data, mode: TranscriptionMode) -> Data {
+    private func buildBody(boundary: String, wav: Data, mode: TranscriptionMode, model: String) -> Data {
         var body = Data()
         func appendField(_ name: String, _ value: String) {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)

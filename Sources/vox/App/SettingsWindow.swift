@@ -6,6 +6,9 @@ struct SettingsView: View {
     @State private var showKey = false
     @State private var savedMessage: String?
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
+    @State private var forceProse: Bool = AppSettings.forceProseMode
+    @State private var model: TranscriptionModel = AppSettings.transcriptionModel
+    @State private var totals: UsageTotals = UsageTracker.totals()
     let keychain: KeychainStore
 
     var body: some View {
@@ -48,6 +51,64 @@ struct SettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("Model")
+                    .font(.headline)
+                Picker("", selection: $model) {
+                    ForEach(TranscriptionModel.allCases, id: \.self) { m in
+                        Text(m.displayName).tag(m)
+                    }
+                }
+                .labelsHidden()
+                .onChange(of: model) { newValue in
+                    AppSettings.transcriptionModel = newValue
+                }
+                Text(String(format: "≈ $%.4f / minute of audio", model.usdPerMinute))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Usage (lifetime)")
+                    .font(.headline)
+                Text("Calls: \(totals.calls)   Words: \(totals.words)")
+                    .font(.system(.body, design: .monospaced))
+                Text(String(format: "Audio: %.1f min   Cost: $%.3f",
+                            totals.audioSeconds / 60.0, totals.usd))
+                    .font(.system(.body, design: .monospaced))
+                HStack {
+                    Button("Refresh") { totals = UsageTracker.totals() }
+                    Button("Reset") {
+                        UsageTracker.reset()
+                        totals = UsageTracker.totals()
+                    }
+                }
+                Text("Estimate based on audio duration × model rate. Output text tokens add a tiny extra charge.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Mode")
+                    .font(.headline)
+                Toggle("Always use prose mode (ignore terminal detection)", isOn: Binding(
+                    get: { forceProse },
+                    set: { newValue in
+                        forceProse = newValue
+                        AppSettings.forceProseMode = newValue
+                    }
+                ))
+                Text("Off: dictation in Terminal/iTerm/Wave/etc gets command formatting (no period, no caps, dash/NATO/control). On: always treat dictation as prose with sentence punctuation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Paste behavior")
                     .font(.headline)
                 Toggle("Keep transcription on clipboard after paste", isOn: Binding(
@@ -83,9 +144,12 @@ struct SettingsView: View {
             Spacer()
         }
         .padding(20)
-        .frame(width: 460, height: 460)
+        .frame(width: 480, height: 800)
         .onAppear {
             apiKey = keychain.read() ?? ""
+            totals = UsageTracker.totals()
+            model = AppSettings.transcriptionModel
+            forceProse = AppSettings.forceProseMode
         }
     }
 
