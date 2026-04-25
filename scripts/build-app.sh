@@ -42,15 +42,25 @@ SIGN_IDENTITY="-"
 LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
 VOX_SHA="$(security find-identity "$LOGIN_KC" 2>/dev/null \
     | awk '/"vox-dev"/ {print $2; exit}')"
+BUNDLE_ID="com.andykumeda.vox"
+REQ_ARG=()
 if [ -n "$VOX_SHA" ]; then
     SIGN_IDENTITY="$VOX_SHA"
     echo "→ codesign (vox-dev $VOX_SHA — permissions will persist)"
+    # Pin the designated requirement to the cert SHA so the bundle's identity
+    # is stable across rebuilds. Without this the DR defaults to something
+    # that embeds the CDHash, which changes every build and invalidates
+    # Keychain ACLs ("Always Allow" re-prompting after every rebuild).
+    # The `=` prefix marks it as an inline requirement string; `designated =>`
+    # names which slot it binds to.
+    REQ_ARG=(-r "=designated => identifier \"$BUNDLE_ID\" and certificate leaf = H\"$VOX_SHA\"")
 else
     echo "→ codesign (ad-hoc — permissions will reset on each rebuild)"
     echo "   run ./scripts/create-dev-cert.sh once to make permissions persistent"
 fi
 
 codesign --force --sign "$SIGN_IDENTITY" \
+    "${REQ_ARG[@]}" \
     --entitlements Resources/vox.entitlements \
     --options runtime \
     --timestamp=none \
