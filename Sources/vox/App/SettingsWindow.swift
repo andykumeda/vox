@@ -90,8 +90,10 @@ struct SettingsView: View {
     }
 
     private func save() {
+        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        apiKey = trimmed
         do {
-            try keychain.save(apiKey)
+            try keychain.save(trimmed)
             savedMessage = "Saved."
         } catch {
             savedMessage = "Save failed: \(error.localizedDescription)"

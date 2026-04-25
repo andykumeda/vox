@@ -32,7 +32,9 @@ public struct GroqClient {
     }
 
     public func transcribe(wav: Data, mode: TranscriptionMode) async throws -> String {
-        guard let key = apiKeyProvider(), !key.isEmpty else { throw GroqError.missingAPIKey }
+        guard let raw = apiKeyProvider() else { throw GroqError.missingAPIKey }
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw GroqError.missingAPIKey }
 
         let boundary = "vox-\(UUID().uuidString)"
         var request = URLRequest(url: endpoint)
