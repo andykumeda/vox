@@ -31,6 +31,7 @@ public struct PostProcessor {
         case .command:
             s = lowercaseFirstLetter(s)
             s = stripTrailingSentencePunctuation(s)
+            s = splitCommandFromFlag(s)
         }
 
         return restoreURLs(s, urlMap)
@@ -112,6 +113,32 @@ public struct PostProcessor {
         return s
     }
 
+    // MARK: - Command / flag splitting
+
+    // Commands where `<cmd>-<suffix>` is almost never a real binary — safe
+    // to split "<cmd>-<flag>" back into "<cmd> -<flag>". Deliberately
+    // excludes ssh/scp (ssh-keygen, ssh-add), git/docker/kubectl (subcommand
+    // aliases), make/npm/brew (plugin forms) to avoid rewriting valid names.
+    private static let splittableCommands: [String] = [
+        "ls", "cd", "cat", "grep", "awk", "sed", "chmod", "chown", "rm", "cp",
+        "mv", "mkdir", "rmdir", "touch", "echo", "find", "man", "ps", "kill",
+        "top", "df", "du", "tar", "zip", "unzip", "head", "tail", "less",
+        "more", "which", "sort", "uniq", "wc", "xargs", "cut", "tr", "diff",
+        "tee", "file", "stat", "ln", "ping", "lsof", "curl", "wget",
+    ]
+
+    private static let splitRegex: NSRegularExpression? = {
+        let pattern = "\\b(" + splittableCommands.joined(separator: "|") + ")-(?=[a-zA-Z])"
+        return try? NSRegularExpression(pattern: pattern)
+    }()
+
+    private func splitCommandFromFlag(_ input: String) -> String {
+        guard let re = Self.splitRegex else { return input }
+        let ns = input as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        return re.stringByReplacingMatches(in: input, options: [], range: range, withTemplate: "$1 -")
+    }
+
     // MARK: - URL / filename shielding
 
     // Private-Use-Area markers — unlikely to collide with any speech output.
@@ -133,6 +160,8 @@ public struct PostProcessor {
             "\\b[a-zA-Z0-9][a-zA-Z0-9-]*\\.(?:\(tlds))(?:\\.[a-z]{2,})?(?:/[^\\s]*)?\\b",
             "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b",
             "\\bv\\d+(?:\\.\\d+)+\\b",
+            // Compound archive extensions (listed before simple to win alternation).
+            "\\b[a-zA-Z0-9_-]+\\.tar\\.(?:gz|bz2|xz|zst)\\b",
             "\\b[a-zA-Z0-9_-]+\\.(?:\(exts))\\b",
         ]
         let pattern = parts.joined(separator: "|")

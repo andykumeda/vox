@@ -127,4 +127,31 @@ final class PostProcessorTests: XCTestCase {
         let result = p.apply("ls -la")
         XCTAssertFalse(result.hasSuffix(" "))
     }
+
+    func testCommandSplitsJoinedFlag() {
+        // Whisper sometimes emits "ls-l" without a space — split it.
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("ls-l"), "ls -l")
+    }
+
+    func testCommandSplitsJoinedLongFlag() {
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("grep-i foo"), "grep -i foo")
+    }
+
+    func testCommandLeavesAlreadySpacedCommand() {
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("ls -la"), "ls -la")
+    }
+
+    func testCommandDoesNotSplitSshKeygen() {
+        // "ssh-keygen" is a real binary — must not become "ssh -keygen".
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("ssh-keygen -t ed25519"), "ssh-keygen -t ed25519")
+    }
+
+    func testCommandDoesNotSplitPathsWithDash() {
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cat /tmp/some-file.txt"), "cat /tmp/some-file.txt")
+    }
 }
