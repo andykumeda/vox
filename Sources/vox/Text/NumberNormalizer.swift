@@ -17,10 +17,15 @@ public struct NumberNormalizer {
 
     public init() {}
 
-    public func normalize(_ input: String) -> String {
+    /// Convert spelled-out numbers to digits.
+    /// - Parameter aggressive: when true, convert *every* number word including
+    ///   bare singles ("three" → "3"). When false (prose default), keep bare
+    ///   singles < 10 as words because "I have three apples" reads better.
+    public func normalize(_ input: String, aggressive: Bool = false) -> String {
         let tokens = tokenize(input)
         var output: [String] = []
         var runStart: Int? = nil
+        var lastNumberWordInRun: String? = nil
 
         var i = 0
         while i < tokens.count {
@@ -28,26 +33,31 @@ public struct NumberNormalizer {
             let lower = tok.word.lowercased()
             if isNumberWord(lower) {
                 if runStart == nil { runStart = i }
+                lastNumberWordInRun = lower
                 i += 1
                 continue
             }
-            // possible connector between number words: "and", "-"
-            if runStart != nil,
-               (lower == "and" || tok.word == "-"),
-               i + 1 < tokens.count, isNumberWord(tokens[i + 1].word.lowercased())
-            {
-                i += 1
-                continue
+            // Connectors between number words. "-" always OK ("twenty-three").
+            // "and" only OK after a scale word ("two hundred and fifty"); not
+            // after a unit/teen/ten ("two and three apples" must stay split).
+            if runStart != nil, i + 1 < tokens.count, isNumberWord(tokens[i + 1].word.lowercased()) {
+                let isHyphen = tok.word == "-"
+                let isScaleAnd = lower == "and" && (lastNumberWordInRun.flatMap { Self.scales[$0] } != nil)
+                if isHyphen || isScaleAnd {
+                    i += 1
+                    continue
+                }
             }
             if let start = runStart {
-                output.append(contentsOf: collapseRun(tokens: Array(tokens[start..<i])))
+                output.append(contentsOf: collapseRun(tokens: Array(tokens[start..<i]), aggressive: aggressive))
                 runStart = nil
+                lastNumberWordInRun = nil
             }
             output.append(tok.original)
             i += 1
         }
         if let start = runStart {
-            output.append(contentsOf: collapseRun(tokens: Array(tokens[start..<tokens.count])))
+            output.append(contentsOf: collapseRun(tokens: Array(tokens[start..<tokens.count]), aggressive: aggressive))
         }
         return output.joined()
     }
@@ -56,7 +66,7 @@ public struct NumberNormalizer {
         Self.units[w] != nil || Self.tens[w] != nil || Self.scales[w] != nil
     }
 
-    private func collapseRun(tokens: [Token]) -> [String] {
+    private func collapseRun(tokens: [Token], aggressive: Bool) -> [String] {
         // Strip connectors/whitespace; keep only number words.
         let words = tokens.compactMap { t -> String? in
             let w = t.word.lowercased()
@@ -66,10 +76,11 @@ public struct NumberNormalizer {
             // Not a parseable number run — keep originals.
             return tokens.map { $0.original }
         }
-        // Single spelled-out word < 10 is almost always better left as a word
-        // in prose ("I have three apples"). Compound runs like "twenty-three"
-        // or "two thousand" clearly want digits — convert those.
-        if words.count == 1 && n < 10 {
+        // In prose, single spelled-out word < 10 reads better as a word ("I have
+        // three apples"). In command/terminal mode the user almost always means
+        // a literal digit ("head -n three" → "head -n 3"), so aggressive=true
+        // converts bare singles too.
+        if !aggressive && words.count == 1 && n < 10 {
             return tokens.map { $0.original }
         }
         // Preserve leading whitespace of first token, trailing of last token.

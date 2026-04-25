@@ -53,4 +53,26 @@ final class NumberNormalizerTests: XCTestCase {
     func testTrailingSmallNumberWordStays() {
         XCTAssertEqual(n.normalize("apples five"), "apples five")
     }
+
+    func testAndConnectorRequiresPriorScale() {
+        // "and" between non-scale number words must NOT collapse — these are
+        // distinct quantities, not a compound number.
+        XCTAssertEqual(n.normalize("two and three apples"), "two and three apples")
+    }
+
+    func testAndConnectorAfterScaleStillCollapses() {
+        XCTAssertEqual(n.normalize("one thousand and twenty"), "1020")
+    }
+
+    func testAggressiveConvertsBareSingle() {
+        XCTAssertEqual(n.normalize("head -n three", aggressive: true), "head -n 3")
+    }
+
+    func testAggressiveStillKeepsNonNumberWords() {
+        XCTAssertEqual(n.normalize("apples three pears", aggressive: true), "apples 3 pears")
+    }
+
+    func testProseModeUnchangedWithoutAggressive() {
+        XCTAssertEqual(n.normalize("I have three apples"), "I have three apples")
+    }
 }
