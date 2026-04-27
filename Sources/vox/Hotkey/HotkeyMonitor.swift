@@ -66,4 +66,29 @@ public final class HotkeyMonitor {
             }
         }
     }
+
+    /// Pure-function event matcher. `keycode == nil` means "modifier-only event"
+    /// (e.g., Fn flag changes). Returns true when the event represents this hotkey.
+    public static func matches(keycode: UInt16?, flags: CGEventFlags, hotkey: Hotkey) -> Bool {
+        guard hotkey.enabled else { return false }
+        switch hotkey.key {
+        case .fn:
+            // Fn-only: secondaryFn flag set, no other modifier flags, no keycode.
+            let otherMods: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            return flags.contains(.maskSecondaryFn)
+                && flags.intersection(otherMods).isEmpty
+                && keycode == nil
+        case .keycode(let target):
+            guard let kc = keycode, kc == target else { return false }
+            let actual: Set<Modifier> = {
+                var s: Set<Modifier> = []
+                if flags.contains(.maskCommand)   { s.insert(.command) }
+                if flags.contains(.maskControl)   { s.insert(.control) }
+                if flags.contains(.maskAlternate) { s.insert(.option) }
+                if flags.contains(.maskShift)     { s.insert(.shift) }
+                return s
+            }()
+            return actual == hotkey.modifiers
+        }
+    }
 }
