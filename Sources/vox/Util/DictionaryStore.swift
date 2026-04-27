@@ -64,7 +64,12 @@ public final class DictionaryStore: ObservableObject {
 
         self.entries = merged
         if didMutate {
-            try? write(entries: merged)
+            do {
+                try write(entries: merged)
+                saveError = nil
+            } catch {
+                saveError = "Could not save dictionary: \(error.localizedDescription)"
+            }
         }
     }
 
