@@ -7,8 +7,10 @@ public struct DictionaryFileV1: Codable {
     public var entries: [DictionaryEntry]
 }
 
+@MainActor
 public final class DictionaryStore: ObservableObject {
 
+    @MainActor
     public static let shared: DictionaryStore = DictionaryStore(
         fileURL: DictionaryStore.defaultFileURL(),
         bundledDefaults: DictionaryDefaults.bundledDefaults
@@ -16,6 +18,7 @@ public final class DictionaryStore: ObservableObject {
 
     @Published public private(set) var entries: [DictionaryEntry] = []
     @Published public private(set) var loadError: String?
+    @Published public private(set) var saveError: String?
 
     public let fileURL: URL
     private let bundledDefaults: [DictionaryEntry]
@@ -25,11 +28,12 @@ public final class DictionaryStore: ObservableObject {
         self.bundledDefaults = bundledDefaults
     }
 
-    public static func defaultFileURL() -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first!
-            .appendingPathComponent("Vox", isDirectory: true)
+    public nonisolated static func defaultFileURL() -> URL {
+        guard let userBase = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            fatalError("applicationSupportDirectory unavailable — cannot initialize DictionaryStore")
+        }
+        let base = userBase.appendingPathComponent("Vox", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("dictionary.json")
     }
@@ -65,25 +69,53 @@ public final class DictionaryStore: ObservableObject {
     }
 
     public func add(_ entry: DictionaryEntry) {
+        let backup = entries
         entries.append(entry)
-        try? write(entries: entries)
+        do {
+            try write(entries: entries)
+            saveError = nil
+        } catch {
+            entries = backup
+            saveError = "Could not save dictionary: \(error.localizedDescription)"
+        }
     }
 
     public func update(_ entry: DictionaryEntry) {
         guard let idx = entries.firstIndex(where: { $0.id == entry.id }) else { return }
+        let backup = entries
         entries[idx] = entry
-        try? write(entries: entries)
+        do {
+            try write(entries: entries)
+            saveError = nil
+        } catch {
+            entries = backup
+            saveError = "Could not save dictionary: \(error.localizedDescription)"
+        }
     }
 
     public func delete(id: String) {
+        let backup = entries
         entries.removeAll { $0.id == id }
-        try? write(entries: entries)
+        do {
+            try write(entries: entries)
+            saveError = nil
+        } catch {
+            entries = backup
+            saveError = "Could not save dictionary: \(error.localizedDescription)"
+        }
     }
 
     public func setEnabled(id: String, enabled: Bool) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
+        let backup = entries
         entries[idx].enabled = enabled
-        try? write(entries: entries)
+        do {
+            try write(entries: entries)
+            saveError = nil
+        } catch {
+            entries = backup
+            saveError = "Could not save dictionary: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - File I/O
@@ -113,7 +145,8 @@ public final class DictionaryStore: ObservableObject {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(envelope)
-        let tmp = fileURL.appendingPathExtension("tmp")
+        let tmp = fileURL.deletingLastPathComponent()
+            .appendingPathComponent(".\(fileURL.lastPathComponent).\(UUID().uuidString).tmp")
         try data.write(to: tmp, options: .atomic)
         // Replace destination atomically.
         _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tmp)

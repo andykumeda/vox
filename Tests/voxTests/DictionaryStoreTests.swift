@@ -1,6 +1,7 @@
 import XCTest
 @testable import vox
 
+@MainActor
 final class DictionaryStoreTests: XCTestCase {
 
     private var tempDir: URL!
@@ -84,14 +85,13 @@ final class DictionaryStoreTests: XCTestCase {
     func testDisabledBuiltinStaysDisabledAcrossReload() throws {
         let store = makeStore()
         store.load()
-        var firstId = store.entries[0].id
+        let firstId = store.entries[0].id
         store.setEnabled(id: firstId, enabled: false)
         // New store reading same file.
         let store2 = makeStore()
         store2.load()
         let entry = store2.entries.first(where: { $0.id == firstId })
         XCTAssertEqual(entry?.enabled, false)
-        _ = firstId  // silence unused mutation warning if any
     }
 
     func testUserEntrySurvivesReload() throws {
@@ -170,5 +170,26 @@ final class DictionaryStoreTests: XCTestCase {
         let store2 = makeStore()
         store2.load()
         XCTAssertNotNil(store2.entries.first(where: { $0.id == firstBuiltinId }))
+    }
+
+    func testFutureSchemaVersionFallsBackAndFlagsError() throws {
+        let url = tempDir.appendingPathComponent("dictionary.json")
+        let payload: [String: Any] = [
+            "schemaVersion": 99,
+            "entries": [
+                ["id": "user-x", "spoken": "a", "replacement": "X",
+                 "mode": "command", "startsWith": false, "caseInsensitive": true,
+                 "enabled": true, "isBuiltIn": false]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
+            .write(to: url)
+        let store = makeStore()
+        store.load()
+        XCTAssertNotNil(store.loadError)
+        XCTAssertTrue(store.loadError?.contains("99") == true)
+        // Falls back to bundled defaults — user entry from the future-schema
+        // file is not loaded.
+        XCTAssertNil(store.entries.first(where: { $0.id == "user-x" }))
     }
 }
