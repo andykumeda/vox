@@ -20,6 +20,53 @@ public final class DictionaryStore: ObservableObject {
     @Published public private(set) var loadError: String?
     @Published public private(set) var saveError: String?
 
+    private var watchSource: DispatchSourceFileSystemObject?
+    private var watchFD: Int32 = -1
+    private var debounceTimer: DispatchSourceTimer?
+    private let watchQueue = DispatchQueue(label: "vox.dictionary.watch")
+
+    /// Start watching the file. Idempotent.
+    public func startWatching() {
+        stopWatching()
+        let fd = open(fileURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .delete],
+            queue: watchQueue
+        )
+        src.setEventHandler { [weak self] in
+            Task { @MainActor in self?.scheduleReload() }
+        }
+        src.setCancelHandler { [watchFD = fd] in
+            if watchFD >= 0 { close(watchFD) }
+        }
+        watchFD = fd
+        watchSource = src
+        src.resume()
+    }
+
+    public func stopWatching() {
+        watchSource?.cancel()
+        watchSource = nil
+        debounceTimer?.cancel()
+        debounceTimer = nil
+    }
+
+    private func scheduleReload() {
+        debounceTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: watchQueue)
+        timer.schedule(deadline: .now() + .milliseconds(250))
+        timer.setEventHandler { [weak self] in
+            Task { @MainActor in
+                self?.load()
+                self?.startWatching()
+            }
+        }
+        timer.resume()
+        debounceTimer = timer
+    }
+
     public let fileURL: URL
     private let bundledDefaults: [DictionaryEntry]
 
