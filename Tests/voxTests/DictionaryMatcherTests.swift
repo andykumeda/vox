@@ -178,4 +178,54 @@ final class DictionaryMatcherTests: XCTestCase {
         )
         XCTAssertEqual(result, "ls -shell")
     }
+
+    func testEmptySpokenIsSilentNoOp() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("", "should-not-appear")],
+            to: "ls -shell",
+            scope: .command
+        )
+        XCTAssertEqual(result, "ls -shell")
+    }
+
+    func testWhitespaceOnlySpokenIsSilentNoOp() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("   ", "should-not-appear")],
+            to: "ls -shell",
+            scope: .command
+        )
+        XCTAssertEqual(result, "ls -shell")
+    }
+
+    func testLongerSpokenWinsEvenWhenListedSecond() {
+        // "double dash" listed FIRST in the array but must still beat "dash"
+        // even if the implementation iterated in input order.
+        let entries = [
+            entry("dash", "-", mode: .both),
+            entry("double dash", "--", mode: .both),
+        ]
+        let result = DictionaryMatcher.apply(
+            entries: entries,
+            to: "double dash",
+            scope: .command
+        )
+        XCTAssertEqual(result, "--")
+    }
+
+    func testTiesBrokenByInputOrder() {
+        // Two single-token entries whose spoken counts are tied — order in the
+        // input array determines which fires first. Both target "x" but only
+        // one can fire in any given pass; the FIRST array entry wins because
+        // by the time the second runs, "x" has been replaced.
+        let entries = [
+            entry("x", "FIRST", mode: .both),
+            entry("x", "SECOND", mode: .both),
+        ]
+        let result = DictionaryMatcher.apply(
+            entries: entries,
+            to: "x",
+            scope: .command
+        )
+        XCTAssertEqual(result, "FIRST")
+    }
 }

@@ -25,6 +25,8 @@ public enum DictionaryMatcher {
         for (e, sp) in prepared {
             tokens = replace(in: tokens, spoken: sp, entry: e)
         }
+        // Whitespace normalization is intentional: a side effect of token
+        // round-tripping. Multi-space input becomes single-space output.
         return tokens.joined(separator: " ")
     }
 
