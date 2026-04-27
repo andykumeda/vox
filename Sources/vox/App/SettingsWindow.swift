@@ -176,18 +176,37 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                 }
 
+                let userEntries = dict.entries.filter { !$0.isBuiltIn }
+                let builtinCount = dict.entries.count - userEntries.count
+                let disabledCount = userEntries.filter { !$0.enabled }.count
+
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(dict.entries.enumerated()), id: \.element.id) { idx, entry in
-                            DictionaryRow(
-                                entry: entry,
-                                onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
-                                onEdit: { editingEntry = entry; isAddingEntry = false },
-                                onDelete: { dict.delete(id: entry.id) }
-                            )
-                            .padding(.horizontal, 8)
-                            if idx < dict.entries.count - 1 {
-                                Divider()
+                        if userEntries.isEmpty {
+                            VStack(spacing: 6) {
+                                Text("No custom entries yet.")
+                                    .foregroundStyle(.secondary)
+                                Text("Click Add to create one.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("\(builtinCount) built-in fixups active")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            ForEach(Array(userEntries.enumerated()), id: \.element.id) { idx, entry in
+                                DictionaryRow(
+                                    entry: entry,
+                                    onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
+                                    onEdit: { editingEntry = entry; isAddingEntry = false },
+                                    onDelete: { dict.delete(id: entry.id) }
+                                )
+                                .padding(.horizontal, 8)
+                                if idx < userEntries.count - 1 {
+                                    Divider()
+                                }
                             }
                         }
                     }
@@ -200,7 +219,7 @@ struct SettingsView: View {
                         .stroke(Color(NSColor.separatorColor), lineWidth: 1)
                 )
 
-                Text("\(dict.entries.count) entries · \(dict.entries.filter { !$0.enabled }.count) disabled")
+                Text("\(userEntries.count) custom entries · \(disabledCount) disabled · \(builtinCount) built-in fixups active")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
