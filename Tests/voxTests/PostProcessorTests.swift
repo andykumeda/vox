@@ -411,4 +411,66 @@ final class PostProcessorTests: XCTestCase {
         let p = PostProcessor(mode: .command)
         XCTAssertEqual(p.apply("git double dash help"), "git --help")
     }
+
+    // MARK: - Dictionary scope behavior
+
+    func testProseDictionaryReplacesMidSentenceProperNoun() {
+        let entries = [DictionaryEntry(
+            id: "user-vox-cap", spoken: "vox", replacement: "Vox", mode: .prose,
+            isBuiltIn: false
+        )]
+        let p = PostProcessor(mode: .prose, dictionaryProvider: { entries })
+        XCTAssertEqual(p.apply("running vox today"), "Running Vox today.")
+    }
+
+    func testProseDictionaryDoesNotFireInCommandMode() {
+        let entries = [DictionaryEntry(
+            id: "user-vox-cap", spoken: "vox", replacement: "Vox", mode: .prose,
+            isBuiltIn: false
+        )]
+        let p = PostProcessor(mode: .command, dictionaryProvider: { entries })
+        XCTAssertEqual(p.apply("vox status"), "vox status")
+    }
+
+    func testCommandDictionaryDoesNotFireInProseMode() {
+        let entries = [DictionaryEntry(
+            id: "user-foo", spoken: "foo", replacement: "bar", mode: .command,
+            isBuiltIn: false
+        )]
+        let p = PostProcessor(mode: .prose, dictionaryProvider: { entries })
+        XCTAssertEqual(p.apply("foo is here"), "Foo is here.")
+    }
+
+    func testBothScopeFiresInBothModes() {
+        let entries = [DictionaryEntry(
+            id: "user-foo", spoken: "foo", replacement: "bar", mode: .both,
+            isBuiltIn: false
+        )]
+        XCTAssertEqual(
+            PostProcessor(mode: .prose, dictionaryProvider: { entries }).apply("foo"),
+            "Bar."
+        )
+        XCTAssertEqual(
+            PostProcessor(mode: .command, dictionaryProvider: { entries }).apply("foo"),
+            "bar"
+        )
+    }
+
+    func testDisabledEntryIsNoOpInPipeline() {
+        let entries = [DictionaryEntry(
+            id: "user-foo", spoken: "foo", replacement: "bar",
+            mode: .command, enabled: false, isBuiltIn: false
+        )]
+        let p = PostProcessor(mode: .command, dictionaryProvider: { entries })
+        XCTAssertEqual(p.apply("foo"), "foo")
+    }
+
+    func testEmptyReplacementDeletesTokenInPipeline() {
+        let entries = [DictionaryEntry(
+            id: "user-um", spoken: "um", replacement: "", mode: .command,
+            isBuiltIn: false
+        )]
+        let p = PostProcessor(mode: .command, dictionaryProvider: { entries })
+        XCTAssertEqual(p.apply("ls um now"), "ls now")
+    }
 }

@@ -37,9 +37,9 @@ public struct PostProcessor {
         var suffixKeys: [SuffixKey] = []
         switch mode {
         case .prose:
+            s = applyDictionary(.prose, s)
             s = capitalizeSentenceStarts(s)
             s = ensureTrailingTerminator(s)
-            s = applyDictionary(.prose, s)
             // Send a Space keystroke after paste instead of appending " " to
             // the text. Some apps (notably Wave terminal) strip trailing
             // whitespace from pasted content; a discrete keystroke can't be
