@@ -5,3 +5,6 @@ dist/
 .DS_Store
 *.xcodeproj/xcuserdata/
 Resources/AppIcon.png
+
+# Git worktrees
+.worktrees/
