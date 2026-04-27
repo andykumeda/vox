@@ -344,6 +344,46 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(r.suffixKeys, [.escape])
     }
 
+    // MARK: - Common misfire fixups (now driven by built-in dictionary defaults)
+
+    private func dictPostProcessor(_ mode: TranscriptionMode) -> PostProcessor {
+        PostProcessor(
+            mode: mode,
+            dictionaryProvider: { DictionaryDefaults.bundledDefaults }
+        )
+    }
+
+    func testCommandFixesShellMisfireAsLowercaseL() {
+        XCTAssertEqual(dictPostProcessor(.command).apply("ls -shell"), "ls -l")
+    }
+
+    func testCommandFixesShallMisfireAsLowercaseL() {
+        XCTAssertEqual(dictPostProcessor(.command).apply("ls -shall"), "ls -l")
+    }
+
+    func testCommandFixesLeadingHelloBeforeDashAsLs() {
+        XCTAssertEqual(dictPostProcessor(.command).apply("hello, -shell"), "ls -l")
+    }
+
+    func testCommandFixesLeadingHiBeforeDashAsLs() {
+        XCTAssertEqual(dictPostProcessor(.command).apply("hi -a"), "ls -a")
+    }
+
+    func testCommandFixesHeyMisfireAsLowercaseA() {
+        XCTAssertEqual(dictPostProcessor(.command).apply("ls -hey"), "ls -a")
+    }
+
+    func testCommandLeavesLongFlagShellAlone() {
+        XCTAssertEqual(
+            dictPostProcessor(.command).apply("usermod --shell /bin/zsh"),
+            "usermod --shell /bin/zsh"
+        )
+    }
+
+    func testCommandLeavesShellWordWithoutDashAlone() {
+        XCTAssertEqual(dictPostProcessor(.command).apply("which shell"), "which shell")
+    }
+
     // MARK: - NATO phonetic + minus alias
 
     func testCommandNatoPhoneticAfterDash() {
