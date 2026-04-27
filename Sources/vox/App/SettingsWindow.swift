@@ -15,6 +15,7 @@ struct SettingsView: View {
     let keychain: KeychainStore
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
             Text("Vox — Settings")
                 .font(.title2)
@@ -175,17 +176,29 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                 }
 
-                List {
-                    ForEach(dict.entries) { entry in
-                        DictionaryRow(
-                            entry: entry,
-                            onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
-                            onEdit: { editingEntry = entry; isAddingEntry = false },
-                            onDelete: { dict.delete(id: entry.id) }
-                        )
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(dict.entries.enumerated()), id: \.element.id) { idx, entry in
+                            DictionaryRow(
+                                entry: entry,
+                                onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
+                                onEdit: { editingEntry = entry; isAddingEntry = false },
+                                onDelete: { dict.delete(id: entry.id) }
+                            )
+                            .padding(.horizontal, 8)
+                            if idx < dict.entries.count - 1 {
+                                Divider()
+                            }
+                        }
                     }
                 }
-                .frame(minHeight: 180, maxHeight: 360)
+                .frame(minHeight: 240, maxHeight: 400)
+                .background(Color(NSColor.textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                )
 
                 Text("\(dict.entries.count) entries · \(dict.entries.filter { !$0.enabled }.count) disabled")
                     .font(.caption)
@@ -203,9 +216,9 @@ struct SettingsView: View {
                 )
             }
 
-            Spacer()
         }
         .padding(20)
+        }
         .frame(width: 480, height: 800)
         .onAppear {
             apiKey = keychain.read() ?? ""
