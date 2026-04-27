@@ -188,7 +188,9 @@ final class MenuBarController: NSObject {
             do {
                 let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
                 dlog("raw=\(raw)")
-                let processed = PostProcessor(mode: mode).process(raw)
+                let processed = await MainActor.run {
+                    PostProcessor(mode: mode).process(raw)
+                }
                 let wordCount = processed.text.split(whereSeparator: { $0.isWhitespace }).count
                 let model = AppSettings.transcriptionModel
                 let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
