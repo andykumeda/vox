@@ -93,7 +93,7 @@ section "Build"
 ./scripts/build-app.sh
 
 # Verify signing succeeded
-if codesign -dvv build/Vox.app 2>&1 | grep -q "Authority=vox-dev"; then
+if codesign -dvv dist/Vox.app 2>&1 | grep -q "Authority=vox-dev"; then
     green "✓ build signed with vox-dev (TCC permissions will persist)"
 else
     yellow "⚠ build is ad-hoc signed (TCC will reset every rebuild)"
@@ -109,7 +109,7 @@ if pgrep -f "Vox.app/Contents/MacOS/vox" >/dev/null 2>&1; then
     sleep 1
 fi
 
-open build/Vox.app
+open dist/Vox.app
 green "✓ Vox launched"
 
 # ─── Next steps ────────────────────────────────────────────────────────────

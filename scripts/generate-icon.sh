@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MASTER="Resources/AppIcon.png"
-ICONSET="build/AppIcon.iconset"
+ICONSET="dist/AppIcon.iconset"
 OUT="Resources/AppIcon.icns"
 
 echo "→ rendering master 1024x1024 PNG"

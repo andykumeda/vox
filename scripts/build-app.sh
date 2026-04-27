@@ -8,7 +8,7 @@ CONFIG="${CONFIG:-release}"
 BINARY_NAME="vox"
 APP_NAME="Vox"
 BUILD_DIR=".build/arm64-apple-macosx/$CONFIG"
-APP_PATH="build/${APP_NAME}.app"
+APP_PATH="dist/${APP_NAME}.app"
 ICON_SRC="Resources/AppIcon.icns"
 
 echo "→ swift build -c $CONFIG"

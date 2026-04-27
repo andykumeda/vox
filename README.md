@@ -36,7 +36,7 @@ After `setup.sh` finishes:
 ```sh
 ./scripts/create-dev-cert.sh   # ONE TIME — persistent self-signed identity
 ./scripts/build-app.sh
-open build/Vox.app
+open dist/Vox.app
 ```
 
 `create-dev-cert.sh` creates a self-signed `vox-dev` identity in the login keychain. Signing every build with the same identity keeps macOS **TCC permissions sticky across rebuilds**. Skip it and the build falls back to ad-hoc signing — every rebuild revokes Accessibility / Input Monitoring / Microphone, forcing re-permit.
@@ -48,10 +48,10 @@ open build/Vox.app
 Always launch via `open`, not by running the binary directly:
 
 ```sh
-open build/Vox.app
+open dist/Vox.app
 ```
 
-Running `./build/Vox.app/Contents/MacOS/vox` from a shell makes the process a child of the terminal, and TCC attributes Accessibility grants to the terminal instead of Vox — paste silently fails.
+Running `./dist/Vox.app/Contents/MacOS/vox` from a shell makes the process a child of the terminal, and TCC attributes Accessibility grants to the terminal instead of Vox — paste silently fails.
 
 ### First-run permissions
 
@@ -200,7 +200,7 @@ git clone git@github.com:andykumeda/vox.git
 cd vox
 ./scripts/create-dev-cert.sh
 ./scripts/build-app.sh
-open build/Vox.app
+open dist/Vox.app
 ```
 
 ## Roadmap (not yet)

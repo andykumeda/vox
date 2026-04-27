@@ -6,10 +6,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP_NAME="Vox"
-APP_PATH="build/${APP_NAME}.app"
+APP_PATH="dist/${APP_NAME}.app"
 DMG_VOL="${APP_NAME}"
 DMG_NAME="${APP_NAME}.dmg"
-STAGE="build/dmg-stage"
+STAGE="dist/dmg-stage"
 OUT="dist/${DMG_NAME}"
 
 echo "→ building app"

@@ -47,7 +47,7 @@ Working. Push-to-talk → paste cycle is reliable. Tests: 79 passing.
 - **Fn key may not fire** if "Press 🌐 key to" is set to anything other than *Do Nothing* in System Settings → Keyboard. macOS intercepts before our `CGEventTap` sees it.
 - **First-time API key save** triggers a Keychain prompt. Click **Always Allow** (not "Allow") — otherwise it re-prompts every launch.
 - **Keychain re-prompt after switching from ad-hoc to vox-dev signing** is expected once. ACL was pinned to ad-hoc CDHash; first save under vox-dev re-pins to the new identity (locked by the build's designated requirement).
-- **Self-relocator** triggers when running from `/Volumes/*` or `~/Downloads/*`. Running from `~/Applications/*` or `/Applications/*` is silent. Running from `~/Dev/vox/build/Vox.app` does NOT trigger relocation.
+- **Self-relocator** triggers when running from `/Volumes/*` or `~/Downloads/*`. Running from `~/Applications/*` or `/Applications/*` is silent. Running from `~/Dev/vox/dist/Vox.app` does NOT trigger relocation.
 - **MDM-managed Macs** can't write `/Library/Keychains/System.keychain` even with sudo. `build-app.sh` falls back to probing the login keychain alone (no `-v`) when the default-search-list probe finds nothing.
 - **`find-identity -v` (no `-p`) returns 0 valid identities** — must use `-p codesigning`. The build script has both.
 - **Pipefail + `grep -q`** killed an earlier identity probe (SIGPIPE). Current probe uses an intermediate variable. Don't reintroduce the inline pipe.
@@ -142,7 +142,7 @@ If functional code change:
 swift test                              # confirm no regressions
 ./scripts/build-app.sh                  # rebuild
 pkill -f 'Vox.app/Contents/MacOS/vox'   # kill old instance
-open build/Vox.app                      # relaunch
+open dist/Vox.app                      # relaunch
 tail -f ~/Library/Logs/vox.log          # verify behavior live
 ```
 
