@@ -209,6 +209,13 @@ struct SettingsView: View {
                     } label: {
                         Label("Reveal in Finder", systemImage: "folder")
                     }
+                    Button {
+                        Task { @MainActor in
+                            HelpWindowController().show()
+                        }
+                    } label: {
+                        Label("Open Help", systemImage: "questionmark.circle")
+                    }
                 }
 
                 if let err = dict.loadError {
