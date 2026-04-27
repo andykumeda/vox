@@ -51,38 +51,58 @@ public struct TextInjector {
         up?.post(tap: .cghidEventTap)
     }
 
-    /// Writes `text` to the pasteboard and synthesizes Cmd+V.
-    /// - Parameter keepOnClipboard: when true, leaves `text` on the clipboard so the user
-    ///   can manually Cmd+V again if focus was lost. When false (default), restores the
-    ///   prior clipboard contents after ~400ms.
-    public func paste(_ text: String, keepOnClipboard: Bool = false) {
-        let pasteboard = NSPasteboard.general
-        let previous = keepOnClipboard ? nil : pasteboard.string(forType: .string)
+    /// Writes `text` to the pasteboard and synthesizes the configured paste shortcut.
+    /// - Parameters:
+    ///   - text: the string to paste
+    ///   - keepOnClipboard: when true, leaves `text` on the clipboard so the user
+    ///     can manually paste again if focus was lost. When false (default), restores the
+    ///     prior clipboard contents after ~400ms.
+    ///   - shortcut: the hotkey combination to synthesize. When nil (default), uses `AppSettings.pasteHotkey`.
+    public func paste(
+        _ text: String,
+        keepOnClipboard: Bool = false,
+        shortcut: Hotkey? = nil
+    ) {
+        let pb = NSPasteboard.general
+        let previous = keepOnClipboard ? nil : pb.string(forType: .string)
 
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        pb.clearContents()
+        pb.setString(text, forType: .string)
 
-        synthesizeCmdV()
-
-        if let previous {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(previous, forType: .string)
-            }
+        let hk = shortcut ?? AppSettings.pasteHotkey
+        guard hk.enabled, case .keycode(let kc) = hk.key else {
+            // Fn or invalid binding — fall back to ⌘V (defensive).
+            sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
+            if !keepOnClipboard { schedulePasteboardClear(previous: previous) }
+            return
         }
+
+        var mods: CGEventFlags = []
+        if hk.modifiers.contains(.command) { mods.insert(.maskCommand) }
+        if hk.modifiers.contains(.control) { mods.insert(.maskControl) }
+        if hk.modifiers.contains(.option)  { mods.insert(.maskAlternate) }
+        if hk.modifiers.contains(.shift)   { mods.insert(.maskShift) }
+
+        sendKeyCombo(keycode: kc, modifiers: mods)
+        if !keepOnClipboard { schedulePasteboardClear(previous: previous) }
     }
 
-    private func synthesizeCmdV() {
-        let source = CGEventSource(stateID: .combinedSessionState)
-        let vKeyCode = CGKeyCode(kVK_ANSI_V)
+    private func sendKeyCombo(keycode: UInt16, modifiers: CGEventFlags) {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keycode), keyDown: true)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(keycode), keyDown: false)
+        down?.flags = modifiers
+        up?.flags = modifiers
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+    }
 
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false)
-        keyDown?.flags = .maskCommand
-        keyUp?.flags = .maskCommand
-
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+    private func schedulePasteboardClear(previous: String?) {
+        guard let previous else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(previous, forType: .string)
+        }
     }
 }

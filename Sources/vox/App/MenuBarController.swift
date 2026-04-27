@@ -33,15 +33,6 @@ private let isoFormatter: ISO8601DateFormatter = {
 
 enum MenuIconState {
     case idle, recording, transcribing, error
-
-    var symbolName: String {
-        switch self {
-        case .idle: return "text.bubble"
-        case .recording: return "text.bubble.fill"
-        case .transcribing: return "text.bubble.fill"
-        case .error: return "exclamationmark.triangle"
-        }
-    }
 }
 
 final class MenuBarController: NSObject {
@@ -57,6 +48,7 @@ final class MenuBarController: NSObject {
         apiKeyProvider: { [keychain] in keychain.read() }
     )
     private lazy var settingsController = SettingsWindowController(keychain: keychain)
+    private var helpWindowController: HelpWindowController?
 
     private var currentMode: TranscriptionMode = .prose
     private var pulseTimer: Timer?
@@ -68,13 +60,31 @@ final class MenuBarController: NSObject {
         configureMenu()
         refreshIcon()
 
-        hotkey.onPress = { [weak self] in
+        hotkey.onRecordPress = { [weak self] in
             dlog("Fn press")
             self?.beginRecording()
         }
-        hotkey.onRelease = { [weak self] in
+        hotkey.onRecordRelease = { [weak self] in
             dlog("Fn release")
             self?.endRecordingAndTranscribe()
+        }
+        hotkey.onModeToggle = { [weak self] in
+            self?.handleModeToggle()
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: .recordHotkeyChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reconfigureHotkey()
+        }
+        NotificationCenter.default.addObserver(
+            forName: .modeToggleHotkeyChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reconfigureHotkey()
         }
 
         Task {
@@ -102,6 +112,10 @@ final class MenuBarController: NSObject {
         let menu = NSMenu()
         menu.addItem(withTitle: "Hold Fn to dictate", action: nil, keyEquivalent: "").isEnabled = false
         menu.addItem(.separator())
+        let helpItem = NSMenuItem(title: "Help…", action: #selector(showHelpAction(_:)), keyEquivalent: "")
+        helpItem.target = self
+        menu.addItem(helpItem)
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
@@ -110,7 +124,18 @@ final class MenuBarController: NSObject {
 
     private func refreshIcon() {
         guard let button = statusItem.button else { return }
-        let base = NSImage(systemSymbolName: state.symbolName, accessibilityDescription: "Vox")
+        let symbolName: String
+        switch state {
+        case .idle:
+            symbolName = AppSettings.forceProseMode ? "lock.bubble.fill" : "text.bubble"
+        case .recording:
+            symbolName = "text.bubble.fill"
+        case .transcribing:
+            symbolName = "text.bubble.fill"
+        case .error:
+            symbolName = "exclamationmark.triangle"
+        }
+        let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Vox")
         switch state {
         case .recording:
             // Palette config bakes the color into the rendered SF Symbol.
@@ -147,6 +172,35 @@ final class MenuBarController: NSObject {
 
     @objc private func openSettings() {
         settingsController.show()
+    }
+
+    public func showHelp() {
+        if helpWindowController == nil {
+            helpWindowController = HelpWindowController()
+        }
+        let controller = helpWindowController
+        Task { @MainActor in
+            controller?.show()
+        }
+    }
+
+    @objc private func showHelpAction(_ sender: Any?) {
+        showHelp()
+    }
+
+    private func handleModeToggle() {
+        AppSettings.forceProseMode.toggle()
+        refreshIcon()
+        NSSound(named: NSSound.Name("Tink"))?.play()
+    }
+
+    private func reconfigureHotkey() {
+        hotkey.stop()
+        hotkey.configure(
+            record: AppSettings.recordHotkey,
+            modeToggle: AppSettings.modeToggleHotkey
+        )
+        _ = hotkey.start()
     }
 
     // MARK: - Record / Transcribe

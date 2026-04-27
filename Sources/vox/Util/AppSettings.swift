@@ -49,4 +49,45 @@ enum AppSettings {
         get { UserDefaults.standard.bool(forKey: forceProseKey) }
         set { UserDefaults.standard.set(newValue, forKey: forceProseKey) }
     }
+
+    private static let recordHotkeyKey = "recordHotkey"
+    private static let modeToggleHotkeyKey = "modeToggleHotkey"
+    private static let pasteHotkeyKey = "pasteHotkey"
+
+    static var recordHotkey: Hotkey {
+        get { readHotkey(forKey: recordHotkeyKey) ?? .defaultRecord }
+        set {
+            writeHotkey(newValue, forKey: recordHotkeyKey)
+            NotificationCenter.default.post(name: .recordHotkeyChanged, object: nil)
+        }
+    }
+
+    static var modeToggleHotkey: Hotkey {
+        get { readHotkey(forKey: modeToggleHotkeyKey) ?? .defaultModeToggle }
+        set {
+            writeHotkey(newValue, forKey: modeToggleHotkeyKey)
+            NotificationCenter.default.post(name: .modeToggleHotkeyChanged, object: nil)
+        }
+    }
+
+    static var pasteHotkey: Hotkey {
+        get { readHotkey(forKey: pasteHotkeyKey) ?? .defaultPaste }
+        set { writeHotkey(newValue, forKey: pasteHotkeyKey) }
+    }
+
+    private static func readHotkey(forKey key: String) -> Hotkey? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(Hotkey.self, from: data)
+    }
+
+    private static func writeHotkey(_ h: Hotkey, forKey key: String) {
+        if let data = try? JSONEncoder().encode(h) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+}
+
+extension Notification.Name {
+    static let recordHotkeyChanged = Notification.Name("vox.recordHotkeyChanged")
+    static let modeToggleHotkeyChanged = Notification.Name("vox.modeToggleHotkeyChanged")
 }

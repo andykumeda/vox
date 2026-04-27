@@ -27,6 +27,7 @@ mkdir -p "$APP_PATH/Contents/Resources"
 cp "$BUILD_DIR/$BINARY_NAME" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
 cp Resources/Info.plist "$APP_PATH/Contents/Info.plist"
 cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
+cp Resources/help.md "$APP_PATH/Contents/Resources/"
 
 # Prefer the persistent "vox-dev" self-signed identity (created by
 # scripts/create-dev-cert.sh) so TCC permissions stick across rebuilds.

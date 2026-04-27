@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 struct SettingsView: View {
@@ -149,6 +150,46 @@ struct SettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("Hotkeys").font(.headline)
+
+                HotkeyRecorderField(
+                    hotkey: Binding(
+                        get: { AppSettings.recordHotkey },
+                        set: { AppSettings.recordHotkey = $0 }
+                    ),
+                    label: "Record dictation",
+                    allowTriggerModePicker: true
+                )
+
+                HotkeyRecorderField(
+                    hotkey: Binding(
+                        get: { AppSettings.modeToggleHotkey },
+                        set: { AppSettings.modeToggleHotkey = $0 }
+                    ),
+                    label: "Toggle mode (auto / force prose)",
+                    allowTriggerModePicker: false
+                )
+
+                HotkeyRecorderField(
+                    hotkey: Binding(
+                        get: { AppSettings.pasteHotkey },
+                        set: { AppSettings.pasteHotkey = $0 }
+                    ),
+                    label: "Paste keystroke (sent to focused app)",
+                    allowTriggerModePicker: false
+                )
+
+                Button("Reset all to defaults") {
+                    AppSettings.recordHotkey = .defaultRecord
+                    AppSettings.modeToggleHotkey = .defaultModeToggle
+                    AppSettings.pasteHotkey = .defaultPaste
+                }
+                .controlSize(.small)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Dictionary")
                         .font(.headline)
@@ -168,6 +209,13 @@ struct SettingsView: View {
                     } label: {
                         Label("Reveal in Finder", systemImage: "folder")
                     }
+                    Button {
+                        Task { @MainActor in
+                            HelpWindowController().show()
+                        }
+                    } label: {
+                        Label("Open Help", systemImage: "questionmark.circle")
+                    }
                 }
 
                 if let err = dict.loadError {
@@ -176,18 +224,37 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                 }
 
+                let userEntries = dict.entries.filter { !$0.isBuiltIn }
+                let builtinCount = dict.entries.count - userEntries.count
+                let disabledCount = userEntries.filter { !$0.enabled }.count
+
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(dict.entries.enumerated()), id: \.element.id) { idx, entry in
-                            DictionaryRow(
-                                entry: entry,
-                                onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
-                                onEdit: { editingEntry = entry; isAddingEntry = false },
-                                onDelete: { dict.delete(id: entry.id) }
-                            )
-                            .padding(.horizontal, 8)
-                            if idx < dict.entries.count - 1 {
-                                Divider()
+                        if userEntries.isEmpty {
+                            VStack(spacing: 6) {
+                                Text("No custom entries yet.")
+                                    .foregroundStyle(.secondary)
+                                Text("Click Add to create one.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("\(builtinCount) built-in fixups active")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            ForEach(Array(userEntries.enumerated()), id: \.element.id) { idx, entry in
+                                DictionaryRow(
+                                    entry: entry,
+                                    onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
+                                    onEdit: { editingEntry = entry; isAddingEntry = false },
+                                    onDelete: { dict.delete(id: entry.id) }
+                                )
+                                .padding(.horizontal, 8)
+                                if idx < userEntries.count - 1 {
+                                    Divider()
+                                }
                             }
                         }
                     }
@@ -200,7 +267,7 @@ struct SettingsView: View {
                         .stroke(Color(NSColor.separatorColor), lineWidth: 1)
                 )
 
-                Text("\(dict.entries.count) entries · \(dict.entries.filter { !$0.enabled }.count) disabled")
+                Text("\(userEntries.count) custom entries · \(disabledCount) disabled · \(builtinCount) built-in fixups active")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -331,6 +398,108 @@ struct DictionaryEditSheet: View {
         .padding()
         .frame(width: 460)
     }
+}
+
+struct HotkeyRecorderField: View {
+    @Binding var hotkey: Hotkey
+    let label: String
+    let allowTriggerModePicker: Bool
+    @State private var isRecording = false
+    @State private var recorder: HotkeyRecorder?
+    @State private var hint: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.caption)
+            HStack(spacing: 8) {
+                Button {
+                    startRecording()
+                } label: {
+                    Text(isRecording ? "Press your combo…" : displayString(hotkey))
+                        .frame(minWidth: 200, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+
+                if allowTriggerModePicker {
+                    Picker("", selection: $hotkey.triggerMode) {
+                        Text("Press-and-hold").tag(TriggerMode.pressHold)
+                        Text("Tap-to-toggle").tag(TriggerMode.tapToggle)
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 180)
+                }
+
+                Button(hotkey.enabled ? "Disable" : "Enable") {
+                    hotkey.enabled.toggle()
+                }
+            }
+            if let h = hint {
+                Text(h).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func startRecording() {
+        isRecording = true
+        hint = nil
+        let r = HotkeyRecorder(existingTriggerMode: hotkey.triggerMode)
+        recorder = r
+        _ = r.start { [hotkey] result in
+            isRecording = false
+            recorder = nil
+            if let captured = result, captured.isValid {
+                self.hotkey = Hotkey(
+                    key: captured.key,
+                    modifiers: captured.modifiers,
+                    triggerMode: hotkey.triggerMode,
+                    enabled: true
+                )
+            } else if result != nil {
+                hint = "Combo needs at least one modifier."
+            } // nil = cancelled / timeout, leave existing binding
+        }
+    }
+}
+
+private func displayString(_ h: Hotkey) -> String {
+    if !h.enabled { return "(disabled)" }
+    switch h.key {
+    case .fn:
+        return "Fn"
+    case .keycode(let kc):
+        let prefix = displayModifiers(h.modifiers)
+        return prefix + keyName(forKeycode: kc)
+    }
+}
+
+private func displayModifiers(_ mods: Set<Modifier>) -> String {
+    var s = ""
+    if mods.contains(.control) { s += "⌃" }
+    if mods.contains(.option)  { s += "⌥" }
+    if mods.contains(.shift)   { s += "⇧" }
+    if mods.contains(.command) { s += "⌘" }
+    return s
+}
+
+private func keyName(forKeycode kc: UInt16) -> String {
+    let map: [UInt16: String] = [
+        UInt16(kVK_ANSI_A): "A", UInt16(kVK_ANSI_B): "B", UInt16(kVK_ANSI_C): "C",
+        UInt16(kVK_ANSI_D): "D", UInt16(kVK_ANSI_E): "E", UInt16(kVK_ANSI_F): "F",
+        UInt16(kVK_ANSI_G): "G", UInt16(kVK_ANSI_H): "H", UInt16(kVK_ANSI_I): "I",
+        UInt16(kVK_ANSI_J): "J", UInt16(kVK_ANSI_K): "K", UInt16(kVK_ANSI_L): "L",
+        UInt16(kVK_ANSI_M): "M", UInt16(kVK_ANSI_N): "N", UInt16(kVK_ANSI_O): "O",
+        UInt16(kVK_ANSI_P): "P", UInt16(kVK_ANSI_Q): "Q", UInt16(kVK_ANSI_R): "R",
+        UInt16(kVK_ANSI_S): "S", UInt16(kVK_ANSI_T): "T", UInt16(kVK_ANSI_U): "U",
+        UInt16(kVK_ANSI_V): "V", UInt16(kVK_ANSI_W): "W", UInt16(kVK_ANSI_X): "X",
+        UInt16(kVK_ANSI_Y): "Y", UInt16(kVK_ANSI_Z): "Z",
+        UInt16(kVK_ANSI_0): "0", UInt16(kVK_ANSI_1): "1", UInt16(kVK_ANSI_2): "2",
+        UInt16(kVK_ANSI_3): "3", UInt16(kVK_ANSI_4): "4", UInt16(kVK_ANSI_5): "5",
+        UInt16(kVK_ANSI_6): "6", UInt16(kVK_ANSI_7): "7", UInt16(kVK_ANSI_8): "8",
+        UInt16(kVK_ANSI_9): "9",
+        UInt16(kVK_Space): "Space", UInt16(kVK_Return): "Return",
+        UInt16(kVK_Tab): "Tab", UInt16(kVK_Escape): "Esc",
+    ]
+    return map[kc] ?? "key(\(kc))"
 }
 
 final class SettingsWindowController: NSWindowController {
