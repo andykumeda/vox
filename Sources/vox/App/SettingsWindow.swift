@@ -9,6 +9,9 @@ struct SettingsView: View {
     @State private var forceProse: Bool = AppSettings.forceProseMode
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
+    @StateObject private var dict = DictionaryStore.shared
+    @State private var editingEntry: DictionaryEntry?
+    @State private var isAddingEntry: Bool = false
     let keychain: KeychainStore
 
     var body: some View {
@@ -141,6 +144,65 @@ struct SettingsView: View {
                         "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
                 }
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Dictionary")
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        editingEntry = DictionaryEntry(
+                            id: "user-\(UUID().uuidString)",
+                            spoken: "", replacement: "",
+                            mode: .command, isBuiltIn: false
+                        )
+                        isAddingEntry = true
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([dict.fileURL])
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
+                    }
+                }
+
+                if let err = dict.loadError {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                List {
+                    ForEach(dict.entries) { entry in
+                        DictionaryRow(
+                            entry: entry,
+                            onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
+                            onEdit: { editingEntry = entry; isAddingEntry = false },
+                            onDelete: { dict.delete(id: entry.id) }
+                        )
+                    }
+                }
+                .frame(minHeight: 180, maxHeight: 360)
+
+                Text("\(dict.entries.count) entries · \(dict.entries.filter { !$0.enabled }.count) disabled")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .sheet(item: $editingEntry) { entry in
+                DictionaryEditSheet(
+                    entry: entry,
+                    isNew: isAddingEntry,
+                    onSave: { saved in
+                        if isAddingEntry { dict.add(saved) } else { dict.update(saved) }
+                        editingEntry = nil
+                    },
+                    onCancel: { editingEntry = nil }
+                )
+            }
+
             Spacer()
         }
         .padding(20)
@@ -162,6 +224,99 @@ struct SettingsView: View {
         } catch {
             savedMessage = "Save failed: \(error.localizedDescription)"
         }
+    }
+}
+
+struct DictionaryRow: View {
+    let entry: DictionaryEntry
+    let onToggle: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Toggle("", isOn: Binding(
+                get: { entry.enabled },
+                set: { _ in onToggle() }
+            ))
+            .labelsHidden()
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.spoken).font(.system(.body, design: .monospaced))
+                    Text("→").foregroundStyle(.secondary)
+                    Text(entry.replacement.isEmpty ? "(delete)" : entry.replacement)
+                        .font(.system(.body, design: .monospaced))
+                }
+                HStack(spacing: 8) {
+                    Text(entry.mode.rawValue).font(.caption).foregroundStyle(.secondary)
+                    if entry.startsWith {
+                        Text("start").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if entry.isBuiltIn {
+                        Text("built-in").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            Spacer()
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.plain)
+            if !entry.isBuiltIn {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct DictionaryEditSheet: View {
+    @State var entry: DictionaryEntry
+    let isNew: Bool
+    let onSave: (DictionaryEntry) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(isNew ? "Add entry" : "Edit entry").font(.title3).fontWeight(.semibold)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Spoken").font(.caption)
+                TextField("e.g. vox", text: $entry.spoken)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Replacement").font(.caption)
+                TextField("e.g. Vox", text: $entry.replacement)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack(spacing: 16) {
+                Picker("Mode", selection: $entry.mode) {
+                    ForEach(Scope.allCases, id: \.self) { s in
+                        Text(s.rawValue).tag(s)
+                    }
+                }
+                .frame(maxWidth: 180)
+
+                Toggle("Match only at start", isOn: $entry.startsWith)
+                Toggle("Case-insensitive", isOn: $entry.caseInsensitive)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                Button(isNew ? "Add" : "Save") { onSave(entry) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(entry.spoken.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding()
+        .frame(width: 460)
     }
 }
 

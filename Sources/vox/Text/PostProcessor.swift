@@ -3,9 +3,16 @@ import Foundation
 public struct PostProcessor {
     public let mode: TranscriptionMode
     private let numberNormalizer = NumberNormalizer()
+    private let dictionaryProvider: () -> [DictionaryEntry]
 
-    public init(mode: TranscriptionMode) {
+    public init(
+        mode: TranscriptionMode,
+        dictionaryProvider: @escaping () -> [DictionaryEntry] = {
+            MainActor.assumeIsolated { DictionaryStore.shared.entries }
+        }
+    ) {
         self.mode = mode
+        self.dictionaryProvider = dictionaryProvider
     }
 
     public func apply(_ raw: String) -> String {
@@ -30,6 +37,7 @@ public struct PostProcessor {
         var suffixKeys: [SuffixKey] = []
         switch mode {
         case .prose:
+            s = applyDictionary(.prose, s)
             s = capitalizeSentenceStarts(s)
             s = ensureTrailingTerminator(s)
             // Send a Space keystroke after paste instead of appending " " to
@@ -42,6 +50,7 @@ public struct PostProcessor {
             s = stripTrailingSentencePunctuation(s)
             s = expandSpokenPunctuation(s)
             s = splitCommandFromFlag(s)
+            s = applyDictionary(.command, s)
             let extracted = extractTrailingSuffixKeys(s)
             s = extracted.text
             suffixKeys = extracted.keys
@@ -185,6 +194,12 @@ public struct PostProcessor {
         let ns = input as NSString
         let range = NSRange(location: 0, length: ns.length)
         return re.stringByReplacingMatches(in: input, options: [], range: range, withTemplate: "$1 -")
+    }
+
+    // MARK: - User dictionary
+
+    private func applyDictionary(_ scope: Scope, _ input: String) -> String {
+        DictionaryMatcher.apply(entries: dictionaryProvider(), to: input, scope: scope)
     }
 
     // MARK: - Spoken punctuation (command mode)
