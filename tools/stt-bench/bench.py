@@ -122,9 +122,11 @@ async def transcribe_deepgram(client: httpx.AsyncClient, wav_bytes: bytes) -> tu
 async def transcribe_assemblyai(client: httpx.AsyncClient, wav_bytes: bytes) -> tuple[str, float]:
     """Returns (transcript, latency_seconds).
 
-    AssemblyAI is upload + create transcript + poll. Latency = wall-clock from
-    upload start to terminal status, capped at 30s of polling for the transcript
-    (uploads themselves don't count toward that 30s).
+    AssemblyAI is upload + create transcript + poll. The returned latency is
+    wall-clock from upload start through to terminal poll status, so it includes
+    upload, create, and polling round-trips (this is the user-facing latency
+    a real client would see). The 30s polling cap is measured separately, from
+    after the create response, and does not include upload time.
     """
     api_key = os.environ["ASSEMBLYAI_API_KEY"]
     headers = {"Authorization": api_key}
