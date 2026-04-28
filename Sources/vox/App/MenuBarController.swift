@@ -48,6 +48,9 @@ final class MenuBarController: NSObject {
         modelProvider: { AppSettings.transcriptionModel.rawValue },
         apiKeyProvider: { [keychain] in keychain.read() }
     )
+    private lazy var liveLLMCleaner: CleanupProcessor.LLMCleanFunc = makeLiveLLMCleaner(
+        apiKeyProvider: { [keychain] in keychain.read() }
+    )
     private lazy var settingsController = SettingsWindowController(keychain: keychain)
     private lazy var updaterController = SPUStandardUpdaterController(
         startingUpdater: true,
@@ -302,17 +305,27 @@ final class MenuBarController: NSObject {
                 let processed = await MainActor.run {
                     PostProcessor(mode: mode).process(raw)
                 }
-                let wordCount = processed.text.split(whereSeparator: { $0.isWhitespace }).count
+
+                let cleanupEnabled = AppSettings.smartCleanupEnabled
+                let cleaner = CleanupProcessor(
+                    mode: mode,
+                    enabled: cleanupEnabled,
+                    llmCleaner: cleanupEnabled ? self.liveLLMCleaner : nil
+                )
+                let cleanedText = await cleaner.process(processed.text)
+                dlog("cleaned=\(cleanedText)")
+
+                let wordCount = cleanedText.split(whereSeparator: { $0.isWhitespace }).count
                 let model = AppSettings.transcriptionModel
                 let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
                 UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model)
                 dlog("processed=\(processed.text) keys=\(processed.suffixKeys) words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
                 await MainActor.run {
                     let pasteDelay: Double
-                    if processed.text.isEmpty {
+                    if cleanedText.isEmpty {
                         pasteDelay = 0
                     } else {
-                        self.injector.paste(processed.text, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
+                        self.injector.paste(cleanedText, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
                         pasteDelay = 0.2
                     }
                     for (i, key) in processed.suffixKeys.enumerated() {
