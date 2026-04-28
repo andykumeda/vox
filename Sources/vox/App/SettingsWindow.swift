@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var savedMessage: String?
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
     @State private var forceProse: Bool = AppSettings.forceProseMode
+    @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
     @StateObject private var dict = DictionaryStore.shared
@@ -107,6 +108,17 @@ struct SettingsView: View {
                     }
                 ))
                 Text("Off: dictation in Terminal/iTerm/Wave/etc gets command formatting (no period, no caps, dash/NATO/control). On: always treat dictation as prose with sentence punctuation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Smart cleanup (prose mode): remove false starts and self-corrections via gpt-4o-mini", isOn: Binding(
+                    get: { smartCleanup },
+                    set: { newValue in
+                        smartCleanup = newValue
+                        AppSettings.smartCleanupEnabled = newValue
+                    }
+                ))
+                .help("Adds ~$0.0001 and ~1s latency per dictation. Triggers ('scratch that', 'new paragraph', 'new line') also activate when enabled.")
+                Text("Adds ~$0.0001 and ~1s latency per dictation. Triggers ('scratch that', 'new paragraph', 'new line') also activate when enabled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -292,6 +304,7 @@ struct SettingsView: View {
             totals = UsageTracker.totals()
             model = AppSettings.transcriptionModel
             forceProse = AppSettings.forceProseMode
+            smartCleanup = AppSettings.smartCleanupEnabled
         }
     }
 
