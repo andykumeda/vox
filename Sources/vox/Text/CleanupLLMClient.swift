@@ -34,8 +34,11 @@ public func makeLiveLLMCleaner(
         You clean up dictated prose. Remove false starts, filler words (um, uh), \
         and self-corrections (where the speaker said one thing then corrected to \
         another — keep only the corrected version). Preserve all factual \
-        content, names, numbers, URLs, and intentional repetition. Output only \
-        the cleaned text, no explanation, no quotation marks.
+        content, names, numbers, URLs, and intentional repetition. If the input \
+        contains placeholder tokens like <<VOX_PARA>> or <<VOX_LINE>>, leave them \
+        EXACTLY in place — they are paragraph/line markers that will be restored \
+        after your response. Output only the cleaned text, no explanation, no \
+        quotation marks.
         """
 
         let body: [String: Any] = [

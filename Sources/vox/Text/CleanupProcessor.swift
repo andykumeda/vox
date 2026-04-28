@@ -28,8 +28,16 @@ public struct CleanupProcessor {
 
         guard let cleaner = llmCleaner else { return triggered }
 
+        // Replace newline markers with placeholder tokens before the LLM call so
+        // gpt-4o-mini doesn't strip them as artifacts. Restored verbatim after.
+        let paraToken = "<<VOX_PARA>>"
+        let lineToken = "<<VOX_LINE>>"
+        let prepared = triggered
+            .replacingOccurrences(of: "\n\n", with: paraToken)
+            .replacingOccurrences(of: "\n", with: lineToken)
+
         do {
-            let cleaned = try await cleaner(triggered)
+            let cleaned = try await cleaner(prepared)
             let trimmedCleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
             // Suspicious-small-output guard: if the LLM returns far less than we sent,
             // treat it as a malformed completion and fail open. Threshold tuned to allow
@@ -39,7 +47,10 @@ public struct CleanupProcessor {
                 FileHandle.standardError.write(Data("Cleanup malformed response (length \(trimmedCleaned.count) < 3 for input length \(triggered.count))\n".utf8))
                 return triggered
             }
-            return trimmedCleaned
+            let restored = trimmedCleaned
+                .replacingOccurrences(of: paraToken, with: "\n\n")
+                .replacingOccurrences(of: lineToken, with: "\n")
+            return restored
         } catch {
             FileHandle.standardError.write(Data("Cleanup error: \(error)\n".utf8))
             return triggered
@@ -49,7 +60,52 @@ public struct CleanupProcessor {
     // MARK: - Triggers
 
     /// Runs the three trigger phrases over the input. Pure synchronous function.
+    /// Prose mode uses sentence-tokenizer anchoring (low false-positive risk).
+    /// Command mode uses substring-based logic — Whisper command-mode output
+    /// often lacks sentence punctuation, so the tokenizer can't split it.
     func applyTriggers(_ input: String) -> String {
+        if mode == .command {
+            return applyTriggersCommand(input)
+        }
+        return applyTriggersProse(input)
+    }
+
+    // Command mode: "scratch that" / "delete that" splits the input; keep only
+    // what's after the LAST occurrence (multiple corrections collapse to the
+    // final attempt). "new paragraph" / "new line" replace as substrings.
+    // Trades off some false-positive risk ("scratch that itch") — acceptable
+    // because command-mode dictation rarely contains those phrases naturally.
+    private func applyTriggersCommand(_ input: String) -> String {
+        var s = input
+        if let re = try? NSRegularExpression(
+            pattern: "\\b(scratch|delete) that\\b\\s*[.,!?]?\\s*",
+            options: [.caseInsensitive]
+        ) {
+            let ns = s as NSString
+            let matches = re.matches(in: s, range: NSRange(location: 0, length: ns.length))
+            if let last = matches.last {
+                let afterEnd = last.range.location + last.range.length
+                s = ns.substring(from: afterEnd)
+            }
+        }
+        if let re = try? NSRegularExpression(
+            pattern: "\\s*\\bnew paragraph\\b\\s*[.,!?]?\\s*",
+            options: [.caseInsensitive]
+        ) {
+            let ns = s as NSString
+            s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "\n\n")
+        }
+        if let re = try? NSRegularExpression(
+            pattern: "\\s*\\bnew line\\b\\s*[.,!?]?\\s*",
+            options: [.caseInsensitive]
+        ) {
+            let ns = s as NSString
+            s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "\n")
+        }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func applyTriggersProse(_ input: String) -> String {
         let sentences = splitSentences(input)
         var output: [String] = []
 

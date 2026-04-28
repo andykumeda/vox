@@ -245,4 +245,87 @@ final class CleanupProcessorTests: XCTestCase {
         let result = await proc.process("Hi.")
         XCTAssertEqual(result, "Hi.")
     }
+
+    // MARK: - Command mode triggers (substring-based, tolerant of missing punct)
+
+    func testCommandModeTriggerWithoutPunctuation() async {
+        // Whisper command-mode prompt forbids trailing punctuation, so input
+        // is often one continuous sentence. Trigger must still fire.
+        let proc = CleanupProcessor(mode: .command, enabled: true, llmCleaner: nil)
+        let result = await proc.process("open the file scratch that close the file")
+        XCTAssertEqual(result, "close the file")
+    }
+
+    func testCommandModeMultipleTriggersKeepLast() async {
+        // Multiple "scratch that" — keep only what's after the last one.
+        let proc = CleanupProcessor(mode: .command, enabled: true, llmCleaner: nil)
+        let result = await proc.process("ls scratch that grep foo scratch that wc -l")
+        XCTAssertEqual(result, "wc -l")
+    }
+
+    func testCommandModeTriggerWithPeriodStillWorks() async {
+        // Existing test case: with punctuation, command mode also works.
+        let proc = CleanupProcessor(mode: .command, enabled: true, llmCleaner: nil)
+        let result = await proc.process("Open the file. Scratch that. Close the file.")
+        XCTAssertEqual(result, "Close the file.")
+    }
+
+    func testCommandModeNoTriggerLeavesUnchanged() async {
+        // No trigger: input passes through unchanged.
+        let proc = CleanupProcessor(mode: .command, enabled: true, llmCleaner: nil)
+        let result = await proc.process("ls -la")
+        XCTAssertEqual(result, "ls -la")
+    }
+
+    func testCommandModeNewParagraphSubstring() async {
+        // "new paragraph" works as substring in command mode (e.g., for echo
+        // or vim heredoc dictation).
+        let proc = CleanupProcessor(mode: .command, enabled: true, llmCleaner: nil)
+        let result = await proc.process("first line new paragraph second line")
+        XCTAssertEqual(result, "first line\n\nsecond line")
+    }
+
+    // MARK: - Newline placeholder swap protects against LLM stripping
+
+    func testProseLLMReceivesPlaceholderTokensNotRawNewlines() async {
+        // Verify the LLM is invoked with placeholder tokens, not raw \n.
+        // If we sent raw \n, gpt-4o-mini would strip them as artifacts.
+        final class Capture { var input: String? }
+        let capture = Capture()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
+            capture.input = input
+            return input
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        _ = await proc.process("First. New paragraph. Second.")
+        XCTAssertNotNil(capture.input)
+        XCTAssertTrue(capture.input!.contains("<<VOX_PARA>>"),
+                      "LLM input should contain <<VOX_PARA>> placeholder, got: \(capture.input ?? "nil")")
+        XCTAssertFalse(capture.input!.contains("\n\n"),
+                       "LLM input should NOT contain raw \\n\\n; got: \(capture.input ?? "nil")")
+    }
+
+    func testProsePlaceholderTokensRestoredToNewlines() async {
+        // The LLM returns placeholder tokens; CleanupProcessor restores them
+        // back to raw newlines in the final output.
+        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
+            // Pass through verbatim — placeholder tokens preserved.
+            return input
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("First. New paragraph. Second.")
+        XCTAssertEqual(result, "First.\n\nSecond.")
+    }
+
+    func testProseLLMStripsPlaceholdersStillReturnsCleanedText() async {
+        // Even if the LLM strips the placeholder tokens, we still pass through
+        // the cleaned text (newlines are lost but the rest of the cleanup is
+        // preserved). The Vox UI degrades gracefully rather than crashing.
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            return "First. Second."  // Both placeholders stripped by the "LLM".
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("First. New paragraph. Second.")
+        XCTAssertEqual(result, "First. Second.")
+    }
 }
