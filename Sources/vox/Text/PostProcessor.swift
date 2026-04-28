@@ -320,6 +320,18 @@ public struct PostProcessor {
         ("esc", .escape, false),
     ]
 
+    // Spoken-word → KeyModifier and ArrowDirection lookups for arrow + modifier
+    // suffix keys (e.g. "control right" → Ctrl+→).
+    private static let modifierWords: [String: KeyModifier] = [
+        "control": .control, "ctrl": .control,
+        "option": .option, "opt": .option, "alt": .option,
+        "command": .command, "cmd": .command,
+        "shift": .shift,
+    ]
+    private static let arrowWords: [String: ArrowDirection] = [
+        "left": .left, "right": .right, "up": .up, "down": .down,
+    ]
+
     private func extractTrailingSuffixKeys(_ input: String) -> (text: String, keys: [SuffixKey]) {
         var s = input
         var keys: [SuffixKey] = []
@@ -328,6 +340,28 @@ public struct PostProcessor {
             let parts = trimmed.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
             guard let last = parts.last else { break }
             let lower = last.lowercased()
+            // Trailing arrow with one or more modifiers: "<mod>+ <arrow>"
+            // (e.g. "ls control right", "echo foo command shift left").
+            // Bare "left"/"right" without a modifier is NOT consumed — too easy
+            // to false-positive on real prose ("turn left").
+            if parts.count >= 2, let dir = Self.arrowWords[lower] {
+                var mods: Set<KeyModifier> = []
+                var consumed = 1
+                for i in stride(from: parts.count - 2, through: 0, by: -1) {
+                    let w = parts[i].lowercased()
+                    if let mod = Self.modifierWords[w] {
+                        mods.insert(mod)
+                        consumed += 1
+                    } else {
+                        break
+                    }
+                }
+                if !mods.isEmpty {
+                    keys.insert(.arrow(dir, modifiers: mods), at: 0)
+                    s = parts.dropLast(consumed).joined(separator: " ")
+                    continue
+                }
+            }
             // Two-word "control X" / "ctrl X" → Ctrl+letter
             if parts.count >= 2, lower.count == 1, lower.first?.isLetter == true {
                 let secondLast = parts[parts.count - 2].lowercased()
