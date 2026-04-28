@@ -228,4 +228,73 @@ final class DictionaryMatcherTests: XCTestCase {
         )
         XCTAssertEqual(result, "FIRST")
     }
+
+    // MARK: - Edge punctuation tolerance
+
+    func testReplacesTokenWithTrailingComma() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("andie", "Andy", mode: .prose)],
+            to: "Hi Andie, how are you?",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "Hi Andy, how are you?")
+    }
+
+    func testReplacesTokenWithTrailingPeriod() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("andie", "Andy", mode: .prose)],
+            to: "I saw Andie.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "I saw Andy.")
+    }
+
+    func testReplacesTokenWithSurroundingQuotes() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("andie", "Andy", mode: .prose)],
+            to: "She said \"Andie\" twice.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "She said \"Andy\" twice.")
+    }
+
+    func testReplacesAllOccurrencesEvenWithMixedPunct() {
+        // The reported bug: first occurrence (no punct) replaced, later
+        // occurrence (with punct) was missed.
+        let result = DictionaryMatcher.apply(
+            entries: [entry("andie", "Andy", mode: .prose)],
+            to: "Andie saw Andie, then Andie left.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "Andy saw Andy, then Andy left.")
+    }
+
+    func testReplacesTokenWithTrailingQuestionMark() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("andie", "Andy", mode: .prose)],
+            to: "Is that Andie?",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "Is that Andy?")
+    }
+
+    func testMultiTokenSpokenWithTrailingPunct() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("new york", "NYC", mode: .prose)],
+            to: "I love New York, really.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "I love NYC, really.")
+    }
+
+    func testEmptyReplacementDropsTokenAndPunct() {
+        // Deletion entry: punct goes with the deleted word (better than
+        // stranding ", ," in the middle of a sentence).
+        let result = DictionaryMatcher.apply(
+            entries: [entry("um", "", mode: .prose)],
+            to: "Hello, um, how are you?",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "Hello, how are you?")
+    }
 }
