@@ -7,7 +7,7 @@ struct SettingsView: View {
     @State private var showKey = false
     @State private var savedMessage: String?
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
-    @State private var forceProse: Bool = AppSettings.forceProseMode
+    @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
     @StateObject private var dict = DictionaryStore.shared
@@ -99,14 +99,20 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Mode")
                     .font(.headline)
-                Toggle("Always use prose mode (ignore terminal detection)", isOn: Binding(
-                    get: { forceProse },
+                Picker("", selection: Binding(
+                    get: { modeOverride },
                     set: { newValue in
-                        forceProse = newValue
-                        AppSettings.forceProseMode = newValue
+                        modeOverride = newValue
+                        AppSettings.modeOverride = newValue
                     }
-                ))
-                Text("Off: dictation in Terminal/iTerm/Wave/etc gets command formatting (no period, no caps, dash/NATO/control). On: always treat dictation as prose with sentence punctuation.")
+                )) {
+                    ForEach(ModeOverride.allCases, id: \.self) { m in
+                        Text(m.displayName).tag(m)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                Text("Auto: dictation in Terminal/iTerm/Wave/etc gets command formatting (no period, no caps, dash/NATO/control); other apps get prose with sentence punctuation. Always prose: every dictation formatted as prose. Always command: every dictation formatted as a shell command (useful when dictating into a journal app or notes that hold shell commands you'll copy out later). The mode-toggle hotkey cycles through all three.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -291,7 +297,7 @@ struct SettingsView: View {
             apiKey = keychain.read() ?? ""
             totals = UsageTracker.totals()
             model = AppSettings.transcriptionModel
-            forceProse = AppSettings.forceProseMode
+            modeOverride = AppSettings.modeOverride
         }
     }
 
