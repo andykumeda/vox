@@ -285,47 +285,49 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, "first line\n\nsecond line")
     }
 
-    // MARK: - Newline placeholder swap protects against LLM stripping
+    // MARK: - Newline-bypass: paragraph triggers skip the LLM entirely
 
-    func testProseLLMReceivesPlaceholderTokensNotRawNewlines() async {
-        // Verify the LLM is invoked with placeholder tokens, not raw \n.
-        // If we sent raw \n, gpt-4o-mini would strip them as artifacts.
-        final class Capture { var input: String? }
-        let capture = Capture()
-        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
-            capture.input = input
-            return input
-        }
-        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
-        _ = await proc.process("First. New paragraph. Second.")
-        XCTAssertNotNil(capture.input)
-        XCTAssertTrue(capture.input!.contains("<<VOX_PARA>>"),
-                      "LLM input should contain <<VOX_PARA>> placeholder, got: \(capture.input ?? "nil")")
-        XCTAssertFalse(capture.input!.contains("\n\n"),
-                       "LLM input should NOT contain raw \\n\\n; got: \(capture.input ?? "nil")")
-    }
-
-    func testProsePlaceholderTokensRestoredToNewlines() async {
-        // The LLM returns placeholder tokens; CleanupProcessor restores them
-        // back to raw newlines in the final output.
-        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
-            // Pass through verbatim — placeholder tokens preserved.
-            return input
+    func testProseParagraphTriggerSkipsLLMEntirely() async {
+        // gpt-4o-mini cannot be relied on to preserve placeholder tokens; the
+        // safest behavior is to bypass the LLM whenever the triggered text
+        // contains an explicit \n or \n\n. Verify the cleaner closure is
+        // never invoked in that case.
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            flag.value = true
+            return "should not be used"
         }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
         let result = await proc.process("First. New paragraph. Second.")
+        XCTAssertFalse(flag.value, "LLM must NOT be invoked when triggered text contains newlines")
         XCTAssertEqual(result, "First.\n\nSecond.")
     }
 
-    func testProseLLMStripsPlaceholdersStillReturnsCleanedText() async {
-        // Even if the LLM strips the placeholder tokens, we still pass through
-        // the cleaned text (newlines are lost but the rest of the cleanup is
-        // preserved). The Vox UI degrades gracefully rather than crashing.
+    func testProseNewLineTriggerSkipsLLMEntirely() async {
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
         let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
-            return "First. Second."  // Both placeholders stripped by the "LLM".
+            flag.value = true
+            return "should not be used"
         }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
-        let result = await proc.process("First. New paragraph. Second.")
-        XCTAssertEqual(result, "First. Second.")
+        let result = await proc.process("Item one. New line. Item two.")
+        XCTAssertFalse(flag.value)
+        XCTAssertEqual(result, "Item one.\nItem two.")
+    }
+
+    func testProseNoNewlinesStillInvokesLLM() async {
+        // Sanity: when triggered text has no newlines, the LLM is still called.
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
+            flag.value = true
+            return "[cleaned] \(input)"
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("This is plain prose with no triggers.")
+        XCTAssertTrue(flag.value, "LLM must be invoked when triggered text has no newlines")
+        XCTAssertEqual(result, "[cleaned] This is plain prose with no triggers.")
     }
 }

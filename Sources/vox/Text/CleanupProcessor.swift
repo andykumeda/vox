@@ -26,10 +26,19 @@ public struct CleanupProcessor {
         let trimmed = triggered.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return trimmed }
 
+        // If the trigger inserted explicit paragraph or line breaks, skip the
+        // LLM call. gpt-4o-mini strips placeholder tokens reliably enough to be
+        // unsafe even with prompt instructions, and losing the break is worse
+        // than losing the prose polish on a paragraph-broken dictation.
+        if triggered.contains("\n") {
+            return triggered
+        }
+
         guard let cleaner = llmCleaner else { return triggered }
 
-        // Replace newline markers with placeholder tokens before the LLM call so
-        // gpt-4o-mini doesn't strip them as artifacts. Restored verbatim after.
+        // Placeholder swap kept for any future case where input arrives with
+        // newlines that didn't come from triggers (currently unreachable because
+        // triggers are the only newline source — cheap insurance).
         let paraToken = "<<VOX_PARA>>"
         let lineToken = "<<VOX_LINE>>"
         let prepared = triggered
