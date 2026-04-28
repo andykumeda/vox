@@ -192,7 +192,12 @@ final class MenuBarController: NSObject {
             let base = candidates.lazy
                 .compactMap { NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") }
                 .first
-            let tint: NSColor = AppSettings.forceProseMode ? .systemBlue : .labelColor
+            let tint: NSColor
+            switch AppSettings.modeOverride {
+            case .auto:    tint = .labelColor
+            case .prose:   tint = .systemBlue
+            case .command: tint = .systemPurple
+            }
             let cfg = NSImage.SymbolConfiguration(paletteColors: [tint])
             let tinted = base?.withSymbolConfiguration(cfg)
             tinted?.isTemplate = false
@@ -249,7 +254,7 @@ final class MenuBarController: NSObject {
     }
 
     private func handleModeToggle() {
-        AppSettings.forceProseMode.toggle()
+        AppSettings.modeOverride = AppSettings.modeOverride.next()
         refreshIcon()
         NSSound(named: NSSound.Name("Tink"))?.play()
     }
@@ -267,7 +272,11 @@ final class MenuBarController: NSObject {
 
     private func beginRecording() {
         guard state == .idle else { return }
-        currentMode = AppSettings.forceProseMode ? .prose : contextDetector.modeForFrontmost()
+        switch AppSettings.modeOverride {
+        case .auto:    currentMode = contextDetector.modeForFrontmost()
+        case .prose:   currentMode = .prose
+        case .command: currentMode = .command
+        }
         do {
             try recorder.start()
             state = .recording

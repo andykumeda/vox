@@ -24,10 +24,33 @@ enum TranscriptionModel: String, CaseIterable, Sendable {
     }
 }
 
+public enum ModeOverride: String, CaseIterable, Sendable {
+    case auto      // ContextDetector decides (terminal apps → command, others → prose)
+    case prose     // always prose
+    case command   // always command
+
+    public var displayName: String {
+        switch self {
+        case .auto:    return "Auto (detect by app)"
+        case .prose:   return "Always prose"
+        case .command: return "Always command"
+        }
+    }
+
+    public func next() -> ModeOverride {
+        switch self {
+        case .auto:    return .prose
+        case .prose:   return .command
+        case .command: return .auto
+        }
+    }
+}
+
 enum AppSettings {
     private static let keepKey = "keepTranscriptionOnClipboard"
     private static let modelKey = "transcriptionModel"
-    private static let forceProseKey = "forceProseMode"
+    private static let forceProseKey = "forceProseMode"   // legacy — read for migration only
+    private static let modeOverrideKey = "modeOverride"
     private static let smartCleanupKey = "smartCleanupEnabled"
 
     static var keepTranscriptionOnClipboard: Bool {
@@ -46,9 +69,21 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: modelKey) }
     }
 
-    static var forceProseMode: Bool {
-        get { UserDefaults.standard.bool(forKey: forceProseKey) }
-        set { UserDefaults.standard.set(newValue, forKey: forceProseKey) }
+    static var modeOverride: ModeOverride {
+        get {
+            // Read new key first; fall back to legacy forceProseMode bool for migration.
+            if let raw = UserDefaults.standard.string(forKey: modeOverrideKey),
+               let m = ModeOverride(rawValue: raw) {
+                return m
+            }
+            // Legacy migration: forceProseMode=true → .prose; absent or false → .auto.
+            // command override is new and has no legacy equivalent.
+            if UserDefaults.standard.bool(forKey: forceProseKey) {
+                return .prose
+            }
+            return .auto
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: modeOverrideKey) }
     }
 
     static var smartCleanupEnabled: Bool {
