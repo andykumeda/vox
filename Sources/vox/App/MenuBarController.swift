@@ -311,6 +311,25 @@ final class MenuBarController: NSObject {
             do {
                 let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
                 dlog("raw=\(raw)")
+
+                // Hallucination guard. gpt-4o-mini-transcribe occasionally loops on
+                // short / noisy audio and emits a runaway repetitive cascade
+                // (e.g. "rm -rf X rm -rf Y rm -rf Z..." for 100s of repetitions).
+                // Cap output at a generous chars-per-second ratio for the audio
+                // duration; a real fast speaker tops out around 17 chars/sec so
+                // 40 leaves margin for noisy speech and abbreviations.
+                let maxChars = max(160, Int(durationSec * 40.0))
+                if raw.count > maxChars {
+                    dlog("hallucination guard: \(raw.count) chars for \(durationSec)s audio (max \(maxChars)) — suppressing paste")
+                    await MainActor.run {
+                        self.state = .error
+                        self.sound.play(.error)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            self.state = .idle
+                        }
+                    }
+                    return
+                }
                 let processed = await MainActor.run {
                     PostProcessor(mode: mode).process(raw)
                 }
