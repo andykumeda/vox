@@ -176,10 +176,125 @@ async def transcribe_assemblyai(client: httpx.AsyncClient, wav_bytes: bytes) -> 
         await asyncio.sleep(1.0)
 
 
-def main() -> int:
+PROVIDERS: list[tuple[str, str, callable]] = [
+    ("openai", "OPENAI_API_KEY", transcribe_openai),
+    ("deepgram", "DEEPGRAM_API_KEY", transcribe_deepgram),
+    ("assemblyai", "ASSEMBLYAI_API_KEY", transcribe_assemblyai),
+]
+
+
+def estimate_cost_usd(provider: str, duration_s: float) -> float:
+    rate = PRICING_USD_PER_MIN[provider]
+    return rate * (duration_s / 60.0)
+
+
+async def run_provider(
+    provider: str,
+    fn: callable,
+    client: httpx.AsyncClient,
+    wav_bytes: bytes,
+) -> tuple[str, float]:
+    """Returns (transcript_or_error_marker, latency_seconds)."""
+    try:
+        return await fn(client, wav_bytes)
+    except httpx.HTTPStatusError as e:
+        body = (e.response.text or "")[:200]
+        msg = f"ERROR: HTTP {e.response.status_code} {body}"
+        print(f"{provider} failed: {msg}", file=sys.stderr)
+        return msg, 0.0
+    except (httpx.TimeoutException, asyncio.TimeoutError) as e:
+        msg = f"ERROR: timeout ({type(e).__name__})"
+        print(f"{provider} failed: {msg}", file=sys.stderr)
+        return msg, 0.0
+    except Exception as e:
+        msg = f"ERROR: {type(e).__name__}: {e}"
+        print(f"{provider} failed: {msg}", file=sys.stderr)
+        return msg, 0.0
+
+
+def md_escape_cell(text: str) -> str:
+    """Escape a transcript for use inside a markdown table cell."""
+    return text.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+
+
+async def run_bench() -> int:
     load_dotenv(ROOT / ".env")
-    print("bench.py skeleton ok")
+
+    samples = sorted(SAMPLES_DIR.glob("*.wav"))
+    if not samples:
+        print(f"No WAVs in {SAMPLES_DIR}", file=sys.stderr)
+        return 1
+
+    active = [(name, fn) for name, env, fn in PROVIDERS if os.environ.get(env)]
+    skipped = [name for name, env, _ in PROVIDERS if not os.environ.get(env)]
+    for name in skipped:
+        env = next(e for n, e, _ in PROVIDERS if n == name)
+        print(f"Skipping {name}: {env} not set", file=sys.stderr)
+    if not active:
+        print("No providers configured", file=sys.stderr)
+        return 1
+
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
+    out_dir = OUTPUTS_DIR / ts
+    raw_dir = out_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    results: dict[Path, dict[str, tuple[str, float]]] = {}
+    durations: dict[Path, float] = {}
+
+    async with httpx.AsyncClient() as client:
+        for sample in samples:
+            wav_bytes = sample.read_bytes()
+            duration = wav_duration_seconds(sample)
+            durations[sample] = duration
+            print(f"[{sample.name}] {duration:.1f}s", file=sys.stderr)
+
+            tasks = [run_provider(name, fn, client, wav_bytes) for name, fn in active]
+            outcomes = await asyncio.gather(*tasks)
+            results[sample] = {name: outcome for (name, _), outcome in zip(active, outcomes)}
+
+            for name, (text, _) in results[sample].items():
+                (raw_dir / f"{sample.stem}-{name}.txt").write_text(text + "\n")
+
+    lines: list[str] = []
+    lines.append(f"# stt-bench results — {ts}\n")
+    lines.append(f"Active providers: {', '.join(name for name, _ in active)}\n")
+    if skipped:
+        lines.append(f"Skipped: {', '.join(skipped)}\n")
+    lines.append("")
+
+    totals_cost: dict[str, float] = {name: 0.0 for name, _ in active}
+    totals_latency: dict[str, list[float]] = {name: [] for name, _ in active}
+
+    for sample in samples:
+        duration = durations[sample]
+        lines.append(f"## {sample.name}  ({duration:.1f}s audio)\n")
+        lines.append("| Provider   | Latency  | Cost      | Transcript |")
+        lines.append("|------------|----------|-----------|------------|")
+        for name, _ in active:
+            text, latency = results[sample][name]
+            cost = estimate_cost_usd(name, duration)
+            totals_cost[name] += cost
+            totals_latency[name].append(latency)
+            lines.append(
+                f"| {name:<10} | {latency:>5.2f}s  | ${cost:>7.5f} | {md_escape_cell(text)} |"
+            )
+        lines.append("")
+
+    lines.append("## Totals\n")
+    lines.append("| Provider   | Total cost | Avg latency |")
+    lines.append("|------------|------------|-------------|")
+    for name, _ in active:
+        avg = (sum(totals_latency[name]) / len(totals_latency[name])) if totals_latency[name] else 0.0
+        lines.append(f"| {name:<10} | ${totals_cost[name]:>8.5f} | {avg:>6.2f}s     |")
+
+    (out_dir / "results.md").write_text("\n".join(lines) + "\n")
+    print(f"\nWrote {out_dir / 'results.md'}", file=sys.stderr)
     return 0
+
+
+def main() -> int:
+    return asyncio.run(run_bench())
 
 
 if __name__ == "__main__":
