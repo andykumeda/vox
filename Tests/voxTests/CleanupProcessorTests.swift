@@ -64,4 +64,82 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, "Hello. Scratch that, Goodbye.",
                        "When trigger is comma-joined to next clause, it is left in place; LLM handles it in prose.")
     }
+
+    // MARK: - Trigger: new paragraph
+
+    func testNewParagraphInsertsDoubleNewline() async {
+        let proc = makeProseProc()
+        let result = await proc.process("Para one. New paragraph. Para two.")
+        XCTAssertEqual(result, "Para one.\n\nPara two.")
+    }
+
+    func testNewParagraphCaseInsensitive() async {
+        let proc = makeProseProc()
+        let result = await proc.process("Header. NEW PARAGRAPH. Body.")
+        XCTAssertEqual(result, "Header.\n\nBody.")
+    }
+
+    func testNewParagraphMultipleInOneUtterance() async {
+        let proc = makeProseProc()
+        let result = await proc.process("First. New paragraph. Second. New paragraph. Third.")
+        XCTAssertEqual(result, "First.\n\nSecond.\n\nThird.")
+    }
+
+    // MARK: - Trigger: new line
+
+    func testNewLineInsertsSingleNewline() async {
+        let proc = makeProseProc()
+        let result = await proc.process("Item one. New line. Item two.")
+        XCTAssertEqual(result, "Item one.\nItem two.")
+    }
+
+    func testNewLineCaseInsensitive() async {
+        let proc = makeProseProc()
+        let result = await proc.process("Alpha. NEW LINE. Beta.")
+        XCTAssertEqual(result, "Alpha.\nBeta.")
+    }
+
+    // MARK: - Trigger false positives
+
+    func testScratchThatItchDoesNotTrigger() async {
+        let proc = makeProseProc()
+        let input = "I want to scratch that itch."
+        let result = await proc.process(input)
+        XCTAssertEqual(result, input)
+    }
+
+    func testNewParagraphFormatDoesNotTrigger() async {
+        let proc = makeProseProc()
+        let input = "We need a new paragraph format for this document."
+        let result = await proc.process(input)
+        XCTAssertEqual(result, input)
+    }
+
+    func testNewLineOfCodeDoesNotTrigger() async {
+        let proc = makeProseProc()
+        let input = "Add a new line of code to the function."
+        let result = await proc.process(input)
+        XCTAssertEqual(result, input)
+    }
+
+    func testDeleteThatBugDoesNotTrigger() async {
+        let proc = makeProseProc()
+        let input = "We should delete that bug from the queue."
+        let result = await proc.process(input)
+        XCTAssertEqual(result, input)
+    }
+
+    // MARK: - Trigger punctuation tolerance
+
+    func testScratchThatExclamationWipesPrecedingSentence() async {
+        let proc = makeProseProc()
+        let result = await proc.process("Hello. Scratch that! Goodbye.")
+        XCTAssertEqual(result, "Goodbye.")
+    }
+
+    func testScratchThatQuestionWipesPrecedingSentence() async {
+        let proc = makeProseProc()
+        let result = await proc.process("Hello. Scratch that? Goodbye.")
+        XCTAssertEqual(result, "Goodbye.")
+    }
 }
