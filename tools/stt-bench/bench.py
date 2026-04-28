@@ -146,7 +146,7 @@ async def transcribe_assemblyai(client: httpx.AsyncClient, wav_bytes: bytes) -> 
         headers={**headers, "Content-Type": "application/json"},
         json={
             "audio_url": upload_url,
-            "speech_model": "universal",
+            "speech_models": ["universal"],
             "language_code": "en",
             "punctuate": True,
             "format_text": True,
