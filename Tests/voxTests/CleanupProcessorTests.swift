@@ -202,4 +202,47 @@ final class CleanupProcessorTests: XCTestCase {
         let result = await proc.process("Hello world.")
         XCTAssertEqual(result, "Hello world.")
     }
+
+    // MARK: - Fail-open
+
+    func testLLMThrowsReturnsTriggeredText() async {
+        struct DummyError: Error {}
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in throw DummyError() }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Hello. Scratch that. World.")
+        XCTAssertEqual(result, "World.")
+    }
+
+    func testLLMHTTPErrorReturnsTriggeredText() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            throw NSError(domain: "test", code: 500, userInfo: [NSLocalizedDescriptionKey: "boom"])
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Goodbye world.")
+        XCTAssertEqual(result, "Goodbye world.")
+    }
+
+    // MARK: - Small-output guard
+
+    func testLLMEmptyOutputReturnsTriggeredText() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in return "" }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Hey there friend, how are you doing?")
+        XCTAssertEqual(result, "Hey there friend, how are you doing?")
+    }
+
+    func testLLMTinyOutputReturnsTriggeredText() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in return "." }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("This is a complete sentence with several words.")
+        XCTAssertEqual(result, "This is a complete sentence with several words.")
+    }
+
+    func testLLMShortInputAllowsShortOutput() async {
+        // If input is short, a short output is fine — guard only kicks in when input is long.
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in return "Hi." }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Hi.")
+        XCTAssertEqual(result, "Hi.")
+    }
 }

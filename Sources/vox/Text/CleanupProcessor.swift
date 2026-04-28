@@ -30,7 +30,16 @@ public struct CleanupProcessor {
 
         do {
             let cleaned = try await cleaner(triggered)
-            return cleaned
+            let trimmedCleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Suspicious-small-output guard: if the LLM returns far less than we sent,
+            // treat it as a malformed completion and fail open. Threshold tuned to allow
+            // legitimate aggressive cleanups (e.g. "Hi." -> "Hi.") while catching empty
+            // or near-empty completions for normal-length input.
+            if triggered.count >= 20 && trimmedCleaned.count < 3 {
+                FileHandle.standardError.write(Data("Cleanup malformed response (length \(trimmedCleaned.count) < 3 for input length \(triggered.count))\n".utf8))
+                return triggered
+            }
+            return trimmedCleaned
         } catch {
             FileHandle.standardError.write(Data("Cleanup error: \(error)\n".utf8))
             return triggered
