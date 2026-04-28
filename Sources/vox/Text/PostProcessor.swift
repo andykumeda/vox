@@ -340,6 +340,16 @@ public struct PostProcessor {
             let parts = trimmed.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
             guard let last = parts.last else { break }
             let lower = last.lowercased()
+            // Whisper's command-mode prompt names "control C for Ctrl+C", so the
+            // model often encodes a spoken "control X" as the symbol "^X" rather
+            // than two words. Detect a trailing "^[A-Za-z]" or "^[A-Za-z]<term>"
+            // and convert to a Ctrl+letter suffix key.
+            if let m = last.range(of: "^\\^[A-Za-z]$", options: .regularExpression) {
+                let letter = last[last.index(after: m.lowerBound)]
+                keys.insert(.control(Character(letter.lowercased())), at: 0)
+                s = parts.dropLast(1).joined(separator: " ")
+                continue
+            }
             // Trailing arrow with one or more modifiers: "<mod>+ <arrow>"
             // (e.g. "ls control right", "echo foo command shift left").
             // Bare "left"/"right" without a modifier is NOT consumed — too easy

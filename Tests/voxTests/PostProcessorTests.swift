@@ -593,4 +593,31 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(r.text, "ls")
         XCTAssertEqual(r.suffixKeys, [.arrow(.right, modifiers: [.control]), .return])
     }
+
+    // MARK: - "^X" caret-letter pattern (Whisper-encoded "control X")
+
+    func testCommandTrailingCaretCAsCtrlC() {
+        // Whisper sometimes encodes "control C" as the literal "^C" symbol
+        // (its command-mode prompt explicitly mentions "control C for Ctrl+C").
+        // PostProcessor should recognize the trailing pattern and emit Ctrl+C
+        // rather than pasting "^C" as text.
+        let p = PostProcessor(mode: .command)
+        let r = p.process("^C")
+        XCTAssertEqual(r.text, "")
+        XCTAssertEqual(r.suffixKeys, [.control("c")])
+    }
+
+    func testCommandCaretLetterAfterText() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls -la ^C")
+        XCTAssertEqual(r.text, "ls -la")
+        XCTAssertEqual(r.suffixKeys, [.control("c")])
+    }
+
+    func testCommandCaretLowerCaseLetter() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls ^d")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.control("d")])
+    }
 }
