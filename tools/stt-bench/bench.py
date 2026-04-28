@@ -59,6 +59,121 @@ def wav_duration_seconds(path: Path) -> float:
     return data_bytes / bytes_per_sample / sample_rate
 
 
+async def transcribe_openai(client: httpx.AsyncClient, wav_bytes: bytes) -> tuple[str, float]:
+    """Returns (transcript, latency_seconds). Raises on HTTP error."""
+    api_key = os.environ["OPENAI_API_KEY"]
+    files = {
+        "file": ("audio.wav", wav_bytes, "audio/wav"),
+    }
+    data = {
+        "model": "gpt-4o-transcribe",
+        "response_format": "text",
+        "language": "en",
+        "temperature": "0",
+        "prompt": PROSE_PROMPT,
+    }
+    headers = {"Authorization": f"Bearer {api_key}"}
+    started = time.monotonic()
+    resp = await client.post(
+        "https://api.openai.com/v1/audio/transcriptions",
+        headers=headers,
+        files=files,
+        data=data,
+        timeout=60.0,
+    )
+    latency = time.monotonic() - started
+    resp.raise_for_status()
+    return resp.text.strip(), latency
+
+
+async def transcribe_deepgram(client: httpx.AsyncClient, wav_bytes: bytes) -> tuple[str, float]:
+    """Returns (transcript, latency_seconds). Raises on HTTP error."""
+    api_key = os.environ["DEEPGRAM_API_KEY"]
+    headers = {
+        "Authorization": f"Token {api_key}",
+        "Content-Type": "audio/wav",
+    }
+    params = {
+        "model": "nova-3",
+        "language": "en",
+        "punctuate": "true",
+        "smart_format": "true",
+    }
+    started = time.monotonic()
+    resp = await client.post(
+        "https://api.deepgram.com/v1/listen",
+        headers=headers,
+        params=params,
+        content=wav_bytes,
+        timeout=60.0,
+    )
+    latency = time.monotonic() - started
+    resp.raise_for_status()
+    payload = resp.json()
+    transcript = (
+        payload.get("results", {})
+        .get("channels", [{}])[0]
+        .get("alternatives", [{}])[0]
+        .get("transcript", "")
+    )
+    return transcript.strip(), latency
+
+
+async def transcribe_assemblyai(client: httpx.AsyncClient, wav_bytes: bytes) -> tuple[str, float]:
+    """Returns (transcript, latency_seconds).
+
+    AssemblyAI is upload + create transcript + poll. Latency = wall-clock from
+    upload start to terminal status, capped at 30s of polling for the transcript
+    (uploads themselves don't count toward that 30s).
+    """
+    api_key = os.environ["ASSEMBLYAI_API_KEY"]
+    headers = {"Authorization": api_key}
+    started = time.monotonic()
+
+    upload_resp = await client.post(
+        "https://api.assemblyai.com/v2/upload",
+        headers=headers,
+        content=wav_bytes,
+        timeout=60.0,
+    )
+    upload_resp.raise_for_status()
+    upload_url = upload_resp.json()["upload_url"]
+
+    create_resp = await client.post(
+        "https://api.assemblyai.com/v2/transcript",
+        headers={**headers, "Content-Type": "application/json"},
+        json={
+            "audio_url": upload_url,
+            "speech_model": "universal",
+            "language_code": "en",
+            "punctuate": True,
+            "format_text": True,
+        },
+        timeout=60.0,
+    )
+    create_resp.raise_for_status()
+    transcript_id = create_resp.json()["id"]
+
+    poll_started = time.monotonic()
+    while True:
+        if time.monotonic() - poll_started > 30.0:
+            raise TimeoutError(f"AssemblyAI transcript {transcript_id} did not complete in 30s")
+        poll_resp = await client.get(
+            f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+            headers=headers,
+            timeout=30.0,
+        )
+        poll_resp.raise_for_status()
+        body = poll_resp.json()
+        status = body["status"]
+        if status == "completed":
+            text = (body.get("text") or "").strip()
+            return text, time.monotonic() - started
+        if status == "error":
+            raise RuntimeError(f"AssemblyAI error: {body.get('error')}")
+        await asyncio.sleep(1.0)
+
+
 def main() -> int:
     load_dotenv(ROOT / ".env")
     print("bench.py skeleton ok")
