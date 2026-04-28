@@ -45,8 +45,48 @@ Output: `outputs/<UTC-timestamp>/results.md` plus raw per-(sample, provider) tex
 
 ## Noise sources
 
-(Fill in once downloaded.)
+freesound.org CC0 clips, normalized to 16kHz mono Int16 WAV via the
+`mkdir -p noise` + ffmpeg loop in the plan (Task 10 step 2).
 
-- Cafe ambient: <freesound URL>
-- Podcast/voice: <freesound URL>
-- Typing: <freesound URL>
+- Cafe ambient: freesound 380202 (lunchmoney, "cafe ambience day 1")
+- Podcast/voice: freesound 487881 (donalddrum10, "anecdote podcast")
+- Typing: freesound 567920 (luutoo, "keyboard typing 1 sentence")
+
+## Bench run history
+
+### 2026-04-28 — first run
+
+**Verdict:** no clear accuracy winner over current OpenAI; pain B
+(real-speech mishears) is upstream of provider choice. Deepgram is a
+viable tradeoff candidate (cheaper + faster + correct empty-transcript
+on silence) at small accuracy cost.
+
+**Per-pain breakdown:**
+- *Pain A (hallucinations on silence)*: OpenAI hallucinated
+  `"The sun is shining brightly."` on the silent probe. Deepgram and
+  AssemblyAI correctly returned empty.
+- *Pain B (mishears, real prose)*: all three providers shared
+  Whisper-family weaknesses on names (sample 07: "Reza"→"Riza",
+  "Saoirse"→"Sayori" across the board; AssemblyAI also hallucinated
+  "Lupin" and turned "metrics" into "matrix"). OpenAI most accurate on
+  clean prose; AssemblyAI worst (semantic flip on sample 08:
+  "the legal" → "illegal").
+
+**Cost / latency totals (13 samples):**
+
+| Provider   | Total cost | Avg latency |
+|------------|-----------:|------------:|
+| openai     |  $0.01672  |    1.45s    |
+| deepgram   |  $0.01198  |    0.54s    |
+| assemblyai |  $0.01728  |    1.98s    |
+
+**Recommended next steps:**
+1. Investigate pain B upstream of the provider — wire Vox's
+   DictionaryStore into the prompt as hot-words / vocabulary; tune mic
+   gain; add VAD pre-gating.
+2. If pain A is the priority, brainstorm Deepgram integration into Vox
+   as a separate spec.
+3. WER pass not warranted — qualitative gaps were clear.
+
+Full per-sample transcripts: `outputs/2026-04-28-202114/results.md`
+(gitignored).
