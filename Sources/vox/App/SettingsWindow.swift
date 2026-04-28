@@ -117,7 +117,6 @@ struct SettingsView: View {
                         AppSettings.smartCleanupEnabled = newValue
                     }
                 ))
-                .help("Adds ~$0.0001 and ~1s latency per dictation. Triggers ('scratch that', 'new paragraph', 'new line') also activate when enabled.")
                 Text("Adds ~$0.0001 and ~1s latency per dictation. Triggers ('scratch that', 'new paragraph', 'new line') also activate when enabled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
