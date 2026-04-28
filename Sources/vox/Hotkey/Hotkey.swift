@@ -16,7 +16,7 @@ public struct Hotkey: Codable, Equatable, Sendable {
 
     public var isValid: Bool {
         switch key {
-        case .fn:
+        case .fn, .modifier:
             return modifiers.isEmpty
         case .keycode:
             return !modifiers.isEmpty
@@ -34,6 +34,7 @@ public struct Hotkey: Codable, Equatable, Sendable {
 public enum Key: Codable, Equatable, Sendable {
     case fn
     case keycode(UInt16)
+    case modifier(Modifier)
 }
 
 public enum Modifier: String, Codable, CaseIterable, Sendable {

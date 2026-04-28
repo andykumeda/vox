@@ -69,12 +69,14 @@ public final class HotkeyMonitor {
     }
 
     public func stop() {
-        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
-        eventTap = nil
         runLoopSource = nil
+        // Don't call CGEvent.tapEnable(false) — on macOS 26 it can PAC-trap
+        // inside SLEventTapEnable → CFMachPortGetContext. Dropping refs and
+        // removing from runloop is sufficient teardown.
+        eventTap = nil
     }
 
     // MARK: - Dispatch
@@ -88,8 +90,14 @@ public final class HotkeyMonitor {
             return nil
         }()
 
-        // Mode toggle (always tap-toggle, debounced).
-        if type == .keyDown,
+        // Mode toggle (always tap-toggle, debounced). Match on keyDown for
+        // .keycode bindings, on flagsChanged for .fn / .modifier bindings.
+        let modeToggleEvent: Bool
+        switch modeToggle.key {
+        case .fn, .modifier: modeToggleEvent = (type == .flagsChanged)
+        case .keycode:       modeToggleEvent = (type == .keyDown)
+        }
+        if modeToggleEvent,
            Self.matches(keycode: keycode, flags: flags, hotkey: modeToggle) {
             let now = CFAbsoluteTimeGetCurrent()
             if now - lastModeToggleAt >= Self.modeToggleDebounceSeconds {
@@ -102,7 +110,7 @@ public final class HotkeyMonitor {
         // Record hotkey.
         let recordEvent: Bool
         switch record.key {
-        case .fn:
+        case .fn, .modifier:
             recordEvent = (type == .flagsChanged)
         case .keycode:
             recordEvent = (type == .keyDown || type == .keyUp)
@@ -122,11 +130,18 @@ public final class HotkeyMonitor {
     private func handlePressHold(type: CGEventType, isMatch: Bool, keycode: UInt16?) {
         switch type {
         case .flagsChanged:
-            // Used for Fn-only bindings. isMatch reflects whether Fn is held now.
+            // Used for Fn / single-modifier bindings. isMatch reflects whether
+            // the bound modifier is the only one currently held.
+            let isModifierKey: Bool = {
+                switch record.key {
+                case .fn, .modifier: return true
+                case .keycode: return false
+                }
+            }()
             if isMatch && !isRecordActive {
                 isRecordActive = true
                 DispatchQueue.main.async { [weak self] in self?.onRecordPress?() }
-            } else if !isMatch && isRecordActive && record.key == .fn {
+            } else if !isMatch && isRecordActive && isModifierKey {
                 isRecordActive = false
                 pressedKeycode = nil
                 DispatchQueue.main.async { [weak self] in self?.onRecordRelease?() }
@@ -184,6 +199,19 @@ public final class HotkeyMonitor {
             return flags.contains(.maskSecondaryFn)
                 && flags.intersection(otherMods).isEmpty
                 && keycode == nil
+        case .modifier(let m):
+            // Single modifier held alone (no key, no other modifiers).
+            let all: CGEventFlags = [.maskSecondaryFn, .maskCommand, .maskControl, .maskAlternate, .maskShift]
+            let target: CGEventFlags
+            switch m {
+            case .command: target = .maskCommand
+            case .control: target = .maskControl
+            case .option:  target = .maskAlternate
+            case .shift:   target = .maskShift
+            }
+            return keycode == nil
+                && flags.contains(target)
+                && flags.intersection(all.subtracting(target)).isEmpty
         case .keycode(let target):
             guard let kc = keycode, kc == target else { return false }
             let actual: Set<Modifier> = {

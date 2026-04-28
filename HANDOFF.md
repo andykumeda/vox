@@ -1,3 +1,54 @@
+# Handoff — Vox state as of 2026-04-27 (PM)
+
+## Session 2026-04-27 PM — hotkey-recorder stabilization, single-key support, menu-bar icon redesign
+
+**Context:** macOS 26.5 (build 25F5058e) shipped breaking changes that surfaced as crashes when configuring hotkeys, and SF Symbols catalog drift (`text.bubble`, `text.bubble.fill`, `lock.bubble.*` resolve to nil) made the menu-bar icon disappear.
+
+### Crashes fixed
+
+1. **`HotkeyRecorder.finish()` PAC trap** — `CGEvent.tapEnable(false)` on an ephemeral CGEventTap PAC-traps inside `SLEventTapEnable → CFMachPortGetContext` on macOS 26. Replaced the entire CGEventTap path with `NSEvent.addLocalMonitorForEvents` (app-local, only fires while Vox is key window — fine for the settings recorder UI). No second tap, no race against the persistent `HotkeyMonitor` tap.
+2. **`HotkeyMonitor.stop()` same PAC trap** — fires on every settings save via `reconfigureHotkey()`. Removed `tapEnable(false)`; just `CFRunLoopRemoveSource` + nil refs. The port deallocates on its own when refs drop.
+3. **Heap corruption / `objc_retain` x0=2** during settings save — was downstream of the same broken tap teardown. Resolved by 1+2.
+
+### Single-modifier hotkey support
+
+`Hotkey.Key` gained `case modifier(Modifier)` (one of `.command/.control/.option/.shift`). Captures via `flagsChanged`: exactly one modifier flag set, no other mods. `HotkeyMonitor.matches` and the press/release dispatch both treat `.modifier` like `.fn` (flagsChanged-driven). Settings recorder accepts a single Cmd/Opt/Ctrl/Shift press and stores it. Paste hotkey falls back to ⌘V if bound to a bare modifier (no key to synthesize).
+
+### Menu-bar icon
+
+- `text.bubble` returns nil on macOS 26 beta → status item collapsed to zero width / showed `mic.fill` fallback.
+- Idle now uses the actual app icon (`NSApp.applicationIconImage`), 18pt, drawn into a fresh `NSImage`. Recording / transcribing keep an SF Symbol with palette tint (`text.bubble.fill` → `bubble.left.fill` → `waveform` → `mic.fill` resolution chain).
+- Mode differentiation: command mode (default) renders the bare app icon (intrinsic purple bg); prose mode renders a tinted SF Symbol bubble glyph on transparent bg (currently `.systemBlue` — **TBD: user wants this color changed to something else, decide later**). Toggle via `forceProseMode` UserDefaults key.
+- Error state: `exclamationmark.triangle` template + `contentTintColor = .labelColor`. Without the explicit tint, template + nil tint can render invisible on macOS 26.
+
+### Files touched this session
+
+- `Sources/vox/Hotkey/HotkeyRecorder.swift` — full rewrite: `NSEvent.addLocalMonitorForEvents` instead of `CGEvent.tapCreate`. Captures Fn / single modifier / key+modifier combos. Esc cancels.
+- `Sources/vox/Hotkey/HotkeyMonitor.swift` — `stop()` no longer calls `CGEvent.tapEnable(false)`. `matches()` and dispatch handle `.modifier` case; mode-toggle path branches by key type.
+- `Sources/vox/Hotkey/Hotkey.swift` — added `Key.modifier(Modifier)` case; `isValid` updated.
+- `Sources/vox/App/SettingsWindow.swift` — `displayString` renders `.modifier` glyphs (⌘ ⌃ ⌥ ⇧).
+- `Sources/vox/App/MenuBarController.swift` — `refreshIcon` rewritten with per-state SF Symbol fallback chains; idle uses app icon for command, tinted bubble for prose; explicit `contentTintColor` for idle/error so template renders on macOS 26.
+- `Resources/Info.plist` — version bump to 0.2.0.
+
+### Open items / TBD
+
+- **Prose-mode idle icon color** — currently `.systemBlue`. User wants to pick a different color later. One-line change in `MenuBarController.refreshIcon` (`tint:` for `.idle` when `forceProseMode == true`).
+- **Mic returning rms=0 after sleep / first launch** — was actually mic muted at OS level. Not a code bug; documenting in case it recurs and looks like one. If silence-gate trips on every recording, check System Settings → Sound → Input.
+- **Single-modifier hotkeys can collide with system shortcuts** — binding bare ⌘ or ⌥ as a record hotkey will fire on every Cmd/Opt-letter combo the user types (because flagsChanged fires when the modifier alone briefly matches before the letter arrives). Workable for press-and-hold use, awkward for tap-toggle. Not a bug, just a UX caveat.
+
+### Session test plan that works
+
+```
+./scripts/build-app.sh
+pkill -f 'Vox.app/Contents/MacOS/vox' || true
+open dist/Vox.app
+# Open Settings → record a Fn-only hotkey → save → confirm no crash
+# Toggle mode via menu → icon changes (purple ⇄ blue bubble)
+# Hold Fn → speak → release → text pastes
+```
+
+---
+
 # Handoff — Vox state as of 2026-04-25
 
 For the next Claude session (or human dev) picking this up. Read once, then act.

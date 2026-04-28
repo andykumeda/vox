@@ -122,39 +122,83 @@ final class MenuBarController: NSObject {
         statusItem.menu = menu
     }
 
+    private func appIconForMenuBar() -> NSImage? {
+        let icon = NSApp.applicationIconImage
+            ?? NSImage(named: NSImage.applicationIconName)
+        guard let icon else { return nil }
+        let size = NSSize(width: 18, height: 18)
+        let result = NSImage(size: size)
+        result.lockFocus()
+        icon.draw(in: NSRect(origin: .zero, size: size))
+        result.unlockFocus()
+        result.isTemplate = false
+        return result
+    }
+
+    private func whiteBackgroundIcon() -> NSImage? {
+        let size = NSSize(width: 18, height: 18)
+        let result = NSImage(size: size)
+        result.lockFocus()
+        NSColor.white.setFill()
+        let path = NSBezierPath(roundedRect: NSRect(origin: .zero, size: size),
+                                xRadius: 4, yRadius: 4)
+        path.fill()
+        let candidates = ["text.bubble", "bubble.left", "bubble.left.fill", "waveform"]
+        if let glyph = candidates.lazy
+            .compactMap({ NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") })
+            .first {
+            let cfg = NSImage.SymbolConfiguration(paletteColors: [.black])
+            let tinted = glyph.withSymbolConfiguration(cfg) ?? glyph
+            tinted.draw(in: NSRect(x: 2, y: 2, width: 14, height: 14))
+        }
+        result.unlockFocus()
+        result.isTemplate = false
+        return result
+    }
+
+    private func tintedSymbol(color: NSColor) -> NSImage? {
+        let candidates = ["text.bubble.fill", "bubble.left.fill", "waveform", "mic.fill"]
+        let base = candidates.lazy
+            .compactMap { NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") }
+            .first
+        let cfg = NSImage.SymbolConfiguration(paletteColors: [color])
+        let tinted = base?.withSymbolConfiguration(cfg)
+        tinted?.isTemplate = false
+        return tinted
+    }
+
     private func refreshIcon() {
         guard let button = statusItem.button else { return }
-        let symbolName: String
         switch state {
         case .idle:
-            symbolName = AppSettings.forceProseMode ? "lock.bubble.fill" : "text.bubble"
+            // Bubble glyph on transparent background. Tint differs by mode.
+            let candidates = ["text.bubble", "bubble.left", "ellipsis.bubble", "bubble.left.fill"]
+            let base = candidates.lazy
+                .compactMap { NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") }
+                .first
+            let tint: NSColor = AppSettings.forceProseMode ? .systemBlue : .labelColor
+            let cfg = NSImage.SymbolConfiguration(paletteColors: [tint])
+            let tinted = base?.withSymbolConfiguration(cfg)
+            tinted?.isTemplate = false
+            button.image = tinted
+            button.contentTintColor = nil
         case .recording:
-            symbolName = "text.bubble.fill"
+            button.image = tintedSymbol(color: .systemRed)
+            button.contentTintColor = nil
         case .transcribing:
-            symbolName = "text.bubble.fill"
+            button.image = tintedSymbol(color: .systemOrange)
+            button.contentTintColor = nil
         case .error:
-            symbolName = "exclamationmark.triangle"
-        }
-        let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Vox")
-        switch state {
-        case .recording:
-            // Palette config bakes the color into the rendered SF Symbol.
-            // NSStatusBarButton's contentTintColor is unreliable in the menubar,
-            // so apply the color directly to the image.
-            let cfg = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-            let tinted = base?.withSymbolConfiguration(cfg)
-            tinted?.isTemplate = false
-            button.image = tinted
-        case .transcribing:
-            let cfg = NSImage.SymbolConfiguration(paletteColors: [.systemOrange])
-            let tinted = base?.withSymbolConfiguration(cfg)
-            tinted?.isTemplate = false
-            button.image = tinted
-        case .idle, .error:
+            let candidates = ["exclamationmark.triangle", "exclamationmark.circle"]
+            let base = candidates.lazy
+                .compactMap { NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") }
+                .first
             base?.isTemplate = true
             button.image = base
+            button.contentTintColor = NSColor.labelColor
         }
-        button.contentTintColor = nil
+        // Fallback: status item collapses to zero width if image is nil.
+        button.title = (button.image == nil) ? "Vox" : ""
         if state == .transcribing {
             startPulsing()
         } else {

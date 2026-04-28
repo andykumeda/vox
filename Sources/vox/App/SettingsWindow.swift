@@ -466,6 +466,13 @@ private func displayString(_ h: Hotkey) -> String {
     switch h.key {
     case .fn:
         return "Fn"
+    case .modifier(let m):
+        switch m {
+        case .command: return "⌘"
+        case .control: return "⌃"
+        case .option:  return "⌥"
+        case .shift:   return "⇧"
+        }
     case .keycode(let kc):
         let prefix = displayModifiers(h.modifiers)
         return prefix + keyName(forKeycode: kc)
