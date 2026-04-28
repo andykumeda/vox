@@ -7,6 +7,6 @@ __pycache__/
 .env
 
 # Bench artifacts
-samples/*.wav
-noise/*.wav
+samples/
+noise/
 outputs/
