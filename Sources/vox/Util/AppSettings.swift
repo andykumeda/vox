@@ -28,6 +28,7 @@ enum AppSettings {
     private static let keepKey = "keepTranscriptionOnClipboard"
     private static let modelKey = "transcriptionModel"
     private static let forceProseKey = "forceProseMode"
+    private static let smartCleanupKey = "smartCleanupEnabled"
 
     static var keepTranscriptionOnClipboard: Bool {
         get { UserDefaults.standard.bool(forKey: keepKey) }
@@ -48,6 +49,11 @@ enum AppSettings {
     static var forceProseMode: Bool {
         get { UserDefaults.standard.bool(forKey: forceProseKey) }
         set { UserDefaults.standard.set(newValue, forKey: forceProseKey) }
+    }
+
+    static var smartCleanupEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: smartCleanupKey) }
+        set { UserDefaults.standard.set(newValue, forKey: smartCleanupKey) }
     }
 
     private static let recordHotkeyKey = "recordHotkey"
