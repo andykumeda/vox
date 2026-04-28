@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Secrets
+.env
+
+# Bench artifacts
+samples/*.wav
+noise/*.wav
+outputs/
