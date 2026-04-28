@@ -473,4 +473,77 @@ final class PostProcessorTests: XCTestCase {
         let p = PostProcessor(mode: .command, dictionaryProvider: { entries })
         XCTAssertEqual(p.apply("ls um now"), "ls now")
     }
+
+    // MARK: - Arrow + modifier suffix keys
+
+    func testCommandControlRightArrow() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls control right")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.right, modifiers: [.control])])
+    }
+
+    func testCommandControlLeftArrow() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls control left")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.left, modifiers: [.control])])
+    }
+
+    func testCommandCtrlAliasArrow() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls ctrl right")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.right, modifiers: [.control])])
+    }
+
+    func testCommandOptionLeft() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("echo foo option left")
+        XCTAssertEqual(r.text, "echo foo")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.left, modifiers: [.option])])
+    }
+
+    func testCommandCmdRightAlias() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls cmd right")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.right, modifiers: [.command])])
+    }
+
+    func testCommandShiftRightForSelection() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls shift right")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.right, modifiers: [.shift])])
+    }
+
+    func testCommandMultipleModifiersOnArrow() {
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls command shift right")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.right, modifiers: [.command, .shift])])
+    }
+
+    func testCommandUpDownArrows() {
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.process("ls option up").suffixKeys, [.arrow(.up, modifiers: [.option])])
+        XCTAssertEqual(p.process("ls option down").suffixKeys, [.arrow(.down, modifiers: [.option])])
+    }
+
+    func testCommandBareLeftDoesNotTrigger() {
+        // No modifier — "left" stays as content, not a keystroke.
+        let p = PostProcessor(mode: .command)
+        let r = p.process("turn left")
+        XCTAssertEqual(r.text, "turn left")
+        XCTAssertTrue(r.suffixKeys.isEmpty || r.suffixKeys == [.space])
+    }
+
+    func testCommandArrowAndReturnTogether() {
+        // Trailing "control right return" → emit Ctrl+Right then Return.
+        let p = PostProcessor(mode: .command)
+        let r = p.process("ls control right return")
+        XCTAssertEqual(r.text, "ls")
+        XCTAssertEqual(r.suffixKeys, [.arrow(.right, modifiers: [.control]), .return])
+    }
 }
