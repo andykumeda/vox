@@ -473,4 +473,51 @@ final class PostProcessorTests: XCTestCase {
         let p = PostProcessor(mode: .command, dictionaryProvider: { entries })
         XCTAssertEqual(p.apply("ls um now"), "ls now")
     }
+
+    // MARK: - Command mode: cd .. and ./ path handling
+
+    func testCommandCdDotDotWhisperConsolidated() {
+        // When user dictates "cd dot dot", Whisper sometimes consolidates the
+        // second "dot" into a sentence-terminator period: "cd dot."
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cd dot."), "cd ..")
+    }
+
+    func testCommandCdDotDotWhisperKeptBoth() {
+        // Whisper kept both "dot" words but added a stray trailing period.
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cd dot dot."), "cd ..")
+    }
+
+    func testCommandCdDotDotNoTrailingPeriod() {
+        // Whisper kept both "dot" words and obeyed "no trailing punctuation".
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cd dot dot"), "cd ..")
+    }
+
+    func testCommandCdAlreadyDotted() {
+        // Whisper produced the literal `..` from the "cd .." prompt example.
+        // Strip must not eat the trailing dots.
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cd .."), "cd ..")
+    }
+
+    func testCommandStillStripsLoneTrailingPeriod() {
+        // Sanity check the existing behavior is preserved.
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("ls."), "ls")
+    }
+
+    func testCommandDotSlashScript() {
+        // ". /scripts/build-app.sh" → "./scripts/build-app.sh".
+        // Whisper transcribes a leading "./" with a stray space; glue it.
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply(". /scripts/build-app.sh"), "./scripts/build-app.sh")
+    }
+
+    func testCommandDotSlashAfterWord() {
+        // "cat foo. /bar" — same dot-slash glue applies mid-line too.
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cat foo. /bar"), "cat foo./bar")
+    }
 }
