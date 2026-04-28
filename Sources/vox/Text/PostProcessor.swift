@@ -47,8 +47,11 @@ public struct PostProcessor {
             suffixKeys = [.space]
         case .command:
             s = lowercaseFirstLetter(s)
-            s = stripTrailingSentencePunctuation(s)
+            // expand BEFORE strip so dots produced by "dot" replacement
+            // (and the iterative ".." collapse) survive the trailing-period
+            // strip. Strip is now smart enough to leave ".." alone.
             s = expandSpokenPunctuation(s)
+            s = stripTrailingSentencePunctuation(s)
             s = splitCommandFromFlag(s)
             s = applyDictionary(.command, s)
             let extracted = extractTrailingSuffixKeys(s)
@@ -164,8 +167,18 @@ public struct PostProcessor {
 
     private func stripTrailingSentencePunctuation(_ input: String) -> String {
         var s = input
-        while let last = s.last, last == "." || last == "!" || last == "?" || last.isWhitespace {
+        // Trim trailing whitespace.
+        while let last = s.last, last.isWhitespace {
             s.removeLast()
+        }
+        // Strip a single trailing sentence terminator (".", "!", or "?") iff
+        // it sits right after an alphanumeric character. Leave ".." alone
+        // (e.g. "cd ..") and leave " ." alone (path argument like "find .").
+        if let last = s.last, last == "." || last == "!" || last == "?" {
+            let prev = s.dropLast().last
+            if let p = prev, p.isLetter || p.isNumber {
+                s.removeLast()
+            }
         }
         return s
     }
@@ -264,6 +277,27 @@ public struct PostProcessor {
         if let re = try? NSRegularExpression(pattern: "([a-zA-Z0-9])\\s*\\.\\s*([a-zA-Z0-9])") {
             let ns = s as NSString
             s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "$1.$2")
+        }
+        // Glue ". /" → "./" so ". /scripts/build-app.sh" becomes
+        // "./scripts/build-app.sh". Whisper sometimes leaves a stray space
+        // after a leading or mid-line "./".
+        if let re = try? NSRegularExpression(pattern: "\\.\\s+/") {
+            let ns = s as NSString
+            s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "./")
+        }
+        // Collapse "<ws> . . <ws-or-end>" → " .." so "cd . ." becomes "cd ..".
+        // Single pass — handles the common "cd dot dot" → "cd . ." case.
+        if let re = try? NSRegularExpression(pattern: "\\s+\\.\\s+\\.") {
+            let ns = s as NSString
+            s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: " ..")
+        }
+        // Normalize 3+ trailing dots (with optional internal whitespace) to "..".
+        // Catches Whisper artifacts like "cd dot dot." → expand → "cd . .." →
+        // we want "cd ..", not "cd ...". Users dictating "..." literally is rare
+        // in shell context.
+        if let re = try? NSRegularExpression(pattern: "(?:\\s*\\.){3,}\\s*$") {
+            let ns = s as NSString
+            s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: " ..")
         }
         return s
     }
