@@ -142,4 +142,64 @@ final class CleanupProcessorTests: XCTestCase {
         let result = await proc.process("Hello. Scratch that? Goodbye.")
         XCTAssertEqual(result, "Goodbye.")
     }
+
+    // MARK: - Orchestrator
+
+    func testProseInvokesLLMWithTriggeredText() async {
+        final class Capture { var input: String? }
+        let capture = Capture()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
+            capture.input = input
+            return "[cleaned] \(input)"
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("First. Scratch that. Second.")
+        XCTAssertEqual(capture.input, "Second.")
+        XCTAssertEqual(result, "[cleaned] Second.")
+    }
+
+    func testCommandModeSkipsLLM() async {
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            flag.value = true
+            return "should not be used"
+        }
+        let proc = CleanupProcessor(mode: .command, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Open the file. Scratch that. Close the file.")
+        XCTAssertFalse(flag.value)
+        XCTAssertEqual(result, "Close the file.")
+    }
+
+    func testEmptyInputSkipsLLM() async {
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            flag.value = true
+            return "noop"
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("")
+        XCTAssertFalse(flag.value)
+        XCTAssertEqual(result, "")
+    }
+
+    func testWhitespaceOnlyInputSkipsLLM() async {
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            flag.value = true
+            return "noop"
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("   \n  ")
+        XCTAssertFalse(flag.value)
+        XCTAssertEqual(result, "")
+    }
+
+    func testNoLLMInjectedSkipsLLM() async {
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: nil)
+        let result = await proc.process("Hello world.")
+        XCTAssertEqual(result, "Hello world.")
+    }
 }

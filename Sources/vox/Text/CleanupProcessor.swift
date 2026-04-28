@@ -19,7 +19,22 @@ public struct CleanupProcessor {
 
     public func process(_ input: String) async -> String {
         guard enabled else { return input }
-        return applyTriggers(input)
+        let triggered = applyTriggers(input)
+
+        if mode == .command { return triggered }
+
+        let trimmed = triggered.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return trimmed }
+
+        guard let cleaner = llmCleaner else { return triggered }
+
+        do {
+            let cleaned = try await cleaner(triggered)
+            return cleaned
+        } catch {
+            FileHandle.standardError.write(Data("Cleanup error: \(error)\n".utf8))
+            return triggered
+        }
     }
 
     // MARK: - Triggers
