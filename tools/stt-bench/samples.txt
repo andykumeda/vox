@@ -1,0 +1,18 @@
+01-prose-short        ~5s   short casual sentence
+02-prose-tech         ~5s   short technical sentence (one product/tool name)
+03-prose-medium       ~15s  conversational paragraph (daily-update style)  -- ALSO clean source for 11-13
+04-prose-email        ~15s  email/Slack tone, instructions to coworker
+05-prose-long         ~30s  long story-style, multiple sentences, no jargon
+06-prose-structured   ~30s  long with dates, numbers, names mid-sentence
+07-prose-names        ~15s  names-heavy prose; coworker/product/place names known to mishear
+08-prose-disfluent    ~15s  "um", restarts, mid-sentence corrections
+09-prose-quiet        ~15s  same content as 03, spoken softer (low-volume)
+10-prose-silent       ~3s   near-silent / very short (hallucination probe)
+11-noise-cafe         ~15s  03 + cafe ambient @ ~-10dB SNR (mix.sh ... 0.3)
+12-noise-voice        ~15s  03 + intelligible second speaker @ ~-6dB SNR (0.5)
+13-noise-typing       ~15s  03 + keyboard/typing noise @ ~-8dB SNR (0.4)
+
+Ground-truth (only fill in if results are inconclusive and a WER pass is needed):
+01: <type what you said>
+02: <type what you said>
+...
