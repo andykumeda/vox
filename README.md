@@ -31,6 +31,10 @@ After `setup.sh` finishes:
 2. Click the menu-bar bubble icon → **Settings…** → paste OpenAI API key → **Save** → click **Always Allow** on the keychain prompt.
 3. Hold **Fn**, speak, release.
 
+## Updating
+
+Already have Vox installed and want to upgrade to a newer release? See [docs/UPDATING.md](docs/UPDATING.md). Note: the release DMG is ad-hoc signed, so each update drops Input Monitoring / Accessibility / Microphone grants — re-grant them in System Settings after replacing the bundle.
+
 ## Manual build
 
 ```sh
