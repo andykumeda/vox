@@ -30,6 +30,25 @@
 - `Sources/vox/App/MenuBarController.swift` — `refreshIcon` rewritten with per-state SF Symbol fallback chains; idle uses app icon for command, tinted bubble for prose; explicit `contentTintColor` for idle/error so template renders on macOS 26.
 - `Resources/Info.plist` — version bump to 0.2.0.
 
+### Sparkle auto-update wiring (added late in this session)
+
+- Dep: `Sparkle` 2.6+ via SPM, embedded as `Vox.app/Contents/Frameworks/Sparkle.framework` by `scripts/build-app.sh`.
+- Public EdDSA key in `Resources/Info.plist` under `SUPublicEDKey`; **private key lives in macOS Keychain** (account: `Sparkle Account`, service depends on Sparkle defaults). Re-extract via `security find-generic-password -ga ed25519` or use Sparkle's `generate_keys -p` on the same Mac. **Don't lose it** — without the matching private key, no future update can be signed and clients on this app will refuse it.
+- Feed URL: `https://andykumeda.github.io/vox/appcast.xml` — backed by `docs/appcast.xml` on `main` branch (GitHub Pages serves from `/docs`).
+- Signed update tool: `.build/artifacts/sparkle/Sparkle/bin/sign_update <Vox.dmg>` — outputs `sparkle:edSignature` and `length` for the appcast entry.
+- Schedule: `SUEnableAutomaticChecks=true`, `SUScheduledCheckInterval=86400` (1/day). Manual via menu → "Check for Updates…".
+
+#### Cutting a new release
+
+1. Bump `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`.
+2. `./scripts/make-dmg.sh` (which calls `build-app.sh`).
+3. `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` — copy the printed signature + length.
+4. Add a new `<item>` entry at the top of `docs/appcast.xml`'s `<channel>` with the new version, pubDate, signature, length, and the GitHub release download URL.
+5. `git commit && git push` (Pages re-deploys automatically).
+6. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+7. `gh release create vX.Y.Z --title "Vox X.Y.Z" --notes "..." dist/Vox.dmg` — must use the **exact** filename `Vox.dmg` so the appcast URL matches.
+8. Existing installs ≥ 0.2.1 will pick it up at next launch (or via "Check for Updates…").
+
 ### Open items / TBD
 
 - **Prose-mode idle icon color** — currently `.systemBlue`. User wants to pick a different color later. One-line change in `MenuBarController.refreshIcon` (`tint:` for `.idle` when `forceProseMode == true`).

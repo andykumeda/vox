@@ -29,6 +29,14 @@ cp Resources/Info.plist "$APP_PATH/Contents/Info.plist"
 cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
 cp Resources/help.md "$APP_PATH/Contents/Resources/"
 
+# Embed Sparkle.framework for in-app updates.
+SPARKLE_FRAMEWORK="$BUILD_DIR/Sparkle.framework"
+if [ -d "$SPARKLE_FRAMEWORK" ]; then
+    mkdir -p "$APP_PATH/Contents/Frameworks"
+    rm -rf "$APP_PATH/Contents/Frameworks/Sparkle.framework"
+    cp -R "$SPARKLE_FRAMEWORK" "$APP_PATH/Contents/Frameworks/"
+fi
+
 # Prefer the persistent "vox-dev" self-signed identity (created by
 # scripts/create-dev-cert.sh) so TCC permissions stick across rebuilds.
 # Fall back to ad-hoc if the identity isn't installed.
@@ -74,6 +82,26 @@ if [ -n "$VOX_SHA" ]; then
 else
     echo "→ codesign (ad-hoc — permissions will reset on each rebuild)"
     echo "   run ./scripts/create-dev-cert.sh once to make permissions persistent"
+fi
+
+# Sign Sparkle's nested helpers inside-out, then the framework, then the app.
+SPARKLE_BUNDLE="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+if [ -d "$SPARKLE_BUNDLE" ]; then
+    SPARKLE_VER="$SPARKLE_BUNDLE/Versions/B"
+    [ -d "$SPARKLE_VER" ] || SPARKLE_VER="$(/bin/ls -d "$SPARKLE_BUNDLE/Versions/"[A-Z] 2>/dev/null | head -n 1)"
+    if [ -n "$SPARKLE_VER" ] && [ -d "$SPARKLE_VER" ]; then
+        for xpc in "$SPARKLE_VER/XPCServices/"*.xpc; do
+            [ -d "$xpc" ] || continue
+            codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp=none "$xpc" >/dev/null
+        done
+        if [ -d "$SPARKLE_VER/Updater.app" ]; then
+            codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp=none --deep "$SPARKLE_VER/Updater.app" >/dev/null
+        fi
+        if [ -f "$SPARKLE_VER/Autoupdate" ]; then
+            codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp=none "$SPARKLE_VER/Autoupdate" >/dev/null
+        fi
+    fi
+    codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp=none "$SPARKLE_BUNDLE" >/dev/null
 fi
 
 codesign --force --sign "$SIGN_IDENTITY" \

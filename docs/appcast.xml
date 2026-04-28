@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>Vox Updates</title>
+        <link>https://andykumeda.github.io/vox/appcast.xml</link>
+        <description>Updates for Vox — push-to-talk dictation for macOS.</description>
+        <language>en</language>
+        <item>
+            <title>Vox 0.2.1</title>
+            <pubDate>Tue, 28 Apr 2026 03:00:04 +0000</pubDate>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li>In-app updates via Sparkle (Check for Updates… in the menu).</li>
+                    <li>macOS 26 hotkey recorder + monitor stability fixes.</li>
+                    <li>Single-modifier hotkey support (bare ⌘ / ⌃ / ⌥ / ⇧).</li>
+                    <li>Menu-bar icon redesign with mode-aware colors.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.2.1/Vox.dmg"
+                sparkle:edSignature="+FLjRUi31RAY8cUlD0G4I6NdTEFNNEFkYH+9XTTvYgEutu5XIBQXYzcZ/WeJAGphxFxDizS7ZDt8U3o9m0SkDg=="
+                length="2525308"
+                type="application/octet-stream" />
+        </item>
+    </channel>
+</rss>

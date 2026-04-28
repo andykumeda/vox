@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Sparkle
 
 private let logURL: URL = {
     let fm = FileManager.default
@@ -48,6 +49,11 @@ final class MenuBarController: NSObject {
         apiKeyProvider: { [keychain] in keychain.read() }
     )
     private lazy var settingsController = SettingsWindowController(keychain: keychain)
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
     private var helpWindowController: HelpWindowController?
 
     private var currentMode: TranscriptionMode = .prose
@@ -117,6 +123,13 @@ final class MenuBarController: NSObject {
         menu.addItem(helpItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        let updateItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        updateItem.target = updaterController
+        menu.addItem(updateItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
