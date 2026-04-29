@@ -64,14 +64,13 @@ public struct TextInjector {
             if mods.contains(.shift)   { flags.insert(.maskShift) }
         }
         // For arrow keystrokes with modifiers, synthesize explicit modifier
-        // press / release events around the arrow key. Some macOS system
-        // shortcuts (notably Mission Control's Ctrl+Left/Right space switcher)
-        // ignore synthetic events that only set the flags field but don't
-        // include modifier-down events. Sandwiching the arrow event between
-        // real Control/Cmd/Opt/Shift down+up makes it indistinguishable from
-        // a physical keypress.
+        // press / release events around the arrow key with a hardware-like
+        // event source. Mission Control's space switcher and similar system
+        // shortcuts filter events that come from `.combinedSessionState`;
+        // `.hidSystemState` emulates the path real hardware events take.
         if case .arrow = key, !flags.isEmpty {
-            postFullKeystrokeWithModifiers(source: source, code: code, flags: flags)
+            let hwSource = CGEventSource(stateID: .hidSystemState)
+            postFullKeystrokeWithModifiers(source: hwSource, code: code, flags: flags)
             return
         }
         let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
@@ -93,12 +92,10 @@ public struct TextInjector {
             (.maskAlternate, kVK_Option),
             (.maskShift,     kVK_Shift),
         ]
-        // Mission Control's space-switcher and other system shortcuts hook at
-        // the session event tap, not the HID tap. HID-level events normally
-        // propagate up but appear to be filtered for some system shortcuts on
-        // macOS 14+. Posting at the annotated session level matches where the
-        // shortcut handler listens.
-        let tap: CGEventTapLocation = .cgAnnotatedSessionEventTap
+        // HID-level tap with a hardware-like source. Mission Control's
+        // space-switcher listens at WindowServer level; HID events from a
+        // hidSystemState source propagate up the same way a real key would.
+        let tap: CGEventTapLocation = .cghidEventTap
         var current: CGEventFlags = []
         for (flag, vk) in modKeys where flags.contains(flag) {
             current.insert(flag)
@@ -106,12 +103,16 @@ public struct TextInjector {
             evt?.flags = current
             evt?.post(tap: tap)
         }
+        // Small delay so WindowServer registers the modifier flag-change
+        // before the arrow event arrives.
+        usleep(15_000)
         let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
         down?.flags = flags
         down?.post(tap: tap)
         let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
         up?.flags = flags
         up?.post(tap: tap)
+        usleep(15_000)
         for (flag, vk) in modKeys.reversed() where flags.contains(flag) {
             current.remove(flag)
             let evt = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(vk), keyDown: false)
