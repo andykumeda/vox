@@ -26,6 +26,15 @@ public struct CleanupProcessor {
         let trimmed = triggered.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return trimmed }
 
+        // Short-input bypass. gpt-4o-mini sometimes treats very short
+        // dictations as chat requests ("Sure, please provide the text…")
+        // because the system prompt looks like a meta-instruction in
+        // isolation. Skip the LLM for snippets too short to need cleanup —
+        // there's nothing meaningful to remove at this scale anyway.
+        if trimmed.count < 15 {
+            return triggered
+        }
+
         // If the trigger inserted explicit paragraph or line breaks, skip the
         // LLM call. gpt-4o-mini strips placeholder tokens reliably enough to be
         // unsafe even with prompt instructions, and losing the break is worse

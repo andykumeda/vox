@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.3.1</title>
+            <pubDate>Wed, 29 Apr 2026 01:15:00 +0000</pubDate>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Smart Cleanup no longer responds with "Sure, please provide the text…" on short dictations. gpt-4o-mini was treating brief snippets as chat requests; tightened the system prompt and added a short-input bypass (under 15 chars skips the LLM entirely).</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.3.1/Vox.dmg"
+                sparkle:edSignature="zMKx62SrjnQqoq9xDquTkQpgIEWZ9VomwsFVrjfasLhlcox89cuMGFrKLK8x4F8xrrlYDY4VjFGIzn+7o8yFBw=="
+                length="2564923"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.3.0</title>
             <pubDate>Wed, 29 Apr 2026 00:55:00 +0000</pubDate>
             <sparkle:version>4</sparkle:version>

@@ -153,9 +153,42 @@ final class CleanupProcessorTests: XCTestCase {
             return "[cleaned] \(input)"
         }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
-        let result = await proc.process("First. Scratch that. Second.")
-        XCTAssertEqual(capture.input, "Second.")
-        XCTAssertEqual(result, "[cleaned] Second.")
+        // Triggered text must be at least 15 chars to survive the short-input
+        // bypass and reach the LLM.
+        let result = await proc.process("First sentence here. Scratch that. Second sentence here for real.")
+        XCTAssertEqual(capture.input, "Second sentence here for real.")
+        XCTAssertEqual(result, "[cleaned] Second sentence here for real.")
+    }
+
+    // MARK: - Short-input bypass
+
+    func testProseShortInputSkipsLLM() async {
+        // gpt-4o-mini sometimes treats short snippets as chat requests; bypass
+        // the LLM entirely for inputs under 15 chars (after triggers).
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            flag.value = true
+            return "should not be used"
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Okay.")
+        XCTAssertFalse(flag.value, "LLM must NOT be invoked for short inputs")
+        XCTAssertEqual(result, "Okay.")
+    }
+
+    func testProseLongerInputStillInvokesLLM() async {
+        // Sanity check that the short-input bypass doesn't suppress real-length
+        // dictations.
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
+            flag.value = true
+            return input
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        _ = await proc.process("This is a longer dictation that should reach the LLM.")
+        XCTAssertTrue(flag.value)
     }
 
     func testCommandModeSkipsLLM() async {
