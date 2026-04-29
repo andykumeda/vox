@@ -1,8 +1,8 @@
 # Handoff — Vox state as of 2026-04-29 (PM)
 
-## Session 2026-04-29 PM — Meeting Transcription M1 scaffolding landed (uncommitted)
+## Session 2026-04-29 PM — Meeting Transcription M1 scaffolding shipped
 
-**Status:** All M1 deliverables implemented except AudioRecorder backend abstraction (deferred to M2 — see plan note). Builds clean (`swift build` ok). Full suite passes (`swift test` → 221 tests, 0 failures, was 209). Dictation regression baseline still: failure_rate=0.0, quality_score=1.0, latency=4ms.
+**Status:** Committed as `12d508e` on `origin/main`. All M1 deliverables implemented except AudioRecorder backend abstraction (deferred to M2 — see plan note). Builds clean (`swift build` ok). Full suite passes (`swift test` → 221 tests, 0 failures, was 209). Dictation regression baseline still: failure_rate=0.0, quality_score=1.0, latency=4ms.
 
 **Files changed:**
 - `Sources/vox/Util/AppSettings.swift` — added `MeetingCaptureBackend` enum + 3 keys (`meetingModeEnabled`, `meetingConsentAcknowledged`, `meetingCaptureBackend`). All default-off, no migration.
@@ -22,20 +22,9 @@
 4. Add transcript persistence + UI list + export.
 5. Run `scripts/run-dictation-regression.sh` before commit; CI gate is on `pull_request`.
 
-**Required commit (this session's work is uncommitted):**
-```sh
-cd /Users/andy/Dev/vox
-git add Sources/vox/Util/AppSettings.swift \
-        Sources/vox/Meeting/MeetingPreflight.swift \
-        Sources/vox/App/MenuBarController.swift \
-        Sources/vox/App/SettingsWindow.swift \
-        Tests/voxTests/MeetingPreflightTests.swift \
-        Tests/voxTests/MeetingSettingsTests.swift \
-        docs/superpowers/plans/2026-04-29-meeting-transcription-additive.md \
-        HANDOFF.md
-git commit --no-gpg-sign -m "feat(meeting): M1 scaffolding — settings, consent, preflight, menu"
-git push
-```
+**Outstanding pre-existing items not part of M1:**
+- 0.3.3 release blocked on AKsMini for Sparkle EdDSA signing (see "0.3.2 SHIPPED + uncommitted 0.3.3 transport-retry fix" section below — note: that fix is now committed as `7bc8cad` on main; only the DMG/appcast/GH Release remain).
+- `tools/` (stt-bench) untracked locally on `main` workstation; lives on `feat/stt-bench` branch. Merge decision still open.
 
 ---
 
@@ -69,11 +58,11 @@ git push
 
 ---
 
-## Session 2026-04-29 PM — 0.3.2 SHIPPED + uncommitted 0.3.3 transport-retry fix
+## Session 2026-04-29 PM — 0.3.2 SHIPPED + 0.3.3 transport-retry fix committed (release artifact pending)
 
 **Status:**
 - **0.3.2 is fully released.** GitHub Release `v0.3.2` exists with `Vox.dmg` (2,565,662 bytes), Sparkle EdDSA signature `WW4usR9mIl/xkNMz1P1MPZfKoMxl+bNKDTGx1IZXv/tnR08vR9zmFEKjHWdUJs0CrprNmZzKkUUGB/LIVORrDw==`, `docs/appcast.xml` updated (commit `d8e5488`), Pages CDN serving the new appcast.
-- **Uncommitted local change** in `Sources/Vox/STT/OpenAITranscriber.swift` adds 30s request timeout (was 20s) and a single retry on transient URLError codes. Built locally and deployed to `~/Applications/Vox.app` for soak testing. Not yet committed, not yet versioned.
+- **0.3.3 transport-retry fix is committed** as `7bc8cad` on `main` (30s request timeout + single retry on transient URLErrors). **No release artifact yet:** no DMG, no appcast entry, no GitHub Release. AKsMini must run `make-dmg.sh` + `sign_update` + `gh release create v0.3.3` (or just bump to 0.3.4 if more changes accumulate first).
 
 ### Sparkle private key lives ONLY on AKsMini (Andy's Mac mini), NOT on the kumedaa Dev workstation — meaning kumedaa cannot sign releases
 
@@ -120,7 +109,9 @@ git push
 - Multiple stale Vox instances after `pkill` is recurring: use `pkill -9` and verify with `pgrep -af 'Vox.app/Contents/MacOS/vox'` before relaunching.
 - During release-day testing the user saw "transcription failed: Transport error: The request timed out." surfacing at ~3 seconds (not 20s). `curl` to `api.openai.com` from the same Mac was 84ms. Diagnosis: URLSession in the running app cached a dead nw_path after a brief network blip; fast-fail with `URLError.timedOut` localizes as "request timed out". Restart cleared it. Repro frequency was high enough that the user asked for code-level mitigation.
 
-### Uncommitted 0.3.3 candidate fix
+### 0.3.3 candidate fix (committed `7bc8cad`, release artifact pending)
+
+The fix below is now on `main`. XCTest verified locally (full suite passes). Only the DMG + Sparkle signature + GH Release + appcast entry remain.
 
 `Sources/Vox/STT/OpenAITranscriber.swift`:
 
@@ -129,16 +120,16 @@ git push
 
 Worst-case latency: 30s × 2 + 500ms = ~60.5s. That's generous but the alternative is still the silent-hang user reported. If the retry feels too slow in practice, drop to 15s timeout × 2 attempts.
 
-Build verified on kumedaa (`swift build` clean, only pre-existing warnings). `swift test` could not run on kumedaa because XCTest module is missing (CommandLineTools only, no full Xcode). **Run `swift test` on AKsMini before committing** to confirm no regressions across the 209-test suite. Also smoke-test live: hold Fn → speak → release on a Wi-Fi flap if you can simulate one.
+Build verified on kumedaa (`swift build` clean, full `swift test` suite passes — 221/221 as of this session). Smoke-test live before release: hold Fn → speak → release on a Wi-Fi flap if you can simulate one.
 
-If retry+timeout proves out, ship as 0.3.3:
+To ship as 0.3.3 (or fold into a higher version if more lands first):
 
 ```sh
 # On AKsMini:
 cd ~/Dev/vox && git pull
-swift test                 # confirm 209+ pass
+swift test                 # confirm pass (currently 221)
 # Bump CFBundleShortVersionString=0.3.3, CFBundleVersion=7 in Resources/Info.plist
-git add Sources/Vox/STT/OpenAITranscriber.swift Resources/Info.plist
+git add Resources/Info.plist
 git commit --no-gpg-sign -m "release: 0.3.3 — STT request retry + 30s timeout"
 git tag v0.3.3 && git push && git push origin v0.3.3
 rm -rf dist && ./scripts/make-dmg.sh
