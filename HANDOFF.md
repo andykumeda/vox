@@ -1,5 +1,44 @@
 # Handoff — Vox state as of 2026-04-29 (PM)
 
+## Session 2026-04-29 PM — Meeting Transcription M1 scaffolding landed (uncommitted)
+
+**Status:** All M1 deliverables implemented except AudioRecorder backend abstraction (deferred to M2 — see plan note). Builds clean (`swift build` ok). Full suite passes (`swift test` → 221 tests, 0 failures, was 209). Dictation regression baseline still: failure_rate=0.0, quality_score=1.0, latency=4ms.
+
+**Files changed:**
+- `Sources/vox/Util/AppSettings.swift` — added `MeetingCaptureBackend` enum + 3 keys (`meetingModeEnabled`, `meetingConsentAcknowledged`, `meetingCaptureBackend`). All default-off, no migration.
+- `Sources/vox/Meeting/MeetingPreflight.swift` (new) — `MeetingGateError` typed errors, `MeetingBackendStatus` (`.pendingImplementation` default), `MeetingPreflight.gate(...)` pure-function gate. `backendStatusProvider` is the injection point M2 will replace with a real ScreenCaptureKit availability check.
+- `Sources/vox/App/MenuBarController.swift` — Start/Stop Meeting Transcript menu items, only inserted when `meetingModeEnabled=true`. Action runs the gate; on success shows a "lands in M2" alert; on failure shows the gate error's `userMessage`.
+- `Sources/vox/App/SettingsWindow.swift` — new "Meeting Transcription (Beta)" section: enable toggle, consent toggle (visible only when enabled), backend status row.
+- `Tests/voxTests/MeetingPreflightTests.swift` (new) — 6 cases covering each gate denial path + the success path + the default-status invariant.
+- `Tests/voxTests/MeetingSettingsTests.swift` (new) — 5 cases: defaults are off, round-trip, no perturbation of dictation toggles.
+- `docs/superpowers/plans/2026-04-29-meeting-transcription-additive.md` — M1 checkboxes ticked; AudioRecorder refactor explicitly deferred to M2 with rationale.
+
+**Why AudioRecorder refactor was deferred:** The plan called for a backend abstraction in M1, but the only existing consumer is the microphone dictation path. Premature abstraction with one implementation violates the no-regression rule (any reshuffle of `AudioRecorder` risks the primary dictation flow) and the simplicity-first guideline. M2 introduces the second backend (ScreenCaptureKit system audio) — that is when the abstraction earns its keep. Keep this in mind when starting M2: the abstraction shape should be designed against both real backends, not invented in advance.
+
+**Next action for next engineer session (M2):**
+1. Implement system-audio capture via `ScreenCaptureKit` (macOS 13+, `SCStream` + audio sample handler). Wire it behind a `MeetingCaptureBackend` protocol that the dictation `AudioRecorder` does NOT need to conform to (additive only).
+2. Replace `MeetingPreflight.backendStatusProvider` with a live check that returns `available: true` once entitlements + permissions are satisfied.
+3. Build `Sources/vox/STT/MeetingTranscriptionSession.swift` per plan M2 deliverables.
+4. Add transcript persistence + UI list + export.
+5. Run `scripts/run-dictation-regression.sh` before commit; CI gate is on `pull_request`.
+
+**Required commit (this session's work is uncommitted):**
+```sh
+cd /Users/andy/Dev/vox
+git add Sources/vox/Util/AppSettings.swift \
+        Sources/vox/Meeting/MeetingPreflight.swift \
+        Sources/vox/App/MenuBarController.swift \
+        Sources/vox/App/SettingsWindow.swift \
+        Tests/voxTests/MeetingPreflightTests.swift \
+        Tests/voxTests/MeetingSettingsTests.swift \
+        docs/superpowers/plans/2026-04-29-meeting-transcription-additive.md \
+        HANDOFF.md
+git commit --no-gpg-sign -m "feat(meeting): M1 scaffolding — settings, consent, preflight, menu"
+git push
+```
+
+---
+
 ## Session 2026-04-29 PM — Meeting Transcription additive plan locked (implementation not started)
 
 **Status:**

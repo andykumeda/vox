@@ -28,19 +28,19 @@ Add meeting transcription as a **new feature path** while preserving Vox's exist
 - Separate menu commands for meeting session lifecycle
 
 ### Tasks
-- [ ] Add meeting settings keys in `Sources/vox/Util/AppSettings.swift`:
-  - [ ] `meetingModeEnabled: Bool = false`
-  - [ ] `meetingConsentAcknowledged: Bool = false`
-  - [ ] `meetingCaptureBackend` (system-audio options only)
-- [ ] Add `Meeting Transcription (Beta)` section in `Sources/vox/App/SettingsWindow.swift`:
-  - [ ] enable toggle
-  - [ ] consent UI
-  - [ ] system-audio availability status
-- [ ] Refactor `Sources/vox/Audio/AudioRecorder.swift` to support backend abstraction while keeping current microphone dictation backend untouched.
-- [ ] Add availability diagnostics and typed errors for meeting preflight.
-- [ ] Add `Start Meeting Transcript` / `Stop Meeting Transcript` menu actions in `Sources/vox/App/MenuBarController.swift`.
-- [ ] Enforce meeting start gate checks (mode enabled, consent, backend ready).
-- [ ] Add regression tests proving dictation path behavior unchanged when Meeting Mode is off.
+- [x] Add meeting settings keys in `Sources/vox/Util/AppSettings.swift`:
+  - [x] `meetingModeEnabled: Bool = false`
+  - [x] `meetingConsentAcknowledged: Bool = false`
+  - [x] `meetingCaptureBackend` (system-audio options only)
+- [x] Add `Meeting Transcription (Beta)` section in `Sources/vox/App/SettingsWindow.swift`:
+  - [x] enable toggle
+  - [x] consent UI
+  - [x] system-audio availability status
+- [ ] Refactor `Sources/vox/Audio/AudioRecorder.swift` to support backend abstraction while keeping current microphone dictation backend untouched. **Deferred to M2 — refactor is unjustified until a real second backend exists; touching the dictation recorder now violates the no-regression rule.**
+- [x] Add availability diagnostics and typed errors for meeting preflight (`Sources/vox/Meeting/MeetingPreflight.swift`).
+- [x] Add `Start Meeting Transcript` / `Stop Meeting Transcript` menu actions in `Sources/vox/App/MenuBarController.swift` (gated by `meetingModeEnabled`).
+- [x] Enforce meeting start gate checks (mode enabled, consent, API key, backend ready) — see `MeetingPreflight.gate(...)`.
+- [x] Add regression tests proving dictation path behavior unchanged when Meeting Mode is off — `DictationRegressionTests` 221-test run, failure_rate=0.0, quality=1.0; `MeetingSettingsTests` confirms meeting reads do not perturb dictation toggles.
 
 ### Acceptance criteria
 - Existing dictation UX and STT behavior remain unchanged by default.

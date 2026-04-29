@@ -9,6 +9,11 @@ struct SettingsView: View {
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
+    @State private var meetingMode: Bool = AppSettings.meetingModeEnabled
+    @State private var meetingConsent: Bool = AppSettings.meetingConsentAcknowledged
+    @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider(
+        AppSettings.meetingCaptureBackend
+    )
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
     @StateObject private var dict = DictionaryStore.shared
@@ -126,6 +131,43 @@ struct SettingsView: View {
                 Text("Adds ~$0.0001 and ~1s latency per dictation. Triggers ('scratch that', 'new paragraph', 'new line') also activate when enabled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Meeting Transcription (Beta)")
+                    .font(.headline)
+                Toggle("Enable Meeting Mode", isOn: Binding(
+                    get: { meetingMode },
+                    set: { newValue in
+                        meetingMode = newValue
+                        AppSettings.meetingModeEnabled = newValue
+                    }
+                ))
+                Text("Adds Start/Stop Meeting Transcript actions to the menu bar. Off by default. Does not affect dictation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if meetingMode {
+                    Toggle("I acknowledge meeting audio will be captured and sent to OpenAI", isOn: Binding(
+                        get: { meetingConsent },
+                        set: { newValue in
+                            meetingConsent = newValue
+                            AppSettings.meetingConsentAcknowledged = newValue
+                        }
+                    ))
+                    Text("Required once before the first meeting capture. Confirm with all participants per local consent law.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: meetingBackendStatus.available ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(meetingBackendStatus.available ? .green : .orange)
+                        Text(meetingBackendStatus.detail)
+                            .font(.caption)
+                    }
+                }
             }
 
             Divider()
@@ -310,6 +352,9 @@ struct SettingsView: View {
             model = AppSettings.transcriptionModel
             modeOverride = AppSettings.modeOverride
             smartCleanup = AppSettings.smartCleanupEnabled
+            meetingMode = AppSettings.meetingModeEnabled
+            meetingConsent = AppSettings.meetingConsentAcknowledged
+            meetingBackendStatus = MeetingPreflight.backendStatusProvider(AppSettings.meetingCaptureBackend)
         }
     }
 

@@ -24,6 +24,17 @@ enum TranscriptionModel: String, CaseIterable, Sendable {
     }
 }
 
+enum MeetingCaptureBackend: String, CaseIterable, Sendable {
+    /// macOS 13+ ScreenCaptureKit system-audio tap. Implementation deferred to M2.
+    case systemAudio = "systemAudio"
+
+    var displayName: String {
+        switch self {
+        case .systemAudio: return "System audio (ScreenCaptureKit)"
+        }
+    }
+}
+
 public enum ModeOverride: String, CaseIterable, Sendable {
     case auto      // ContextDetector decides (terminal apps → command, others → prose)
     case prose     // always prose
@@ -52,6 +63,9 @@ enum AppSettings {
     private static let forceProseKey = "forceProseMode"   // legacy — read for migration only
     private static let modeOverrideKey = "modeOverride"
     private static let smartCleanupKey = "smartCleanupEnabled"
+    private static let meetingModeKey = "meetingModeEnabled"
+    private static let meetingConsentKey = "meetingConsentAcknowledged"
+    private static let meetingBackendKey = "meetingCaptureBackend"
 
     static var keepTranscriptionOnClipboard: Bool {
         get { UserDefaults.standard.bool(forKey: keepKey) }
@@ -89,6 +103,27 @@ enum AppSettings {
     static var smartCleanupEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: smartCleanupKey) }
         set { UserDefaults.standard.set(newValue, forKey: smartCleanupKey) }
+    }
+
+    static var meetingModeEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: meetingModeKey) }
+        set { UserDefaults.standard.set(newValue, forKey: meetingModeKey) }
+    }
+
+    static var meetingConsentAcknowledged: Bool {
+        get { UserDefaults.standard.bool(forKey: meetingConsentKey) }
+        set { UserDefaults.standard.set(newValue, forKey: meetingConsentKey) }
+    }
+
+    static var meetingCaptureBackend: MeetingCaptureBackend {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: meetingBackendKey),
+               let b = MeetingCaptureBackend(rawValue: raw) {
+                return b
+            }
+            return .systemAudio
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: meetingBackendKey) }
     }
 
     private static let recordHotkeyKey = "recordHotkey"

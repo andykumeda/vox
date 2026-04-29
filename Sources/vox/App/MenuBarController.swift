@@ -126,6 +126,26 @@ final class MenuBarController: NSObject {
         menu.addItem(helpItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+
+        if AppSettings.meetingModeEnabled {
+            menu.addItem(.separator())
+            let startMeeting = NSMenuItem(
+                title: "Start Meeting Transcript",
+                action: #selector(startMeetingTranscript),
+                keyEquivalent: ""
+            )
+            startMeeting.target = self
+            menu.addItem(startMeeting)
+            let stopMeeting = NSMenuItem(
+                title: "Stop Meeting Transcript",
+                action: #selector(stopMeetingTranscript),
+                keyEquivalent: ""
+            )
+            stopMeeting.target = self
+            stopMeeting.isEnabled = false
+            menu.addItem(stopMeeting)
+        }
+
         let updateItem = NSMenuItem(
             title: "Check for Updates…",
             action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
@@ -251,6 +271,34 @@ final class MenuBarController: NSObject {
 
     @objc private func showHelpAction(_ sender: Any?) {
         showHelp()
+    }
+
+    @objc private func startMeetingTranscript() {
+        let result = MeetingPreflight.gate(hasAPIKey: keychain.read()?.isEmpty == false)
+        switch result {
+        case .success:
+            // M2 wires actual session lifecycle. Until then surface the deferred status so the
+            // gate path stays exercised and the menu does not silently no-op.
+            presentMeetingError(
+                "Meeting capture pipeline lands in M2. Settings + consent are wired; backend is not."
+            )
+        case .failure(let err):
+            dlog("meeting gate denied: \(err)")
+            presentMeetingError(err.userMessage)
+        }
+    }
+
+    @objc private func stopMeetingTranscript() {
+        // No-op until M2 attaches a session controller.
+    }
+
+    private func presentMeetingError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Meeting Transcription"
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func handleModeToggle() {
