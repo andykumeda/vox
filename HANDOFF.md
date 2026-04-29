@@ -1,6 +1,86 @@
-# Handoff — Vox state as of 2026-04-29 (AM)
+# Handoff — Vox state as of 2026-04-29 (PM)
 
-## Session 2026-04-29 — 0.3.2 release pending: transcribe timeout + slash dictation
+## Session 2026-04-29 PM — 0.3.2 SHIPPED + uncommitted 0.3.3 transport-retry fix
+
+**Status:**
+- **0.3.2 is fully released.** GitHub Release `v0.3.2` exists with `Vox.dmg` (2,565,662 bytes), Sparkle EdDSA signature `WW4usR9mIl/xkNMz1P1MPZfKoMxl+bNKDTGx1IZXv/tnR08vR9zmFEKjHWdUJs0CrprNmZzKkUUGB/LIVORrDw==`, `docs/appcast.xml` updated (commit `d8e5488`), Pages CDN serving the new appcast.
+- **Uncommitted local change** in `Sources/Vox/STT/OpenAITranscriber.swift` adds 30s request timeout (was 20s) and a single retry on transient URLError codes. Built locally and deployed to `~/Applications/Vox.app` for soak testing. Not yet committed, not yet versioned.
+
+### Sparkle private key lives ONLY on AKsMini (Andy's Mac mini), NOT on the kumedaa Dev workstation — meaning kumedaa cannot sign releases
+
+The keychain entry has label `Private key for signing Sparkle updates`, account `ed25519`, created 2026-04-28 on AKsMini's login keychain. Confirmed absent from kumedaa's keychain (this Dev workstation). The matching public key in `Resources/Info.plist` is `l/SNkU3yHLO0zYGfUf9+CPhK4n7+RO0G8DL/pq5EXGI=`.
+
+**Implication:** every release must be built AND `sign_update`'d on AKsMini (or transfer the DMG bytes back). Today's 0.3.2 release was done split-machine: kumedaa pushed code, AKsMini built+signed+uploaded DMG, kumedaa pushed appcast.
+
+**Recommended split for next release on AKsMini:**
+
+```sh
+# On AKsMini:
+cd ~/Dev/vox
+git pull
+# Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist
+rm -rf dist
+./scripts/make-dmg.sh
+.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg
+# (Keychain prompts once — click Always Allow)
+gh release create vX.Y.Z dist/Vox.dmg --title "Vox X.Y.Z" --notes "..."
+# Capture printed sparkle:edSignature + length
+```
+
+Then on EITHER Mac:
+
+```sh
+git pull
+# Add new <item> at top of docs/appcast.xml using the captured signature + length
+git add docs/appcast.xml
+git commit --no-gpg-sign -m "release: appcast X.Y.Z"
+git push
+```
+
+**Why DMG bytes differ across Macs:** `make-dmg.sh` runs `codesign` with whichever local identity matches `vox-dev` (cert SHA differs per machine — kumedaa: `117CAD808BCBB8E59356AEF16D3E9A17A3344705`, AKsMini: unknown), and timestamps embed in the bundle. So `Vox.dmg` produced on kumedaa was 2,565,879 bytes; on AKsMini, 2,565,662 bytes. The Sparkle signature is over the DMG bytes — the DMG you upload to GH Release MUST be the exact one `sign_update` saw. **Do not regenerate the DMG between sign_update and gh release create.**
+
+### Why kumedaa was stuck
+
+1. `sign_update dist/Vox.dmg` over SSH on AKsMini failed with `ERROR! The operating system has blocked access to the Keychain.` — Keychain ACL needs interactive Keychain Access app to grant the binary access, or just run from a local Terminal where the user can click Allow.
+2. `security find-generic-password -a ed25519 -w` over SSH likewise blocked. Path B (export key to file, sign with `--ed-key-file`) was attempted; user ended up running `sign_update` directly from a local Terminal session on AKsMini and that worked.
+3. After signing on AKsMini, kumedaa's local DMG had different bytes — invalidates signature. Resolution: AKsMini ran `gh release create v0.3.2 dist/Vox.dmg` itself.
+
+### TCC pain encountered today (worth knowing for the future)
+
+- Copying a kumedaa-signed `dist/Vox.app` over the AKsMini-signed `~/Applications/Vox.app` swaps cdhash → TCC drops Input Monitoring + Accessibility + Microphone grants for the new bundle. `tccutil reset Accessibility/ListenEvent/Microphone com.andykumeda.vox` clears stale state and lets Vox re-prompt cleanly.
+- Multiple stale Vox instances after `pkill` is recurring: use `pkill -9` and verify with `pgrep -af 'Vox.app/Contents/MacOS/vox'` before relaunching.
+- During release-day testing the user saw "transcription failed: Transport error: The request timed out." surfacing at ~3 seconds (not 20s). `curl` to `api.openai.com` from the same Mac was 84ms. Diagnosis: URLSession in the running app cached a dead nw_path after a brief network blip; fast-fail with `URLError.timedOut` localizes as "request timed out". Restart cleared it. Repro frequency was high enough that the user asked for code-level mitigation.
+
+### Uncommitted 0.3.3 candidate fix
+
+`Sources/Vox/STT/OpenAITranscriber.swift`:
+
+- `request.timeoutInterval = 30.0` (was 20.0) — gives long dictations more headroom but still surfaces stalls quickly.
+- Extracted send into `private static func sendWithRetry(_:)` — single retry (max 2 attempts total, 500ms backoff) on `.timedOut`, `.networkConnectionLost`, `.dnsLookupFailed`, `.notConnectedToInternet`, `.cannotConnectToHost`. Other `URLError` codes and non-URLError errors throw immediately (no retry on auth or HTTP errors).
+
+Worst-case latency: 30s × 2 + 500ms = ~60.5s. That's generous but the alternative is still the silent-hang user reported. If the retry feels too slow in practice, drop to 15s timeout × 2 attempts.
+
+Build verified on kumedaa (`swift build` clean, only pre-existing warnings). `swift test` could not run on kumedaa because XCTest module is missing (CommandLineTools only, no full Xcode). **Run `swift test` on AKsMini before committing** to confirm no regressions across the 209-test suite. Also smoke-test live: hold Fn → speak → release on a Wi-Fi flap if you can simulate one.
+
+If retry+timeout proves out, ship as 0.3.3:
+
+```sh
+# On AKsMini:
+cd ~/Dev/vox && git pull
+swift test                 # confirm 209+ pass
+# Bump CFBundleShortVersionString=0.3.3, CFBundleVersion=7 in Resources/Info.plist
+git add Sources/Vox/STT/OpenAITranscriber.swift Resources/Info.plist
+git commit --no-gpg-sign -m "release: 0.3.3 — STT request retry + 30s timeout"
+git tag v0.3.3 && git push && git push origin v0.3.3
+rm -rf dist && ./scripts/make-dmg.sh
+.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg
+gh release create v0.3.3 dist/Vox.dmg --title "Vox 0.3.3" --notes "STT request retry + 30s timeout"
+# Then on either Mac: prepend appcast item, commit+push
+```
+
+---
+
+## Session 2026-04-29 AM — 0.3.2 release pending: transcribe timeout + slash dictation
 
 **Context:** User on remote SSH session reported two production bugs in 0.3.1: (1) transcription hangs forever after recording; (2) cannot dictate "/" so Claude Code / Slack / Discord slash commands are unreachable. Code fixed and pushed; **release artifact (DMG + appcast + GitHub Release) still needs local Mac to finish** because Sparkle's `sign_update` reads its EdDSA private key from the macOS Keychain and the Keychain is locked over SSH.
 
