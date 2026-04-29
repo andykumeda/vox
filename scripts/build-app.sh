@@ -35,6 +35,10 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
     mkdir -p "$APP_PATH/Contents/Frameworks"
     rm -rf "$APP_PATH/Contents/Frameworks/Sparkle.framework"
     cp -R "$SPARKLE_FRAMEWORK" "$APP_PATH/Contents/Frameworks/"
+    # SwiftPM doesn't add an rpath that points into the bundled Frameworks
+    # dir. Add it ourselves so dyld can resolve @rpath/Sparkle.framework.
+    install_name_tool -add_rpath "@executable_path/../Frameworks" \
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
 fi
 
 # Prefer the persistent "vox-dev" self-signed identity (created by
