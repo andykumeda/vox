@@ -1,4 +1,109 @@
-# Handoff — Vox state as of 2026-04-27 (PM)
+# Handoff — Vox state as of 2026-04-28 (PM)
+
+## Session 2026-04-28 — STT bench, Smart Cleanup, command-mode bug fixes, mode-override tri-state, arrow+modifier keys, dictionary punct fix
+
+**Context:** Long session covering one new exploratory tool (STT provider benchmark), one major user-facing feature (Smart Cleanup with LLM polish + trigger phrases), three command-mode bug fixes, a settings model change, and a couple smaller features. All work landed on `feat/smart-cleanup` (the integrated test branch). Standalone fix branches exist for clean cherry-picking.
+
+### What shipped
+
+#### 1. STT provider benchmark — `feat/stt-bench` and `tools/stt-bench/`
+
+Standalone Python CLI benchmarking OpenAI gpt-4o-transcribe vs Deepgram Nova-3 vs AssemblyAI Universal-2 on 13 prose samples (10 clean + 3 noise-mixed via ffmpeg). Spec: `docs/superpowers/specs/2026-04-28-stt-bench-design.md`. Plan: `docs/superpowers/plans/2026-04-28-stt-bench.md`. Run findings recorded in `tools/stt-bench/README.md` "Bench run history".
+
+**Verdict:** No clear accuracy winner over current OpenAI. Pain B (real-speech mishears, esp. names) is shared across the entire Whisper family — switching providers won't materially fix it. Pain A (silent-input hallucinations) only OpenAI exhibits; Deepgram and AssemblyAI return empty. Deepgram is a viable tradeoff candidate (28% cheaper, 3× faster, no silent-input hallucinations) at small accuracy cost — flagged for a future Vox-integration spec.
+
+API keys live in `tools/stt-bench/.env` (gitignored). Branch is unmerged but mergeable independently of everything else.
+
+#### 2. Smart Cleanup (prose mode) — `feat/smart-cleanup`
+
+Spec: `docs/superpowers/specs/2026-04-28-smart-cleanup-design.md`. Plan: `docs/superpowers/plans/2026-04-28-smart-cleanup.md`.
+
+Opt-in cleanup pass between `PostProcessor` and `TextInjector`. Two layers:
+
+- **Three deterministic triggers** (regex + sentence tokenizer for prose; substring for command):
+  - `scratch that` / `delete that` → wipe preceding clause
+  - `new paragraph` → `\n\n`
+  - `new line` → `\n`
+- **LLM polish via OpenAI gpt-4o-mini** in prose mode only. 5s timeout, fail-open. Removes false starts, fillers (um/uh), and self-corrections.
+
+Settings: new `smartCleanupEnabled: Bool` (default false).
+
+**Layered fixes for issues caught during smoke testing:**
+- Initial paragraph behavior was broken because gpt-4o-mini stripped `\n\n` as artifacts. Tried placeholder swap (`<<VOX_PARA>>` / `<<VOX_LINE>>`) but the model still strips them. Final fix: skip the LLM call entirely when triggered text contains `\n` — the user dictated an explicit break and gets it; LLM polish is sacrificed for that one dictation.
+- Initial command-mode triggers depended on macOS sentence tokenizer, which fails on no-punctuation input (Whisper's command-mode prompt forbids trailing punctuation, so output is one continuous string). Replaced with substring-based "split on trigger, keep what's after the LAST occurrence" semantics for command mode. Prose mode keeps sentence-tokenizer anchoring (lower false-positive risk).
+
+Files: `Sources/vox/Text/CleanupProcessor.swift` (new, ~165 LOC), `Sources/vox/Text/CleanupLLMClient.swift` (new, ~90 LOC, no unit tests per `OpenAITranscriber` precedent), wiring in `MenuBarController.swift`, toggle in `SettingsWindow.swift`. 36 unit tests in `CleanupProcessorTests.swift`.
+
+#### 3. Command-mode: `cd ..` and `./path` — `fix/cd-dot-dot`
+
+User reported `cd dot dot` pasted as `cd .` (one dot). Root cause: `stripTrailingSentencePunctuation` was iterative and ate trailing dots before `expandSpokenPunctuation` could process them. Also: Whisper sometimes consolidates `cd dot dot` → `cd dot.`, eating one dot at the source.
+
+Fix: reorder pipeline (expand BEFORE strip), tighten strip to only remove `.` if preceded by alphanumeric (preserves `cd ..` / `find .`), add `\.\s+/` → `./` glue, add `\s+\.\s+\.` → ` ..` collapse, normalize `(?:\s*\.){3,}\s*$` to ` ..` for stray-period artifacts. 7 new tests cover all the Whisper output variants.
+
+#### 4. Tri-state mode override — `feat/mode-override-tristate`
+
+User reported "in journal app, no way to force command mode" (existing `forceProseMode: Bool` only forces prose; ContextDetector defaults journal to prose). Replaced with `ModeOverride: { auto, prose, command }`. Settings has a segmented Picker. Mode-toggle hotkey cycles all 3. Menu-bar icon tint shows current state (label / blue / purple). Backward-compatible migration reads legacy `forceProseMode=true` → `.prose`; absent / false → `.auto`.
+
+#### 5. Hallucination guard
+
+User reported a 3s "proceed with file cleanup" dictation produced 5000+ chars of `rm -rf X rm -rf Y...` cascade — gpt-4o-mini-transcribe runaway. Added a chars-per-second cap in `MenuBarController.swift` after the STT call: `if raw.count > max(160, durationSec * 40) { suppress }`. Logs `hallucination guard: ...` to `~/Library/Logs/vox.log` for diagnostics.
+
+#### 6. Arrow + modifier suffix keys — `fix/arrow-modifier-keys`
+
+`SuffixKey` extended with `.arrow(direction, modifiers: Set<KeyModifier>)`. Spoken vocabulary at end of dictation: control/ctrl, option/opt/alt, command/cmd, shift × left/right/up/down. Multi-modifier combos work (e.g. "command shift right"). `TextInjector.sendKey` dispatches with `CGEventFlags` for in-app shortcuts. **Limitation:** Mission Control's space-switcher (Ctrl+Left/Right) still does NOT respond to synthesized events even after multiple attempts — see "Known limitations" below.
+
+#### 7. Dictionary edge-punctuation fix — `fix/dictionary-edge-punct`
+
+User reported the dictionary worked for the first occurrence of a word in a sentence but missed later ones. Root cause: `DictionaryMatcher.tokenize` split only on whitespace, so `"Andie,"` (with attached comma after sentence-internal punctuation) was a different token than `"Andie"`. Fix: `tokensEqual` now strips edge punct from input token's core before comparing; `replace` preserves leading and trailing punct on output by attaching to first/last replacement tokens. Spoken patterns also have edge punct stripped during preparation so back-compat with explicit-punct entries is preserved. 7 new tests.
+
+#### 8. `^X` caret-letter recognition
+
+Whisper's command-mode prompt names "control C for Ctrl+C", and the model often encodes a spoken "control X" as the literal symbol `^X`. Added a regex check in `extractTrailingSuffixKeys` for trailing `\^[A-Za-z]$` → `.control(letter)`. 3 new tests.
+
+### Known limitations
+
+**Mission Control space-switcher does NOT respond to Vox's synthesized Ctrl+Left/Right.** Multiple injection paths attempted, all failed:
+1. Default: `flags = .maskControl` on the keydown/keyup event, posted at `.cghidEventTap` — nothing happens.
+2. Sandwich the arrow event between explicit Control keydown/keyup events — still nothing.
+3. Switch tap to `.cgAnnotatedSessionEventTap` (where Mission Control hooks) — still nothing.
+4. Switch source to `CGEventSource(stateID: .hidSystemState)` to mimic real hardware + 15ms delays around the event — still nothing.
+
+The synthesized events DO work for in-app shortcuts (verified via paste / Ctrl+letter / arrow word-jump in apps that bind it). The filter is specific to system-level shortcuts that route through WindowServer's space-switcher.
+
+Hypothesis: macOS 14+ requires either a Developer ID + notarization or a specific entitlement to inject events that drive Mission Control. The `vox-dev` self-signed cert isn't sufficient. The `Resources/vox.entitlements` file already grants Accessibility + Input Monitoring; adding more without a real Developer ID is unlikely to help.
+
+**User-facing message:** ctrl+arrow with modifiers works for in-app shortcuts (word-jump in shells/editors that bind it, line-end navigation, selection); it does NOT switch desktops via Mission Control. Workaround: physical keys.
+
+### Branch state at end of session
+
+- `main` — base, unchanged from start of session
+- `feat/stt-bench` — bench tool (separate, mergeable)
+- `feat/smart-cleanup` — INTEGRATED branch with everything below + Smart Cleanup itself. This is what `dist/Vox.app` was built from.
+- `fix/cd-dot-dot` — standalone subset (already in feat/smart-cleanup)
+- `feat/mode-override-tristate` — standalone subset (already in feat/smart-cleanup)
+- `fix/arrow-modifier-keys` — standalone subset (already in feat/smart-cleanup)
+- `fix/dictionary-edge-punct` — standalone subset (already in feat/smart-cleanup)
+
+The standalone branches exist so each feature can be merged independently if `feat/smart-cleanup` is too coarse.
+
+### Files touched this session
+
+- New: `tools/stt-bench/` (entire dir), `Sources/vox/Text/CleanupProcessor.swift`, `Sources/vox/Text/CleanupLLMClient.swift`, `Tests/voxTests/CleanupProcessorTests.swift`, three spec docs under `docs/superpowers/specs/`, three plan docs under `docs/superpowers/plans/`
+- Modified: `Sources/vox/Util/AppSettings.swift` (smartCleanupEnabled, ModeOverride enum, modeOverride accessor), `Sources/vox/App/MenuBarController.swift` (CleanupProcessor wiring, hallucination guard, mode-override switch), `Sources/vox/App/SettingsWindow.swift` (Smart cleanup toggle, Mode segmented Picker), `Sources/vox/Text/PostProcessor.swift` (cd .. + ./ + arrow+modifier extraction + ^X recognition), `Sources/vox/Text/TextInjector.swift` (arrow case + Mission Control attempts), `Sources/vox/Util/DictionaryMatcher.swift` (edge punct tolerance), `Tests/voxTests/PostProcessorTests.swift` (~20 new tests), `Tests/voxTests/DictionaryMatcherTests.swift` (~7 new tests)
+
+### Testing
+
+`swift test` → 200+ tests, 0 failures. CleanupProcessorTests covers toggle, three trigger types, false positives, mode dispatch, fail-open, small-output guard, placeholder behavior, command-mode substring path. PostProcessorTests covers cd .. variants, ./ glue, arrow+modifier vocabulary, ^X recognition. DictionaryMatcherTests covers edge punct on input, surrounding quotes, repeated word with mixed punct, empty-replacement deletion.
+
+### Memory entries saved this session
+
+- `feedback_no_gpg_sign.md` — durable: pass `--no-gpg-sign` on commits in this repo
+- `project_stt_provider_bench_2026-04-28.md` — bench findings, do NOT propose another provider switch without addressing pain B upstream first
+- `feedback_subagent_silent_test_rewrites.md` — when dispatching TDD implementer subagents, demand DONE_WITH_CONCERNS rather than silent input rewrites
+- `feedback_rebuild_app_for_testing.md` — run `scripts/build-app.sh` after every Swift commit during user testing
+- `project_whisper_hallucination_cascades.md` — gpt-4o-mini-transcribe runaway cascades; chars/sec guard in MenuBarController
+
+---
 
 ## Session 2026-04-27 PM — hotkey-recorder stabilization, single-key support, menu-bar icon redesign
 
