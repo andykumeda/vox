@@ -93,27 +93,30 @@ public struct TextInjector {
             (.maskAlternate, kVK_Option),
             (.maskShift,     kVK_Shift),
         ]
-        // Press each modifier in order; build cumulative flag state.
+        // Mission Control's space-switcher and other system shortcuts hook at
+        // the session event tap, not the HID tap. HID-level events normally
+        // propagate up but appear to be filtered for some system shortcuts on
+        // macOS 14+. Posting at the annotated session level matches where the
+        // shortcut handler listens.
+        let tap: CGEventTapLocation = .cgAnnotatedSessionEventTap
         var current: CGEventFlags = []
         for (flag, vk) in modKeys where flags.contains(flag) {
             current.insert(flag)
             let evt = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(vk), keyDown: true)
             evt?.flags = current
-            evt?.post(tap: .cghidEventTap)
+            evt?.post(tap: tap)
         }
-        // Press + release the actual key with all modifiers held.
         let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
         down?.flags = flags
-        down?.post(tap: .cghidEventTap)
+        down?.post(tap: tap)
         let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
         up?.flags = flags
-        up?.post(tap: .cghidEventTap)
-        // Release modifiers in reverse order; tear down the flag state.
+        up?.post(tap: tap)
         for (flag, vk) in modKeys.reversed() where flags.contains(flag) {
             current.remove(flag)
             let evt = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(vk), keyDown: false)
             evt?.flags = current
-            evt?.post(tap: .cghidEventTap)
+            evt?.post(tap: tap)
         }
     }
 
