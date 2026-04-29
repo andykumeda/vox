@@ -43,11 +43,11 @@ public struct OpenAITranscriber {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode, model: model)
-        request.timeoutInterval = 20.0
+        request.timeoutInterval = 30.0
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await Self.sendWithRetry(request)
         } catch {
             throw TranscriptionError.transportError(error)
         }
@@ -59,6 +59,25 @@ public struct OpenAITranscriber {
         }
         guard let text = String(data: data, encoding: .utf8) else { throw TranscriptionError.invalidResponse }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func sendWithRetry(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let retriable: Set<URLError.Code> = [
+            .timedOut, .networkConnectionLost, .dnsLookupFailed,
+            .notConnectedToInternet, .cannotConnectToHost
+        ]
+        var lastError: Error?
+        for attempt in 0..<2 {
+            do {
+                return try await URLSession.shared.data(for: request)
+            } catch let urlError as URLError where retriable.contains(urlError.code) {
+                lastError = urlError
+                if attempt == 0 { try? await Task.sleep(nanoseconds: 500_000_000) }
+            } catch {
+                throw error
+            }
+        }
+        throw lastError ?? URLError(.timedOut)
     }
 
     private func buildBody(boundary: String, wav: Data, mode: TranscriptionMode, model: String) -> Data {
