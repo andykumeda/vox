@@ -6,6 +6,30 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.3.0</title>
+            <pubDate>Wed, 29 Apr 2026 00:55:00 +0000</pubDate>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Smart Cleanup (prose mode)</strong> — opt-in LLM polish via gpt-4o-mini removes false starts, fillers, and self-corrections. Settings → Mode → Smart cleanup. Trigger phrases also work: "scratch that" / "delete that" wipes the preceding clause; "new paragraph" inserts \n\n; "new line" inserts \n.</li>
+                    <li><strong>Tri-state mode override</strong> — Settings → Mode → Auto / Always prose / Always command. Mode-toggle hotkey cycles all three. Lets you force command mode in non-terminal apps (e.g. dictating shell commands into a journal).</li>
+                    <li><strong>Arrow + modifier suffix keys</strong> — say "control left", "option right", "command shift right" at end of dictation. Works for in-app shortcuts. (Mission Control space-switching needs physical keys — synthetic events filtered by macOS.)</li>
+                    <li><strong>Hallucination guard</strong> — gpt-4o-mini-transcribe sometimes loops on short or noisy audio (a 3-second clip can produce thousands of repeated chars). Vox now suppresses runaway STT output instead of pasting it.</li>
+                    <li><strong>Fix:</strong> "cd dot dot" now produces "cd .." (was "cd ." — one dot lost). Same fix preserves "./scripts/build-app.sh" without the stray space.</li>
+                    <li><strong>Fix:</strong> dictionary entries match repeated occurrences of a word in one sentence, including when punctuation is attached ("Andie, … Andie." now both replace).</li>
+                    <li><strong>Fix:</strong> "control C" produces real Ctrl+C even when Whisper encodes the spoken phrase as the literal "^C" symbol.</li>
+                </ul>
+                <p><em>Reminder: macOS TCC keys permission grants on the bundle's cdhash, which changes on every ad-hoc-signed release. After updating, re-grant Microphone, Input Monitoring, and Accessibility in System Settings → Privacy &amp; Security.</em></p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.3.0/Vox.dmg"
+                sparkle:edSignature="WKibK992XoILoUHKQ4X2H2CbeUFQAKqz/pqpTGwjmKXP/xiEoXhWCJttzrxkdVb2DhQ1klsIXElLIm0tyR2eAw=="
+                length="2564441"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.2.1</title>
             <pubDate>Tue, 28 Apr 2026 03:00:04 +0000</pubDate>
             <sparkle:version>3</sparkle:version>
