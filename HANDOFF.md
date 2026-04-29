@@ -1,5 +1,35 @@
 # Handoff — Vox state as of 2026-04-29 (PM)
 
+## Session 2026-04-29 PM — Meeting Transcription additive plan locked (implementation not started)
+
+**Status:**
+- Meeting transcription work is **planned but not yet implemented**.
+- Primary constraint explicitly locked: **existing dictation STT quality/latency/reliability must not regress**.
+- Engineer-ready execution plan created at `docs/superpowers/plans/2026-04-29-meeting-transcription-additive.md`.
+
+**Locked product decisions (from stakeholder):**
+1. Meeting capture source: **system/call audio only**.
+2. Output UX: **in-app transcript list + export**.
+3. Diarization in v1: **no**.
+4. Consent UX: **one-time acknowledgment**.
+5. Priority: transcript **accuracy/completeness** over summarization.
+6. Storage default: **Application Support** (app-managed), export for sharing.
+
+**Implementation sequence:**
+- M1: additive scaffolding (settings, consent, system-audio preflight, menu actions)
+- M2: chunked meeting pipeline + timestamped transcript persistence/list/export
+- M3: hardening + strict dictation non-regression gates + telemetry/recovery
+
+**Critical no-regression rule for future sessions:**
+- Any PR that touches shared STT paths must run dictation regression checks and may not merge if baseline quality/latency/reliability drifts.
+
+**Next action for next engineer session:**
+1. Start M1 task checklist in plan doc and check off items as implemented.
+2. Add/adjust tests in `Tests/voxTests/` before wiring meeting UI behavior.
+3. Update this handoff with commit SHAs and remaining checklist items after each milestone increment.
+
+---
+
 ## Session 2026-04-29 PM — 0.3.2 SHIPPED + uncommitted 0.3.3 transport-retry fix
 
 **Status:**
