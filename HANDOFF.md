@@ -1,4 +1,107 @@
-# Handoff — Vox state as of 2026-04-28 (PM)
+# Handoff — Vox state as of 2026-04-29 (AM)
+
+## Session 2026-04-29 — 0.3.2 release pending: transcribe timeout + slash dictation
+
+**Context:** User on remote SSH session reported two production bugs in 0.3.1: (1) transcription hangs forever after recording; (2) cannot dictate "/" so Claude Code / Slack / Discord slash commands are unreachable. Code fixed and pushed; **release artifact (DMG + appcast + GitHub Release) still needs local Mac to finish** because Sparkle's `sign_update` reads its EdDSA private key from the macOS Keychain and the Keychain is locked over SSH.
+
+### Status at handoff
+
+**Pushed to GitHub (`main`):**
+- Commit `e460c89` — code fixes + version bump to `0.3.2` (`CFBundleVersion=6`)
+- Tag `v0.3.2` pushed
+- 209/209 tests pass
+
+**NOT pushed yet (needs local Mac):**
+- `dist/Vox.dmg` — built and ad-hoc signed in this session at `dist/Vox.dmg` (2.4M), but Sparkle EdDSA signature missing → Sparkle clients will reject it. **Rebuild from scratch locally; don't trust the remote-built one.**
+- `docs/appcast.xml` — still shows 0.3.1 as latest item. Sparkle on user's machine correctly reports "no update" because there is no 0.3.2 entry.
+- GitHub Release `v0.3.2` — not created. `gh release list` shows latest as v0.3.1.
+
+### What changed in code
+
+**`Sources/Vox/STT/OpenAITranscriber.swift:46`** — added `request.timeoutInterval = 20.0`. URLSession default is 60s; without an explicit timeout, a stalled OpenAI call left `state = .transcribing` for 60s. Symptom: orange pulsing menu icon "never finishes" after recording. 20s gives long dictations room while surfacing failure fast.
+
+**`Sources/Vox/Text/PostProcessor.swift`** — added spoken-slash handling in command mode. The 0.3.1 code intentionally skipped this (comment cited "cd slash usr slash local" ambiguity). Reversed the call:
+- New entry in `spokenPunctReplacements` (line 230): `\bslash\b` → `/`
+- Two-pass glue (lines 281-298):
+  - Pass A: `/\s+(\w)` → `/$1` — kills space after slash. Covers leading "slash help" → "/help" AND first slash in a path.
+  - Pass B: `(/\w+)\s+/` → `$1/` (looped 3×) — collapses subsequent slashes only when the previous token is `/word`. Preserves intentional "cat /tmp/file" because no spoken-slash signature.
+
+**`Tests/voxTests/PostProcessorTests.swift`** — three new cases at end of command-mode block:
+- `testCommandSlashWordGluesPath` — "cd slash usr slash local" → "cd /usr/local"
+- `testCommandLeadingSlashWord` — "slash help" → "/help"
+- `testCommandLeavesIntentionalPathSpaceAlone` — "cat /tmp/some-file.txt" untouched
+
+### Local-finish steps (run on user's Mac, NOT over SSH)
+
+```sh
+cd /Users/andy/Dev/vox
+git pull                                              # gets e460c89 + v0.3.2 tag
+
+# Rebuild — don't trust dist/Vox.dmg from remote session
+rm -rf dist
+./scripts/make-dmg.sh                                 # builds + ad-hoc signs + creates DMG
+
+# Sign with Sparkle EdDSA key (Keychain prompt expected once)
+.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg
+# → outputs:  sparkle:edSignature="..." length=NNNNNNN
+```
+
+Add a new `<item>` block at the **top** of `docs/appcast.xml` (above the 0.3.1 item):
+
+```xml
+<item>
+    <title>Vox 0.3.2</title>
+    <pubDate>Wed, 29 Apr 2026 16:15:00 +0000</pubDate>
+    <sparkle:version>6</sparkle:version>
+    <sparkle:shortVersionString>0.3.2</sparkle:shortVersionString>
+    <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+    <description><![CDATA[
+        <ul>
+            <li><strong>Fix:</strong> Transcription no longer hangs indefinitely when OpenAI stalls. Added a 20s request timeout so failures surface and the menu icon resets.</li>
+            <li><strong>Feature:</strong> Spoken "slash" now becomes "/" in command mode. "slash help" → "/help" for Claude Code / Slack / Discord slash commands. "cd slash usr slash local" → "cd /usr/local".</li>
+        </ul>
+    ]]></description>
+    <enclosure
+        url="https://github.com/andykumeda/vox/releases/download/v0.3.2/Vox.dmg"
+        sparkle:edSignature="PASTE_FROM_SIGN_UPDATE"
+        length="PASTE_FROM_SIGN_UPDATE"
+        type="application/octet-stream" />
+</item>
+```
+
+Finish:
+
+```sh
+git add docs/appcast.xml
+git commit --no-gpg-sign -m "release: appcast 0.3.2"
+git push
+
+gh release create v0.3.2 dist/Vox.dmg \
+    --title "Vox 0.3.2" \
+    --notes "Transcription timeout + slash dictation"
+```
+
+GitHub Pages CDN cache: ~10 min after the appcast push. Sparkle then offers the update on **Check for Updates…** click. If not, `tail -f ~/Library/Logs/vox.log` while clicking — Sparkle errors land there.
+
+### Troubleshooting hooks for the new session
+
+**If transcribe still hangs after upgrade:** check `vox.log` for `transcription failed:` line. The 20s timeout will throw `TranscriptionError.transportError(...)` after exactly 20s. If hangs persist past 20s, the await is somewhere else — likely Smart Cleanup (5s) or `injector.paste`. Note Smart Cleanup timeout is in `CleanupLLMClient.swift:68` already at 5s.
+
+**If "slash help" still shows as literal text:** mode detection — Claude Code is a terminal app, so `ContextDetector` should pick `.command` for it. Check `vox.log` for `mode=command` on the recorded line. If `mode=prose`, the slash glue won't fire — prose mode doesn't run `expandSpokenPunctuation`. Either toggle the menu mode override to `.command`, or extend slash handling into the prose pipeline (separate decision — current scope is command mode only).
+
+**If Sparkle still says no update available after appcast push:**
+1. `curl -s https://andykumeda.github.io/vox/appcast.xml | head -25` — confirm 0.3.2 is the first item.
+2. GitHub Pages cache up to 10 min.
+3. The `<enclosure url=...>` must point to the released DMG; `gh release create v0.3.2 dist/Vox.dmg` must have run before user clicks Check for Updates.
+
+### Why the remote SSH session couldn't finish
+
+Three keychain-gated steps:
+1. `codesign --sign vox-dev` — fails with `errSecInternalComponent`. The vox-dev cert's private key ACL requires interactive Keychain unlock; SSH has no GUI to satisfy it. Workaround used here: ad-hoc sign (`codesign --sign -`). Local TCC perms reset after that, which is fine for release DMGs (UPDATING.md notes releases are ad-hoc anyway).
+2. `sign_update dist/Vox.dmg` — Sparkle EdDSA private key in Keychain. Same block: `ERROR! The operating system has blocked access to the Keychain.` No ad-hoc workaround — Sparkle clients reject unsigned updates. **Must run from local Terminal.**
+3. `gh release create` works fine over SSH (it's just an API call), but pointless without a Sparkle-signed DMG.
+
+---
 
 ## Session 2026-04-28 — STT bench, Smart Cleanup, command-mode bug fixes, mode-override tri-state, arrow+modifier keys, dictionary punct fix
 
