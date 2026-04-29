@@ -63,12 +63,58 @@ public struct TextInjector {
             if mods.contains(.option)  { flags.insert(.maskAlternate) }
             if mods.contains(.shift)   { flags.insert(.maskShift) }
         }
+        // For arrow keystrokes with modifiers, synthesize explicit modifier
+        // press / release events around the arrow key. Some macOS system
+        // shortcuts (notably Mission Control's Ctrl+Left/Right space switcher)
+        // ignore synthetic events that only set the flags field but don't
+        // include modifier-down events. Sandwiching the arrow event between
+        // real Control/Cmd/Opt/Shift down+up makes it indistinguishable from
+        // a physical keypress.
+        if case .arrow = key, !flags.isEmpty {
+            postFullKeystrokeWithModifiers(source: source, code: code, flags: flags)
+            return
+        }
         let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
         down?.flags = flags
         up?.flags = flags
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+    }
+
+    private func postFullKeystrokeWithModifiers(
+        source: CGEventSource?,
+        code: CGKeyCode,
+        flags: CGEventFlags
+    ) {
+        let modKeys: [(CGEventFlags, Int)] = [
+            (.maskControl,   kVK_Control),
+            (.maskCommand,   kVK_Command),
+            (.maskAlternate, kVK_Option),
+            (.maskShift,     kVK_Shift),
+        ]
+        // Press each modifier in order; build cumulative flag state.
+        var current: CGEventFlags = []
+        for (flag, vk) in modKeys where flags.contains(flag) {
+            current.insert(flag)
+            let evt = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(vk), keyDown: true)
+            evt?.flags = current
+            evt?.post(tap: .cghidEventTap)
+        }
+        // Press + release the actual key with all modifiers held.
+        let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
+        down?.flags = flags
+        down?.post(tap: .cghidEventTap)
+        let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
+        up?.flags = flags
+        up?.post(tap: .cghidEventTap)
+        // Release modifiers in reverse order; tear down the flag state.
+        for (flag, vk) in modKeys.reversed() where flags.contains(flag) {
+            current.remove(flag)
+            let evt = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(vk), keyDown: false)
+            evt?.flags = current
+            evt?.post(tap: .cghidEventTap)
+        }
     }
 
     /// Writes `text` to the pasteboard and synthesizes the configured paste shortcut.
