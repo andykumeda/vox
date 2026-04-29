@@ -43,6 +43,7 @@ public struct OpenAITranscriber {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode, model: model)
+        request.timeoutInterval = 20.0
 
         let (data, response): (Data, URLResponse)
         do {

@@ -227,6 +227,7 @@ public struct PostProcessor {
         ("\\bminus\\b", "-"),
         ("\\bpipe\\b", "|"),
         ("\\bdot\\b", "."),
+        ("\\bslash\\b", "/"),
     ]
 
     // NATO phonetic alphabet → single letter. Only expanded when immediately
@@ -272,11 +273,27 @@ public struct PostProcessor {
             s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "$1$2")
         }
         // Glue "word . word" → "word.word" so "readme dot md" becomes "readme.md".
-        // Slash deliberately omitted — "cd slash usr slash local" is genuinely
-        // ambiguous (path arg vs internal path glue). Dictate "/" literally.
         if let re = try? NSRegularExpression(pattern: "([a-zA-Z0-9])\\s*\\.\\s*([a-zA-Z0-9])") {
             let ns = s as NSString
             s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "$1.$2")
+        }
+        // Slash glue. "slash" → "/" already happened; now collapse spacing.
+        // Two passes:
+        //   A. Kill space AFTER slash: "/ usr" → "/usr" (covers leading
+        //      "slash help" → "/help" and the first slash in a path).
+        //   B. Glue subsequent slashes in the same path: "/usr /local" →
+        //      "/usr/local". Requires preceding "/word" so we don't merge
+        //      an intentional command/path separator like "cat /tmp".
+        // Loop B to collapse multi-segment paths (/a /b /c).
+        if let re = try? NSRegularExpression(pattern: "/\\s+([a-zA-Z0-9])") {
+            let ns = s as NSString
+            s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "/$1")
+        }
+        for _ in 0..<3 {
+            if let re = try? NSRegularExpression(pattern: "(/[a-zA-Z0-9._-]+)\\s+/") {
+                let ns = s as NSString
+                s = re.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: ns.length), withTemplate: "$1/")
+            }
         }
         // Glue ". /" → "./" so ". /scripts/build-app.sh" becomes
         // "./scripts/build-app.sh". Whisper sometimes leaves a stray space

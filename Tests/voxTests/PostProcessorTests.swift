@@ -521,6 +521,25 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(p.apply("cat foo. /bar"), "cat foo./bar")
     }
 
+    func testCommandSlashWordGluesPath() {
+        // "cd slash usr slash local" → "cd /usr/local".
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cd slash usr slash local"), "cd /usr/local")
+    }
+
+    func testCommandLeadingSlashWord() {
+        // "slash help" → "/help" for slash-command apps (Claude Code, Slack).
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("slash help"), "/help")
+    }
+
+    func testCommandLeavesIntentionalPathSpaceAlone() {
+        // "cat /tmp/some-file.txt" — slash already tight to path, no spoken
+        // "slash" word. Don't glue away the intentional cmd/path separator.
+        let p = PostProcessor(mode: .command)
+        XCTAssertEqual(p.apply("cat /tmp/some-file.txt"), "cat /tmp/some-file.txt")
+    }
+
     // MARK: - Arrow + modifier suffix keys
 
     func testCommandControlRightArrow() {
