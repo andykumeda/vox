@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.3.2</title>
+            <pubDate>Wed, 29 Apr 2026 16:45:00 +0000</pubDate>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>0.3.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Transcription no longer hangs indefinitely when OpenAI stalls. Added a 20s request timeout so failures surface and the menu icon resets.</li>
+                    <li><strong>Feature:</strong> Spoken "slash" now becomes "/" in command mode. "slash help" → "/help" for Claude Code / Slack / Discord slash commands. "cd slash usr slash local" → "cd /usr/local".</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.3.2/Vox.dmg"
+                sparkle:edSignature="WW4usR9mIl/xkNMz1P1MPZfKoMxl+bNKDTGx1IZXv/tnR08vR9zmFEKjHWdUJs0CrprNmZzKkUUGB/LIVORrDw=="
+                length="2565662"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.3.1</title>
             <pubDate>Wed, 29 Apr 2026 01:15:00 +0000</pubDate>
             <sparkle:version>5</sparkle:version>
