@@ -152,8 +152,14 @@ final class MenuBarController: NSObject {
                 keyEquivalent: ""
             )
             stopMeeting.target = self
-            stopMeeting.isEnabled = false
             menu.addItem(stopMeeting)
+            let showTranscripts = NSMenuItem(
+                title: "Show Meeting Transcripts…",
+                action: #selector(showMeetingTranscripts),
+                keyEquivalent: ""
+            )
+            showTranscripts.target = self
+            menu.addItem(showTranscripts)
         }
 
         let updateItem = NSMenuItem(
@@ -285,21 +291,39 @@ final class MenuBarController: NSObject {
 
     @objc private func startMeetingTranscript() {
         let result = MeetingPreflight.gate(hasAPIKey: keychain.read()?.isEmpty == false)
-        switch result {
-        case .success:
-            // M2 wires actual session lifecycle. Until then surface the deferred status so the
-            // gate path stays exercised and the menu does not silently no-op.
-            presentMeetingError(
-                "Meeting capture pipeline lands in M2. Settings + consent are wired; backend is not."
-            )
-        case .failure(let err):
+        if case .failure(let err) = result {
             dlog("meeting gate denied: \(err)")
             presentMeetingError(err.userMessage)
+            return
+        }
+        if state == .recording {
+            presentMeetingError("Finish current dictation before starting a meeting.")
+            return
+        }
+        Task { @MainActor in
+            do {
+                try await MeetingTranscriptionSession.shared.start()
+            } catch {
+                self.presentMeetingError("Could not start meeting: \(error)")
+            }
         }
     }
 
     @objc private func stopMeetingTranscript() {
-        // No-op until M2 attaches a session controller.
+        Task { @MainActor in
+            do {
+                try await MeetingTranscriptionSession.shared.stop()
+                MeetingTranscriptsWindow.shared.show()
+            } catch {
+                self.presentMeetingError("Could not stop meeting: \(error)")
+            }
+        }
+    }
+
+    @objc private func showMeetingTranscripts() {
+        Task { @MainActor in
+            MeetingTranscriptsWindow.shared.show()
+        }
     }
 
     private func presentMeetingError(_ message: String) {

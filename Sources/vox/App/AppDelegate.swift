@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Relocator.offerMoveToApplicationsIfNeeded()
         menuController.start()
+        MeetingTranscriptStore().recoverInFlightSessions()
         DictionaryStore.shared.load()
         DictionaryStore.shared.startWatching()
         NotificationCenter.default.addObserver(
