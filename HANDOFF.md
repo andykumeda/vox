@@ -1,4 +1,45 @@
-# Handoff — Vox state as of 2026-04-29 (Evening)
+# Handoff — Vox state as of 2026-04-30 (Evening)
+
+## Session 2026-04-30 — M2 multi-source capture, main window UI, new icon, releases 0.4.0 / 0.5.0 / 0.5.1
+
+**Status:** Three releases shipped today. App runs end-to-end on both Macs (kumedaa + the second one); other Mac auto-updated via Sparkle and is functional after re-granting Accessibility. Next phase queued: meeting summarization (TL;DR via gpt-4o-mini), per stakeholder request.
+
+**Releases shipped (all on `origin/main`):**
+- `v0.4.0` — meeting M2: parallel mic + system audio capture, wall-clock timeline alignment, silence trim, Whisper language pin, distinct red meeting menu icon, multi-modifier hotkey capture fix, audible cue on suppressed Fn during meeting.
+- `v0.5.0` — main window UI with sidebar nav (Home / Dictionary / Meeting / Settings / Help). Auto-opens on launch, hides on close. Home shows stats + recent dictations + recent meetings. Dictation history persisted at `~/Library/Application Support/Vox/DictationHistory/history.json` with configurable retention (forever / 1y / 90d / 30d). Whisper repetition hallucination filter ("yeah, yeah, yeah, ..." 30s walls). Keychain reads cached in process memory.
+- `v0.5.1` — new chrome-V app icon. Menu bar shows the actual icon (cyan in prose, amber/gold in command/terminal) with red/orange dot badge for recording/transcribing. Mode toggle hotkey now flips directly between prose ↔ command on a single press (skips .auto so the change is always visible).
+
+**Key code landmarks added today:**
+- `Sources/vox/Meeting/MeetingMicCapture.swift` — `AVAudioRecorder` mic capture, conforms to `MeetingAudioRecording`.
+- `Sources/vox/Meeting/SilenceTrim.swift` — PCM scan at -46 dBFS RMS, trims leading/trailing silence via passthrough export. Used per stream before chunking.
+- `Sources/vox/Util/Log.swift` — shared `dlog` (was private to MenuBarController).
+- `Sources/vox/Util/DictationHistoryStore.swift` — singleton, JSON file, retention enforced on every record().
+- `Sources/vox/App/MainWindow.swift` — NSWindow + SwiftUI NavigationSplitView with sidebar.
+- `Sources/vox/App/DictionaryView.swift` — extracted from SettingsView.
+- `Sources/vox/App/UpdaterAccess.swift` — process-wide handle to Sparkle's updater controller.
+- `Resources/AppIcon.svg`, `Resources/AppIcon-Command.svg` — sources for both menu-bar variants.
+- `Resources/AppIcon-Command.png` — 72×72 amber variant for terminal-mode menu bar (bundled by build-app.sh).
+
+**Architectural decisions made today:**
+- Meeting transcripts: two parallel streams (system + mic), tagged segments interleaved by `startTime` after wall-clock alignment. Each segment carries `source: .local | .remote`. Sort tie-breaker prefers local first.
+- Hallucination handling: drop segments past audible duration cap, drop low-unique-ratio repetitions. Whisper API request now pins `language=en` and `temperature=0`.
+- HotkeyRecorder: defers single-modifier commit until release (so multi-modifier combos can be entered). `HotkeyRecorder.isCapturing` static gate suppresses global HotkeyMonitor dispatch while configuring.
+- Menu bar dropdown trimmed to: Home / Check for Updates / Help / Quit. Meeting commands moved to main-window Meeting tab.
+
+**Open issues / next-session candidates:**
+1. **Meeting summarization** — user explicitly requested as next phase. Add a TL;DR field to `TranscriptSession`, generate via OpenAI gpt-4o-mini after transcription completes, render in MeetingTranscriptsView's detail pane. Cost: ~$0.0005 per meeting. Make optional via setting (default on).
+2. **TCC stale grants after Sparkle update** — Accessibility specifically gets dropped on every cdhash change because the build is ad-hoc-signed `vox-dev`. After the 0.5.1 update on the other Mac, dictation broke until `tccutil reset Accessibility com.andykumeda.vox` + re-grant. Permanent fix: notarized Developer ID build ($99/yr Apple Developer enrollment).
+3. **Mic bleed during meetings** — user already aware; works around with headphones.
+4. **Per-chunk silence skip** before sending to Whisper would prevent repetition hallucinations at source (cheaper than the post-filter).
+5. **`/usr/bin/log show` for vox** — partial, dlog now writes to `~/Library/Logs/vox.log` for both dictation and meeting paths.
+
+**Sparkle release flow on this machine (kumedaa):** verified working end-to-end. Private EdDSA key in login keychain, `Private key for signing Sparkle updates`, account `ed25519`. Standard flow: bump Info.plist → commit + tag → `make-dmg.sh` → `sign_update` → `gh release create` → prepend appcast.xml → push. ~10 min Pages CDN before the other Mac sees the new entry.
+
+**Tests at end of session:** 244/244 passing. Dictation regression baseline: failure_rate=0.0, quality_score=1.0, latency≈2-3ms (within noise).
+
+**Branch state:** `main` clean, in sync with `origin/main`. Last commit: `release: appcast 0.5.1`. `tools/` (stt-bench) still untracked.
+
+---
 
 ## Session 2026-04-29 Evening — M2 polish + bug hunt (paused mid-debug)
 
