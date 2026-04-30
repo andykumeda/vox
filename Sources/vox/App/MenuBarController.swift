@@ -32,11 +32,15 @@ final class MenuBarController: NSObject {
         apiKeyProvider: { [keychain] in keychain.read() }
     )
     private lazy var settingsController = SettingsWindowController(keychain: keychain)
-    private lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
-        updaterDelegate: nil,
-        userDriverDelegate: nil
-    )
+    private lazy var updaterController: SPUStandardUpdaterController = {
+        let c = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        UpdaterAccess.controller = c
+        return c
+    }()
     private var helpWindowController: HelpWindowController?
 
     private var currentMode: TranscriptionMode = .prose
@@ -123,50 +127,36 @@ final class MenuBarController: NSObject {
     }
 
     private func configureMenu() {
+        // Eagerly trigger the updater lazy so SPUStandardUpdaterController.start() runs
+        // and UpdaterAccess.controller is populated before the user clicks anything.
+        _ = updaterController
+
         let menu = NSMenu()
-        menu.addItem(withTitle: "Hold Fn to dictate", action: nil, keyEquivalent: "").isEnabled = false
+        let home = NSMenuItem(title: "Home", action: #selector(openMainWindow), keyEquivalent: "")
+        home.target = self
+        menu.addItem(home)
         menu.addItem(.separator())
-        let helpItem = NSMenuItem(title: "Help…", action: #selector(showHelpAction(_:)), keyEquivalent: "")
+        let updateItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(checkForUpdatesAction),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        menu.addItem(updateItem)
+        let helpItem = NSMenuItem(title: "Help", action: #selector(showHelpAction(_:)), keyEquivalent: "")
         helpItem.target = self
         menu.addItem(helpItem)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
-
-        if AppSettings.meetingModeEnabled {
-            menu.addItem(.separator())
-            let startMeeting = NSMenuItem(
-                title: "Start Meeting Transcript",
-                action: #selector(startMeetingTranscript),
-                keyEquivalent: ""
-            )
-            startMeeting.target = self
-            menu.addItem(startMeeting)
-            let stopMeeting = NSMenuItem(
-                title: "Stop Meeting Transcript",
-                action: #selector(stopMeetingTranscript),
-                keyEquivalent: ""
-            )
-            stopMeeting.target = self
-            menu.addItem(stopMeeting)
-            let showTranscripts = NSMenuItem(
-                title: "Show Meeting Transcripts…",
-                action: #selector(showMeetingTranscripts),
-                keyEquivalent: ""
-            )
-            showTranscripts.target = self
-            menu.addItem(showTranscripts)
-        }
-
-        let updateItem = NSMenuItem(
-            title: "Check for Updates…",
-            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
-            keyEquivalent: ""
-        )
-        updateItem.target = updaterController
-        menu.addItem(updateItem)
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Vox", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
+    }
+
+    @objc private func openMainWindow() {
+        Task { @MainActor in MainWindowController.shared.showWindow() }
+    }
+
+    @objc private func checkForUpdatesAction() {
+        updaterController.checkForUpdates(nil)
     }
 
     private func appIconForMenuBar() -> NSImage? {
@@ -482,6 +472,14 @@ final class MenuBarController: NSObject {
                 let model = AppSettings.transcriptionModel
                 let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
                 UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model)
+                if !cleanedText.isEmpty {
+                    DictationHistoryStore.shared.record(DictationEntry(
+                        mode: mode == .prose ? "prose" : "command",
+                        durationSec: durationSec,
+                        wordCount: wordCount,
+                        text: cleanedText
+                    ))
+                }
                 dlog("processed=\(processed.text) keys=\(processed.suffixKeys) words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
                 await MainActor.run {
                     let pasteDelay: Double

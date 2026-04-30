@@ -17,7 +17,7 @@ struct HelpView: View {
                     .padding()
             }
         }
-        .frame(width: 640, height: 720)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { loadHelp() }
     }
 

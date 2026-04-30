@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MeetingTranscriptStore().recoverInFlightSessions()
         DictionaryStore.shared.load()
         DictionaryStore.shared.startWatching()
+        Task { @MainActor in MainWindowController.shared.showWindow() }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,

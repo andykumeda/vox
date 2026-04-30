@@ -65,10 +65,16 @@ private final class MeetingTranscriptsModel: ObservableObject {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn {
-            try? store.delete(id: id)
-            reload()
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try store.delete(id: id)
+        } catch {
+            dlog("MeetingTranscriptsModel delete failed: \(error)")
         }
+        // Synchronously refresh so SwiftUI sees a single consistent state update:
+        // sessions list without the deleted item, selection moved to the new first.
+        sessions = store.list()
+        selection = sessions.first?.id
     }
 
     func cancelActive(_ id: UUID) {
@@ -117,13 +123,13 @@ private final class MeetingTranscriptsModel: ObservableObject {
     }
 }
 
-private struct MeetingTranscriptsView: View {
+struct MeetingTranscriptsView: View {
     @StateObject private var model = MeetingTranscriptsModel()
 
     var body: some View {
         HSplitView {
-            sidebar.frame(minWidth: 240, idealWidth: 260)
-            detail
+            sidebar.frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
+            detail.frame(minWidth: 420)
         }
         .frame(minWidth: 600, minHeight: 360)
     }
@@ -175,8 +181,24 @@ private struct MeetingTranscriptsView: View {
                     }.padding(.vertical, 6)
                 }
             }
+        } else if model.sessions.isEmpty {
+            VStack(spacing: 8) {
+                Text("No meeting transcripts yet.")
+                    .foregroundStyle(.secondary)
+                Text("Use the menu bar or Cmd+Shift+M to start a meeting recording.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            Text("No transcripts yet.").foregroundStyle(.secondary)
+            VStack(spacing: 8) {
+                Text("Select a meeting from the list.")
+                    .foregroundStyle(.secondary)
+                Text("\(model.sessions.count) saved.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

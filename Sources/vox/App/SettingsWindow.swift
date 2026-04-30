@@ -18,9 +18,6 @@ struct SettingsView: View {
     @State private var meetingRetainAudio: Bool = AppSettings.meetingRetainAudio
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
-    @StateObject private var dict = DictionaryStore.shared
-    @State private var editingEntry: DictionaryEntry?
-    @State private var isAddingEntry: Bool = false
     let keychain: KeychainStore
 
     var body: some View {
@@ -213,6 +210,46 @@ struct SettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("Dictation history")
+                    .font(.headline)
+                HStack {
+                    Text("Keep entries for")
+                    Picker("", selection: Binding(
+                        get: { AppSettings.dictationHistoryRetention },
+                        set: { AppSettings.dictationHistoryRetention = $0 }
+                    )) {
+                        ForEach(DictationHistoryRetention.allCases, id: \.self) { opt in
+                            Text(opt.displayName).tag(opt)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 160)
+                    Spacer()
+                    Button("Clear all history") {
+                        DictationHistoryStore.shared.clear()
+                    }
+                }
+                Text("Older entries are pruned automatically. \"Forever\" never prunes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Updates")
+                    .font(.headline)
+                Button("Check for Updates…") {
+                    UpdaterAccess.checkForUpdates()
+                }
+                Text("Vox checks automatically once per day. Use this to check immediately.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Permissions")
                     .font(.headline)
                 Button("Open Accessibility Settings") {
@@ -283,106 +320,10 @@ struct SettingsView: View {
                 .controlSize(.small)
             }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Dictionary")
-                        .font(.headline)
-                    Spacer()
-                    Button {
-                        editingEntry = DictionaryEntry(
-                            id: "user-\(UUID().uuidString)",
-                            spoken: "", replacement: "",
-                            mode: .command, isBuiltIn: false
-                        )
-                        isAddingEntry = true
-                    } label: {
-                        Label("Add", systemImage: "plus")
-                    }
-                    Button {
-                        NSWorkspace.shared.activateFileViewerSelecting([dict.fileURL])
-                    } label: {
-                        Label("Reveal in Finder", systemImage: "folder")
-                    }
-                    Button {
-                        Task { @MainActor in
-                            HelpWindowController().show()
-                        }
-                    } label: {
-                        Label("Open Help", systemImage: "questionmark.circle")
-                    }
-                }
-
-                if let err = dict.loadError {
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                let userEntries = dict.entries.filter { !$0.isBuiltIn }
-                let builtinCount = dict.entries.count - userEntries.count
-                let disabledCount = userEntries.filter { !$0.enabled }.count
-
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if userEntries.isEmpty {
-                            VStack(spacing: 6) {
-                                Text("No custom entries yet.")
-                                    .foregroundStyle(.secondary)
-                                Text("Click Add to create one.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(builtinCount) built-in fixups active")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(20)
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            ForEach(Array(userEntries.enumerated()), id: \.element.id) { idx, entry in
-                                DictionaryRow(
-                                    entry: entry,
-                                    onToggle: { dict.setEnabled(id: entry.id, enabled: !entry.enabled) },
-                                    onEdit: { editingEntry = entry; isAddingEntry = false },
-                                    onDelete: { dict.delete(id: entry.id) }
-                                )
-                                .padding(.horizontal, 8)
-                                if idx < userEntries.count - 1 {
-                                    Divider()
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(minHeight: 240, maxHeight: 400)
-                .background(Color(NSColor.textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-                )
-
-                Text("\(userEntries.count) custom entries · \(disabledCount) disabled · \(builtinCount) built-in fixups active")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .sheet(item: $editingEntry) { entry in
-                DictionaryEditSheet(
-                    entry: entry,
-                    isNew: isAddingEntry,
-                    onSave: { saved in
-                        if isAddingEntry { dict.add(saved) } else { dict.update(saved) }
-                        editingEntry = nil
-                    },
-                    onCancel: { editingEntry = nil }
-                )
-            }
-
         }
         .padding(20)
         }
-        .frame(width: 480, height: 800)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             apiKey = keychain.read() ?? ""
             totals = UsageTracker.totals()
