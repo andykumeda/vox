@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider(
         AppSettings.meetingCaptureBackend
     )
+    @State private var meetingRetainAudio: Bool = AppSettings.meetingRetainAudio
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
     @StateObject private var dict = DictionaryStore.shared
@@ -167,6 +168,17 @@ struct SettingsView: View {
                         Text(meetingBackendStatus.detail)
                             .font(.caption)
                     }
+
+                    Toggle("Keep audio recording after transcription", isOn: Binding(
+                        get: { meetingRetainAudio },
+                        set: { newValue in
+                            meetingRetainAudio = newValue
+                            AppSettings.meetingRetainAudio = newValue
+                        }
+                    ))
+                    Text("Off by default. Audio file is deleted after Whisper finishes transcribing. Turn on to keep the .m4a in Application Support for replay or re-transcribe.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -355,6 +367,7 @@ struct SettingsView: View {
             meetingMode = AppSettings.meetingModeEnabled
             meetingConsent = AppSettings.meetingConsentAcknowledged
             meetingBackendStatus = MeetingPreflight.backendStatusProvider(AppSettings.meetingCaptureBackend)
+            meetingRetainAudio = AppSettings.meetingRetainAudio
         }
     }
 

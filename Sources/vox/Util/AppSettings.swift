@@ -66,6 +66,7 @@ enum AppSettings {
     private static let meetingModeKey = "meetingModeEnabled"
     private static let meetingConsentKey = "meetingConsentAcknowledged"
     private static let meetingBackendKey = "meetingCaptureBackend"
+    private static let meetingRetainAudioKey = "meetingRetainAudio"
 
     static var keepTranscriptionOnClipboard: Bool {
         get { UserDefaults.standard.bool(forKey: keepKey) }
@@ -124,6 +125,11 @@ enum AppSettings {
             return .systemAudio
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: meetingBackendKey) }
+    }
+
+    static var meetingRetainAudio: Bool {
+        get { UserDefaults.standard.bool(forKey: meetingRetainAudioKey) }
+        set { UserDefaults.standard.set(newValue, forKey: meetingRetainAudioKey) }
     }
 
     private static let recordHotkeyKey = "recordHotkey"
