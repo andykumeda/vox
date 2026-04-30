@@ -172,4 +172,5 @@ enum AppSettings {
 extension Notification.Name {
     static let recordHotkeyChanged = Notification.Name("vox.recordHotkeyChanged")
     static let modeToggleHotkeyChanged = Notification.Name("vox.modeToggleHotkeyChanged")
+    static let meetingModeChanged = Notification.Name("vox.meetingModeChanged")
 }

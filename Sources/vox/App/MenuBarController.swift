@@ -106,6 +106,14 @@ final class MenuBarController: NSObject {
             self?.reconfigureHotkey()
         }
 
+        NotificationCenter.default.addObserver(
+            forName: .meetingModeChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.configureMenu()
+        }
+
         Task {
             let granted = await recorder.requestPermission()
             dlog("mic permission granted=\(granted)")

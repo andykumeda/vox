@@ -144,6 +144,7 @@ struct SettingsView: View {
                     set: { newValue in
                         meetingMode = newValue
                         AppSettings.meetingModeEnabled = newValue
+                        NotificationCenter.default.post(name: .meetingModeChanged, object: nil)
                     }
                 ))
                 Text("Adds Start/Stop Meeting Transcript actions to the menu bar. Off by default. Does not affect dictation.")
