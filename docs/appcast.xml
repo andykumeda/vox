@@ -6,6 +6,28 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.5.0</title>
+            <pubDate>Thu, 30 Apr 2026 21:05:00 +0000</pubDate>
+            <sparkle:version>8</sparkle:version>
+            <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Main window:</strong> sidebar nav (Home / Dictionary / Meeting / Settings / Help). Auto-opens on launch, hides on close. Click menu-bar icon to reopen.</li>
+                    <li><strong>Home:</strong> stat cards plus recent dictations and recent meetings.</li>
+                    <li><strong>Dictation history:</strong> every dictation is saved to disk. Configurable retention (forever / 1y / 90d / 30d) in Settings.</li>
+                    <li><strong>Fix:</strong> Whisper hallucination filter drops the "yeah, yeah, yeah, ..." 30-second repetitions on quiet mic input.</li>
+                    <li><strong>Fix:</strong> Keychain access cached in process memory so dictations no longer re-prompt for ACL approval each time.</li>
+                    <li><strong>Fix:</strong> meeting Delete now correctly redraws (was a UI-refresh bug, not data loss).</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.5.0/Vox.dmg"
+                sparkle:edSignature="yUxHEHtgdGRf/PksSFuvsjKFN/mGd6vgNjdyna99kt9kUu/uH1aZiqLjdUpJQ6km8E4OPaiDntBH2zPx9tmhBg=="
+                length="2955622"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.4.0</title>
             <pubDate>Thu, 30 Apr 2026 15:55:00 +0000</pubDate>
             <sparkle:version>7</sparkle:version>
