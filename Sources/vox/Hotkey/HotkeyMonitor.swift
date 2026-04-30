@@ -87,6 +87,11 @@ public final class HotkeyMonitor {
     // MARK: - Dispatch
 
     private func handle(type: CGEventType, event: CGEvent) {
+        // While the user is configuring a new hotkey in Settings we mute global
+        // dispatch so the existing binding doesn't fire on the keystrokes meant for
+        // the recorder UI.
+        if HotkeyRecorder.isCapturing { return }
+
         let flags = event.flags
         let keycode: UInt16? = {
             if type == .keyDown || type == .keyUp {
