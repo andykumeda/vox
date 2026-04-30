@@ -93,6 +93,13 @@ final class MenuBarController: NSObject {
         ) { [weak self] _ in
             self?.reconfigureHotkey()
         }
+        NotificationCenter.default.addObserver(
+            forName: .meetingTranscriptStoreDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshIcon()
+        }
 
         Task {
             let granted = await recorder.requestPermission()
@@ -209,6 +216,44 @@ final class MenuBarController: NSObject {
 
     private func refreshIcon() {
         guard let button = statusItem.button else { return }
+
+        // Meeting capture takes visual priority over dictation states. The icon, color,
+        // pulse and tooltip are all distinct so the user can never miss it.
+        if MeetingTranscriptionSession.shared.isActive {
+            let status = MeetingTranscriptionSession.shared.statusSnapshot
+            let symbol: String
+            let color: NSColor
+            let tooltip: String
+            switch status {
+            case .recording:
+                symbol = "record.circle.fill"; color = .systemRed
+                tooltip = "Vox — MEETING RECORDING (click menu → Stop Meeting Transcript)"
+            case .chunking, .transcribing:
+                symbol = "waveform.circle.fill"; color = .systemOrange
+                tooltip = "Vox — meeting transcribing…"
+            default:
+                symbol = "record.circle.fill"; color = .systemRed
+                tooltip = "Vox — meeting active"
+            }
+            let candidates = [symbol, "record.circle", "circle.fill", "mic.fill"]
+            let base = candidates.lazy
+                .compactMap { NSImage(systemSymbolName: $0, accessibilityDescription: "Vox meeting") }
+                .first
+            let cfg = NSImage.SymbolConfiguration(paletteColors: [color])
+            let tinted = base?.withSymbolConfiguration(cfg)
+            tinted?.isTemplate = false
+            button.image = tinted
+            button.contentTintColor = nil
+            button.title = (button.image == nil) ? "● REC" : ""
+            button.toolTip = tooltip
+            if status == .recording {
+                startPulsing()
+            } else {
+                stopPulsing()
+            }
+            return
+        }
+
         switch state {
         case .idle:
             // Bubble glyph on transparent background. Tint differs by mode.
@@ -358,6 +403,8 @@ final class MenuBarController: NSObject {
         guard state == .idle else { return }
         if DictationMutex.isBlocked() {
             dlog("dictation Fn ignored — meeting recording active")
+            // Audible cue so the user notices their dictation isn't going through.
+            NSSound(named: NSSound.Name("Funk"))?.play()
             return
         }
         switch AppSettings.modeOverride {
