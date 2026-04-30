@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import CoreGraphics
 import SwiftUI
 
 struct SettingsView: View {
@@ -145,6 +146,15 @@ struct SettingsView: View {
                         meetingMode = newValue
                         AppSettings.meetingModeEnabled = newValue
                         NotificationCenter.default.post(name: .meetingModeChanged, object: nil)
+                        // Surface the Screen Recording prompt the first time Meeting Mode is enabled.
+                        // CGRequestScreenCaptureAccess is a one-shot system prompt; if already
+                        // decided (granted or denied), the call is a no-op.
+                        if newValue && !CGPreflightScreenCaptureAccess() {
+                            _ = CGRequestScreenCaptureAccess()
+                        }
+                        meetingBackendStatus = MeetingPreflight.backendStatusProvider(
+                            AppSettings.meetingCaptureBackend
+                        )
                     }
                 ))
                 Text("Adds Start/Stop Meeting Transcript actions to the menu bar. Off by default. Does not affect dictation.")
@@ -216,6 +226,10 @@ struct SettingsView: View {
                 Button("Open Microphone Settings") {
                     NSWorkspace.shared.open(URL(string:
                         "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+                }
+                Button("Open Screen Recording Settings") {
+                    NSWorkspace.shared.open(URL(string:
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                 }
             }
 
