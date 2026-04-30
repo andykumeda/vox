@@ -18,10 +18,17 @@ public protocol MeetingAudioRecording: AnyObject {
     /// failure, etc). Read by MeetingTranscriptionSession after stop to surface a clean
     /// failure rather than handing an empty file to the chunker.
     var lastFailureReason: String? { get }
+
+    /// Wall-clock time corresponding to t=0 inside the recorded file. Used by the session
+    /// to align segments across multiple recorders (mic + system) onto a shared timeline.
+    /// nil until the recorder has actually started writing audio (e.g. SCStream waits for
+    /// its first sample buffer; AVAudioRecorder sets it the moment record() returns true).
+    var audioStartedAt: Date? { get }
 }
 
 public extension MeetingAudioRecording {
     var lastFailureReason: String? { nil }
+    var audioStartedAt: Date? { nil }
 }
 
 public enum MeetingAudioCaptureError: Error, CustomStringConvertible {
@@ -57,6 +64,7 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
     private var sessionStarted = false
     private var sampleBufferCount = 0
     private(set) public var lastFailureReason: String?
+    private(set) public var audioStartedAt: Date?
 
     public override init() { super.init() }
 
@@ -108,6 +116,7 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         config.excludesCurrentProcessAudio = true
         sampleBufferCount = 0
         lastFailureReason = nil
+        audioStartedAt = nil
         dlog("MeetingAudioCapture starting → \(outputURL.path)")
 
         // Writer is created lazily on the first audio sample buffer so we can pass the
@@ -221,6 +230,7 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
             }
             writer.startSession(atSourceTime: startTime)
             sessionStarted = true
+            audioStartedAt = Date()
             dlog("MeetingAudioCapture session started at PTS \(startTime.seconds)")
         }
         if input.isReadyForMoreMediaData {

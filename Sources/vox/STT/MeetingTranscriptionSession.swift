@@ -1,22 +1,25 @@
 import Foundation
 
-/// Coordinates a single end-to-end meeting capture: record audio, slice into chunks,
-/// upload each chunk to Whisper with infinite-retry-on-transport-failure, persist segments.
+/// Coordinates a single end-to-end meeting capture: record system audio + local mic in
+/// parallel, slice each into chunks, upload chunks to Whisper with infinite retry on
+/// transport failures, persist segments tagged by source.
 /// Singleton via `.shared` for the app; tests instantiate directly with mocks.
 public final class MeetingTranscriptionSession {
     public typealias Chunker = (URL, URL) async throws -> [URL]
-    public typealias Transcribe = (URL, Double) async throws -> [TranscriptSegment]
+    public typealias Transcribe = (URL, Double, SegmentSource) async throws -> [TranscriptSegment]
 
     public static let shared = MeetingTranscriptionSession(
         store: MeetingTranscriptStore(),
         recorder: nil,
+        micRecorder: nil,
+        captureMic: true,
         chunker: { input, dir in
             try await MeetingChunker().split(input: input, outputDirectory: dir)
         },
-        transcribe: { url, offset in
+        transcribe: { url, offset, source in
             let key = KeychainStore().read() ?? ""
             return try await OpenAITranscriber.transcribeMeetingChunk(
-                fileURL: url, offsetSeconds: offset, apiKey: key
+                fileURL: url, offsetSeconds: offset, apiKey: key, source: source
             )
         },
         apiKey: { KeychainStore().read() },
@@ -24,7 +27,8 @@ public final class MeetingTranscriptionSession {
     )
 
     public let store: MeetingTranscriptStore
-    private let recorderFactory: () -> MeetingAudioRecording
+    private let systemRecorderFactory: () -> MeetingAudioRecording
+    private let micRecorderFactory: () -> MeetingAudioRecording?
     private let chunker: Chunker
     private let transcribe: Transcribe
     private let apiKeyProvider: () -> String?
@@ -32,7 +36,8 @@ public final class MeetingTranscriptionSession {
     private let backoffSchedule: [Double]
     private let chunkDuration: Double = 300
 
-    private var recorder: MeetingAudioRecording?
+    private var systemRecorder: MeetingAudioRecording?
+    private var micRecorder: MeetingAudioRecording?
     private var uploadTask: Task<Void, Never>?
     private let lock = NSLock()
     private var session: TranscriptSession?
@@ -61,6 +66,8 @@ public final class MeetingTranscriptionSession {
     public init(
         store: MeetingTranscriptStore,
         recorder: MeetingAudioRecording?,
+        micRecorder: MeetingAudioRecording? = nil,
+        captureMic: Bool = false,
         chunker: @escaping Chunker,
         transcribe: @escaping Transcribe,
         apiKey: @escaping () -> String?,
@@ -69,12 +76,19 @@ public final class MeetingTranscriptionSession {
     ) {
         self.store = store
         if let recorder = recorder {
-            self.recorderFactory = { recorder }
+            self.systemRecorderFactory = { recorder }
         } else {
-            self.recorderFactory = {
+            self.systemRecorderFactory = {
                 if #available(macOS 13.0, *) { return MeetingAudioCapture() }
                 fatalError("ScreenCaptureKit requires macOS 13+")
             }
+        }
+        if let micRecorder = micRecorder {
+            self.micRecorderFactory = { micRecorder }
+        } else if captureMic {
+            self.micRecorderFactory = { MeetingMicCapture() }
+        } else {
+            self.micRecorderFactory = { nil }
         }
         self.chunker = chunker
         self.transcribe = transcribe
@@ -120,9 +134,21 @@ public final class MeetingTranscriptionSession {
 
         try store.save(initial)
 
-        let recorder = recorderFactory()
-        self.recorder = recorder
-        try await recorder.start(outputURL: store.audioFile(id: id))
+        let system = systemRecorderFactory()
+        self.systemRecorder = system
+        try await system.start(outputURL: store.audioFile(id: id))
+
+        // Mic is best-effort: if it fails (denied/init error) we still want the system-audio
+        // recording to proceed. Log the failure and continue with mic disabled for this session.
+        if let mic = micRecorderFactory() {
+            do {
+                try await mic.start(outputURL: store.micFile(id: id))
+                self.micRecorder = mic
+            } catch {
+                dlog("MeetingMicCapture start failed (continuing without mic): \(error)")
+                self.micRecorder = nil
+            }
+        }
     }
 
     public func stop() async throws {
@@ -136,22 +162,69 @@ public final class MeetingTranscriptionSession {
         lock.unlock()
         try store.save(current)
 
-        guard let recorder = self.recorder else { throw SessionError.notRecording }
-        let audioURL = try await recorder.stop()
-        let captureFailureReason = recorder.lastFailureReason
-        self.recorder = nil
+        guard let system = self.systemRecorder else { throw SessionError.notRecording }
+        let systemURL = try await system.stop()
+        let systemFailureReason = system.lastFailureReason
+        let systemStartedAt = system.audioStartedAt
+        self.systemRecorder = nil
+
+        var micURL: URL? = nil
+        var micFailureReason: String? = nil
+        var micStartedAt: Date? = nil
+        if let mic = self.micRecorder {
+            do {
+                let url = try await mic.stop()
+                micFailureReason = mic.lastFailureReason
+                micStartedAt = mic.audioStartedAt
+                if micFailureReason == nil {
+                    micURL = url
+                }
+            } catch {
+                micFailureReason = "Mic stop failed: \(error)"
+            }
+            self.micRecorder = nil
+        }
 
         let sid = current.id
-        if let reason = captureFailureReason {
+        // Hard-fail only if BOTH streams are unusable. If system captured nothing but mic
+        // worked, proceed with mic-only transcript. Vice versa.
+        if let sysReason = systemFailureReason, micURL == nil {
             updateSession { s in
                 s.status = .failed
-                s.failureReason = reason
+                s.failureReason = "System audio: \(sysReason)" +
+                    (micFailureReason.map { " | Mic: \($0)" } ?? "")
             }
             return
         }
+        if let micReason = micFailureReason {
+            dlog("Mic capture failed (continuing with system audio only): \(micReason)")
+        }
+
+        let usableSystemURL: URL? = (systemFailureReason == nil) ? systemURL : nil
+
+        // Compute per-stream wall-clock offset relative to a shared reference (the earliest
+        // stream that produced its first audible content). Apply it to each segment's
+        // startTime/endTime so segments from both streams share one timeline.
+        let referenceTime: Date = {
+            switch (systemStartedAt, micStartedAt) {
+            case let (s?, m?): return min(s, m)
+            case let (s?, nil): return s
+            case let (nil, m?): return m
+            default: return current.startedAt
+            }
+        }()
+        let systemShift = systemStartedAt.map { $0.timeIntervalSince(referenceTime) } ?? 0
+        let micShift = micStartedAt.map { $0.timeIntervalSince(referenceTime) } ?? 0
+        dlog("Meeting timeline shifts: system=\(systemShift)s mic=\(micShift)s")
 
         uploadTask = Task { [weak self] in
-            await self?.runChunkAndUpload(audioURL: audioURL, sessionID: sid)
+            await self?.runChunkAndUpload(
+                systemURL: usableSystemURL,
+                micURL: micURL,
+                systemShift: systemShift,
+                micShift: micShift,
+                sessionID: sid
+            )
         }
     }
 
@@ -164,72 +237,163 @@ public final class MeetingTranscriptionSession {
         await uploadTask?.value
     }
 
-    private func runChunkAndUpload(audioURL: URL, sessionID: UUID) async {
-        let chunksDir = store.chunksDirectory(id: sessionID)
-        let chunkURLs: [URL]
-        do {
-            chunkURLs = try await chunker(audioURL, chunksDir)
-        } catch let MeetingChunkerError.zeroDurationAsset {
-            updateSession { s in
-                s.status = .failed
-                s.failureReason = "No audio captured. Check that audio was actually playing through the system during the recording, and Screen Recording permission is granted to Vox in System Settings → Privacy & Security."
+    private func runChunkAndUpload(
+        systemURL: URL?, micURL: URL?,
+        systemShift: Double, micShift: Double,
+        sessionID: UUID
+    ) async {
+        // (source, chunks, dir, shift, audibleDurationSec)
+        var streams: [(SegmentSource, [URL], URL, Double, Double)] = []
+
+        if let systemURL = systemURL {
+            let dir = store.chunksDirectory(id: sessionID, source: .remote)
+            let prepped = await prepareForChunking(streamURL: systemURL, baseShift: systemShift)
+            do {
+                let chunks = try await chunker(prepped.url, dir)
+                streams.append((.remote, chunks, dir, prepped.shift, prepped.audibleDuration))
+            } catch let MeetingChunkerError.zeroDurationAsset {
+                dlog("System audio chunking: zero-duration asset")
+            } catch {
+                dlog("System audio chunking failed: \(error)")
             }
-            return
-        } catch {
+        }
+        if let micURL = micURL {
+            let dir = store.chunksDirectory(id: sessionID, source: .local)
+            let prepped = await prepareForChunking(streamURL: micURL, baseShift: micShift)
+            do {
+                let chunks = try await chunker(prepped.url, dir)
+                streams.append((.local, chunks, dir, prepped.shift, prepped.audibleDuration))
+            } catch let MeetingChunkerError.zeroDurationAsset {
+                dlog("Mic chunking: zero-duration asset")
+            } catch {
+                dlog("Mic chunking failed: \(error)")
+            }
+        }
+
+        guard !streams.isEmpty else {
             updateSession { s in
                 s.status = .failed
-                s.failureReason = "Could not split audio: \(error)"
+                s.failureReason = "No audio captured. Check that audio was actually playing through the system during the recording, that the microphone is not muted, and that Screen Recording + Microphone permissions are granted to Vox."
             }
             return
         }
+
+        let totalChunks = streams.reduce(0) { $0 + $1.1.count }
         updateSession { s in
-            s.chunksTotal = chunkURLs.count
+            s.chunksTotal = totalChunks
             s.status = .transcribing
         }
 
         var completed = 0
-        for (i, chunkURL) in chunkURLs.enumerated() {
-            if Task.isCancelled { break }
-            let offset = Double(i) * chunkDuration
-            let segments: [TranscriptSegment]
-            do {
-                segments = try await transcribeWithInfiniteRetry(url: chunkURL, offset: offset)
-            } catch is CancellationError {
-                break
-            } catch {
-                updateSession { s in
-                    s.status = .failed
-                    s.failureReason = "Transcription failed: \(error)"
+        for (source, chunks, _, shift, audibleDuration) in streams {
+            for (i, chunkURL) in chunks.enumerated() {
+                if Task.isCancelled { break }
+                let offset = Double(i) * chunkDuration
+                let segments: [TranscriptSegment]
+                do {
+                    segments = try await transcribeWithInfiniteRetry(
+                        url: chunkURL, offset: offset, source: source
+                    )
+                } catch is CancellationError {
+                    break
+                } catch {
+                    updateSession { s in
+                        s.status = .failed
+                        s.failureReason = "Transcription failed (\(source.rawValue)): \(error)"
+                    }
+                    return
                 }
-                return
+                // Drop Whisper hallucinations whose timestamps fall outside the actual
+                // audible portion of the stream (Whisper sometimes invents segments past
+                // the end of the file or right after a long silence).
+                let hallucinationCap = audibleDuration > 0 ? audibleDuration + 1.5 : .greatestFiniteMagnitude
+                let shifted: [TranscriptSegment] = segments.compactMap { seg in
+                    if seg.startTime > hallucinationCap { return nil }
+                    return TranscriptSegment(
+                        startTime: seg.startTime + shift,
+                        endTime: min(seg.endTime, hallucinationCap) + shift,
+                        text: seg.text,
+                        source: seg.source
+                    )
+                }
+                updateSession { s in
+                    s.segments.append(contentsOf: shifted)
+                    completed += 1
+                    s.chunksCompleted = completed
+                }
             }
-            updateSession { s in
-                s.segments.append(contentsOf: segments)
-                completed += 1
-                s.chunksCompleted = completed
-            }
+            if Task.isCancelled { break }
         }
 
         if Task.isCancelled {
-            updateSession { s in s.status = .cancelled }
+            updateSession { s in
+                s.segments.sort(by: TranscriptSegment.byStartTime)
+                s.status = .cancelled
+            }
             return
         }
 
-        updateSession { s in s.status = .completed }
-        try? FileManager.default.removeItem(at: chunksDir)
+        updateSession { s in
+            s.segments.sort(by: TranscriptSegment.byStartTime)
+            s.status = .completed
+        }
+        for (_, _, dir, _, _) in streams {
+            try? FileManager.default.removeItem(at: dir)
+        }
         if !retainAudioProvider() {
             try? store.purgeAudio(for: sessionID)
         }
     }
 
+    /// Trim leading/trailing silence from a stream before chunking. If detection or trim
+    /// fails (e.g. unit-test fixture file isn't valid audio), fall back to the original URL
+    /// with no shift adjustment. Returns the URL to feed to the chunker, the cumulative
+    /// shift to apply to that stream's segments, and the audible duration (used to cap
+    /// Whisper hallucination segments).
+    private func prepareForChunking(
+        streamURL: URL, baseShift: Double
+    ) async -> (url: URL, shift: Double, audibleDuration: Double) {
+        let bounds: AudibleBounds
+        do {
+            bounds = try SilenceTrim.detectBounds(url: streamURL)
+        } catch {
+            dlog("SilenceTrim.detectBounds failed (\(streamURL.lastPathComponent)): \(error) — using original")
+            return (streamURL, baseShift, 0)
+        }
+        guard bounds.hasAudibleContent else {
+            dlog("SilenceTrim: no audible content in \(streamURL.lastPathComponent) (total=\(bounds.totalDurationSec)s)")
+            return (streamURL, baseShift, 0)
+        }
+        // Skip the trim step entirely if leading silence is short — re-encoding for
+        // <0.5s saves no useful API cost.
+        let padding = 0.25
+        let trimmedDuration = (bounds.lastAudibleSec + padding) - max(0, bounds.firstAudibleSec - padding)
+        if bounds.firstAudibleSec < 0.5 && bounds.totalDurationSec - bounds.lastAudibleSec < 0.5 {
+            dlog("SilenceTrim: \(streamURL.lastPathComponent) firstAudible=\(bounds.firstAudibleSec)s lastAudible=\(bounds.lastAudibleSec)s — skipping trim")
+            return (streamURL, baseShift, trimmedDuration)
+        }
+        let trimmedURL = streamURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(streamURL.deletingPathExtension().lastPathComponent + "-trimmed.m4a")
+        do {
+            try await SilenceTrim.trim(input: streamURL, output: trimmedURL, bounds: bounds, padding: padding)
+        } catch {
+            dlog("SilenceTrim.trim failed (\(streamURL.lastPathComponent)): \(error) — using original")
+            return (streamURL, baseShift, trimmedDuration)
+        }
+        let leadingTrim = max(0, bounds.firstAudibleSec - padding)
+        dlog("SilenceTrim: \(streamURL.lastPathComponent) trimmed leading=\(leadingTrim)s audible=\(trimmedDuration)s")
+        return (trimmedURL, baseShift + leadingTrim, trimmedDuration)
+    }
+
     private func transcribeWithInfiniteRetry(
-        url: URL, offset: Double
+        url: URL, offset: Double, source: SegmentSource
     ) async throws -> [TranscriptSegment] {
         var attempt = 0
         while true {
             try Task.checkCancellation()
             do {
-                return try await transcribe(url, offset)
+                return try await transcribe(url, offset, source)
             } catch let TranscriptionError.transportError(_) {
                 let delay = backoffSchedule[min(attempt, backoffSchedule.count - 1)]
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -254,4 +418,14 @@ public final class MeetingTranscriptionSession {
         f.dateFormat = "yyyy-MM-dd HH:mm"
         return f
     }()
+}
+
+private extension TranscriptSegment {
+    /// Stable interleaving order: by startTime ascending; ties broken so local appears
+    /// before remote (the user's own utterance usually triggers the response).
+    static func byStartTime(_ a: TranscriptSegment, _ b: TranscriptSegment) -> Bool {
+        if a.startTime != b.startTime { return a.startTime < b.startTime }
+        if a.source != b.source { return a.source == .local }
+        return a.endTime < b.endTime
+    }
 }

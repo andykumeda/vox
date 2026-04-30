@@ -48,7 +48,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in chunkURLs },
-            transcribe: { url, offset in
+            transcribe: { url, offset, _ in
                 let i = chunkURLs.firstIndex(of: url)!
                 return [TranscriptSegment(
                     startTime: offset, endTime: offset + 1.0,
@@ -79,7 +79,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in [chunkURL] },
-            transcribe: { _, offset in
+            transcribe: { _, offset, _ in
                 let n = await attemptsBox.increment()
                 if n < 3 {
                     throw TranscriptionError.transportError(URLError(.timedOut))
@@ -108,7 +108,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in urls },
-            transcribe: { _, offset in
+            transcribe: { _, offset, _ in
                 let n = await countBox.increment()
                 if n == 2 {
                     await cancelAfter.signal()
@@ -141,7 +141,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in [url] },
-            transcribe: { _, _ in
+            transcribe: { _, _, _ in
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
             },
             apiKey: { "sk-test" },
@@ -164,7 +164,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in [url] },
-            transcribe: { _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
+            transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
             retainAudio: { false }
         )
@@ -189,7 +189,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in [url] },
-            transcribe: { _, _ in
+            transcribe: { _, _, _ in
                 if failOnce {
                     failOnce = false
                     throw TranscriptionError.invalidResponse
@@ -214,7 +214,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in [] },
-            transcribe: { _, _ in [] },
+            transcribe: { _, _, _ in [] },
             apiKey: { "sk-test" },
             retainAudio: { false }
         )
@@ -235,7 +235,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             store: store,
             recorder: recorder,
             chunker: { _, _ in [url] },
-            transcribe: { _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
+            transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
             retainAudio: { true }
         )
@@ -244,6 +244,90 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         try await session.stop()
         await session.waitForCompletion()
         XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioFile(id: id).path))
+    }
+
+    func testInterleavesSystemAndMicSegmentsByStartTime() async throws {
+        let systemRecorder = MockRecorder()
+        let micRecorder = MockRecorder()
+        let systemChunk = tempRoot.appendingPathComponent("sys.m4a")
+        let micChunk = tempRoot.appendingPathComponent("mic.m4a")
+        try Data([0]).write(to: systemChunk)
+        try Data([0]).write(to: micChunk)
+
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: systemRecorder,
+            micRecorder: micRecorder,
+            chunker: { input, _ in
+                if input.lastPathComponent.contains("audio.m4a") { return [systemChunk] }
+                if input.lastPathComponent.contains("mic.m4a") { return [micChunk] }
+                return []
+            },
+            transcribe: { url, _, source in
+                if url == systemChunk {
+                    return [
+                        TranscriptSegment(startTime: 1.0, endTime: 2.0, text: "remote first", source: source),
+                        TranscriptSegment(startTime: 5.0, endTime: 6.0, text: "remote later", source: source),
+                    ]
+                }
+                if url == micChunk {
+                    return [
+                        TranscriptSegment(startTime: 3.0, endTime: 4.0, text: "local middle", source: source),
+                    ]
+                }
+                return []
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let id = session.activeSessionID!
+        let stored = try XCTUnwrap(store.load(id: id))
+        XCTAssertEqual(stored.segments.count, 3)
+        XCTAssertEqual(stored.segments.map(\.text), ["remote first", "local middle", "remote later"])
+        XCTAssertEqual(stored.segments.map(\.source), [.remote, .local, .remote])
+    }
+
+    func testMicFailureFallsBackToSystemOnly() async throws {
+        let systemRecorder = MockRecorder()
+        let micRecorder = FailingMicRecorder()
+        let systemChunk = tempRoot.appendingPathComponent("sys.m4a")
+        try Data([0]).write(to: systemChunk)
+
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: systemRecorder,
+            micRecorder: micRecorder,
+            chunker: { _, _ in [systemChunk] },
+            transcribe: { _, _, source in
+                [TranscriptSegment(startTime: 0, endTime: 1, text: "ok", source: source)]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let id = session.activeSessionID!
+        let stored = try XCTUnwrap(store.load(id: id))
+        XCTAssertEqual(stored.segments.count, 1)
+        XCTAssertEqual(stored.segments[0].source, .remote)
+    }
+
+    final class FailingMicRecorder: MeetingAudioRecording {
+        func start(outputURL: URL) async throws {
+            throw MeetingMicCaptureError.permissionDenied
+        }
+        func stop() async throws -> URL {
+            throw MeetingMicCaptureError.notRecording
+        }
     }
 }
 

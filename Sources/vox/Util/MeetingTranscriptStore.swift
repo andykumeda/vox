@@ -1,14 +1,36 @@
 import Foundation
 
+public enum SegmentSource: String, Codable, Sendable {
+    /// Captured via SCStream (system audio mix — remote participants in a meeting).
+    case remote
+    /// Captured via the local microphone (the user's own voice).
+    case local
+}
+
 public struct TranscriptSegment: Codable, Equatable, Sendable {
     public let startTime: Double
     public let endTime: Double
     public let text: String
+    public let source: SegmentSource
 
-    public init(startTime: Double, endTime: Double, text: String) {
+    public init(startTime: Double, endTime: Double, text: String, source: SegmentSource = .remote) {
         self.startTime = startTime
         self.endTime = endTime
         self.text = text
+        self.source = source
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case startTime, endTime, text, source
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.startTime = try c.decode(Double.self, forKey: .startTime)
+        self.endTime = try c.decode(Double.self, forKey: .endTime)
+        self.text = try c.decode(String.self, forKey: .text)
+        // Pre-multi-source persisted segments have no `source`; treat as remote (system audio).
+        self.source = try c.decodeIfPresent(SegmentSource.self, forKey: .source) ?? .remote
     }
 }
 
@@ -92,8 +114,19 @@ public final class MeetingTranscriptStore {
         sessionDirectory(id: id).appendingPathComponent("audio.m4a")
     }
 
+    /// Local mic recording captured in parallel with system audio.
+    public func micFile(id: UUID) -> URL {
+        sessionDirectory(id: id).appendingPathComponent("mic.m4a")
+    }
+
     public func chunksDirectory(id: UUID) -> URL {
         sessionDirectory(id: id).appendingPathComponent("chunks", isDirectory: true)
+    }
+
+    /// Per-source chunk directory keeps system and mic chunk ordering independent.
+    public func chunksDirectory(id: UUID, source: SegmentSource) -> URL {
+        let name = source == .local ? "chunks-mic" : "chunks-system"
+        return sessionDirectory(id: id).appendingPathComponent(name, isDirectory: true)
     }
 
     private func transcriptFile(id: UUID) -> URL {
@@ -130,9 +163,10 @@ public final class MeetingTranscriptStore {
     }
 
     public func purgeAudio(for id: UUID) throws {
-        let url = audioFile(id: id)
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
+        for url in [audioFile(id: id), micFile(id: id)] {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
         }
         if var session = load(id: id) {
             session.audioRetained = false

@@ -100,6 +100,7 @@ public struct OpenAITranscriber {
         fileURL: URL,
         offsetSeconds: Double,
         apiKey: String,
+        source: SegmentSource = .remote,
         endpoint: URL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
         urlSession: URLSession = .shared
     ) async throws -> [TranscriptSegment] {
@@ -145,7 +146,8 @@ public struct OpenAITranscriber {
             TranscriptSegment(
                 startTime: seg.start + offsetSeconds,
                 endTime: seg.end + offsetSeconds,
-                text: seg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                text: seg.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                source: source
             )
         }
     }
@@ -161,6 +163,11 @@ public struct OpenAITranscriber {
         field("model", "whisper-1")
         field("response_format", "verbose_json")
         field("timestamp_granularities[]", "segment")
+        // Pin language + temperature=0 so silence/noise chunks don't get transcribed as
+        // random Japanese (or other) text. Whisper's silence-hallucination behavior is
+        // strongly correlated with language=auto + non-zero temperature.
+        field("language", "en")
+        field("temperature", "0")
 
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append(
