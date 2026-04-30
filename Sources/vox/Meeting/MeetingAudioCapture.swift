@@ -39,13 +39,15 @@ public enum MeetingAudioCaptureError: Error, CustomStringConvertible {
 }
 
 @available(macOS 13.0, *)
-public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStreamOutput {
+public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
     private var writer: AVAssetWriter?
     private var writerInput: AVAssetWriterInput?
     private var outputURL: URL?
     private let queue = DispatchQueue(label: "vox.meeting.capture", qos: .userInitiated)
     private var sessionStarted = false
+    private var sampleBufferCount = 0
+    private(set) public var lastFailureReason: String?
 
     public override init() { super.init() }
 
@@ -85,10 +87,18 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         )
 
         let config = SCStreamConfiguration()
+        // SCStream requires non-zero video dimensions even for audio-only capture
+        // (otherwise stream silently emits no buffers). 2x2 keeps overhead negligible.
+        config.width = 2
+        config.height = 2
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)  // 1 fps video — discarded
         config.capturesAudio = true
         config.sampleRate = 16000
         config.channelCount = 1
         config.excludesCurrentProcessAudio = true
+        sampleBufferCount = 0
+        lastFailureReason = nil
+        NSLog("[vox] MeetingAudioCapture starting → \(outputURL.path)")
 
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
         let settings: [String: Any] = [
@@ -103,14 +113,18 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         self.writer = writer
         self.writerInput = input
 
-        let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+        let stream = SCStream(filter: filter, configuration: config, delegate: self)
         do {
             try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
+            // We discard video; still need a registered output or the stream rejects start.
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
             try await stream.startCapture()
         } catch {
+            NSLog("[vox] MeetingAudioCapture stream.startCapture failed: \(error)")
             throw MeetingAudioCaptureError.streamStartFailed(error)
         }
         self.stream = stream
+        NSLog("[vox] MeetingAudioCapture stream started")
     }
 
     public func stop() async throws -> URL {
@@ -121,6 +135,16 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         try? await stream.stopCapture()
         input.markAsFinished()
         await writer.finishWriting()
+        if writer.status != .completed {
+            let reason = "writer status=\(writer.status.rawValue) error=\(writer.error?.localizedDescription ?? "nil") sampleBuffers=\(sampleBufferCount)"
+            NSLog("[vox] MeetingAudioCapture finishWriting failed: \(reason)")
+            lastFailureReason = reason
+        } else {
+            NSLog("[vox] MeetingAudioCapture finishWriting ok sampleBuffers=\(sampleBufferCount)")
+        }
+        if sampleBufferCount == 0 {
+            lastFailureReason = "No system audio captured (\(sampleBufferCount) sample buffers received). Check that audio was actually playing during recording and Screen Recording permission is granted."
+        }
         let url = outputURL
         self.stream = nil
         self.writer = nil
@@ -128,6 +152,13 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         self.outputURL = nil
         self.sessionStarted = false
         return url
+    }
+
+    // MARK: - SCStreamDelegate
+
+    public func stream(_ stream: SCStream, didStopWithError error: Error) {
+        NSLog("[vox] MeetingAudioCapture SCStream didStopWithError: \(error)")
+        lastFailureReason = "SCStream stopped: \(error.localizedDescription)"
     }
 
     // MARK: - SCStreamOutput
@@ -142,11 +173,17 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
               let input = writerInput,
               CMSampleBufferIsValid(sampleBuffer),
               CMSampleBufferDataIsReady(sampleBuffer) else { return }
+        sampleBufferCount += 1
         if !sessionStarted {
             let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            writer.startWriting()
+            let started = writer.startWriting()
+            if !started {
+                NSLog("[vox] MeetingAudioCapture writer.startWriting returned false: \(writer.error?.localizedDescription ?? "nil")")
+                return
+            }
             writer.startSession(atSourceTime: startTime)
             sessionStarted = true
+            NSLog("[vox] MeetingAudioCapture session started at PTS \(startTime.seconds)")
         }
         if input.isReadyForMoreMediaData {
             input.append(sampleBuffer)

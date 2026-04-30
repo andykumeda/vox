@@ -26,6 +26,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
     public var chunksCompleted: Int
     public var segments: [TranscriptSegment]
     public var audioRetained: Bool
+    public var failureReason: String?
 
     public init(
         id: UUID,
@@ -36,7 +37,8 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
         chunksTotal: Int,
         chunksCompleted: Int,
         segments: [TranscriptSegment],
-        audioRetained: Bool
+        audioRetained: Bool,
+        failureReason: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -47,6 +49,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
         self.chunksCompleted = chunksCompleted
         self.segments = segments
         self.audioRetained = audioRetained
+        self.failureReason = failureReason
     }
 }
 

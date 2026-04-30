@@ -151,6 +151,16 @@ private struct MeetingTranscriptsView: View {
                     Button("Delete") { model.delete(s.id) }
                 }.padding()
                 Divider()
+                if s.status == .failed, let reason = s.failureReason {
+                    HStack(alignment: .top) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(reason)
+                            .textSelection(.enabled)
+                            .font(.callout)
+                    }.padding()
+                    Divider()
+                }
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(s.segments.enumerated()), id: \.offset) { _, seg in

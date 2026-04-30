@@ -153,8 +153,17 @@ public final class MeetingTranscriptionSession {
         let chunkURLs: [URL]
         do {
             chunkURLs = try await chunker(audioURL, chunksDir)
+        } catch let MeetingChunkerError.zeroDurationAsset {
+            updateSession { s in
+                s.status = .failed
+                s.failureReason = "No audio captured. Check that audio was actually playing through the system during the recording, and Screen Recording permission is granted to Vox in System Settings → Privacy & Security."
+            }
+            return
         } catch {
-            updateSession { s in s.status = .failed }
+            updateSession { s in
+                s.status = .failed
+                s.failureReason = "Could not split audio: \(error)"
+            }
             return
         }
         updateSession { s in
@@ -172,7 +181,10 @@ public final class MeetingTranscriptionSession {
             } catch is CancellationError {
                 break
             } catch {
-                updateSession { s in s.status = .failed }
+                updateSession { s in
+                    s.status = .failed
+                    s.failureReason = "Transcription failed: \(error)"
+                }
                 return
             }
             updateSession { s in
