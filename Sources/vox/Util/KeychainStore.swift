@@ -34,9 +34,11 @@ public struct KeychainStore: Sendable {
 
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         guard addStatus == errSecSuccess else { throw KeychainError.unexpectedStatus(addStatus) }
+        Self.cache[cacheKey] = value
     }
 
     public func read() -> String? {
+        if let cached = Self.cache[cacheKey] { return cached }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -46,9 +48,17 @@ public struct KeychainStore: Sendable {
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        guard status == errSecSuccess, let data = result as? Data,
+              let value = String(data: data, encoding: .utf8) else { return nil }
+        Self.cache[cacheKey] = value
+        return value
     }
+
+    /// Process-lifetime cache so we don't trigger a Keychain ACL prompt on every
+    /// dictation/meeting transcribe call (transcriber + cleaner each call read()).
+    /// Invalidated by `save()` and `delete()`.
+    nonisolated(unsafe) private static var cache: [String: String] = [:]
+    private var cacheKey: String { "\(service)|\(account)" }
 
     public func delete() throws {
         let query: [String: Any] = [
@@ -60,5 +70,6 @@ public struct KeychainStore: Sendable {
         if status != errSecSuccess && status != errSecItemNotFound {
             throw KeychainError.unexpectedStatus(status)
         }
+        Self.cache.removeValue(forKey: cacheKey)
     }
 }

@@ -309,6 +309,10 @@ public final class MeetingTranscriptionSession {
                 let hallucinationCap = audibleDuration > 0 ? audibleDuration + 1.5 : .greatestFiniteMagnitude
                 let shifted: [TranscriptSegment] = segments.compactMap { seg in
                     if seg.startTime > hallucinationCap { return nil }
+                    if isHallucinated(seg) {
+                        dlog("Meeting hallucination dropped [\(source.rawValue)] \(seg.startTime)-\(seg.endTime)s: \(seg.text.prefix(80))")
+                        return nil
+                    }
                     return TranscriptSegment(
                         startTime: seg.startTime + shift,
                         endTime: min(seg.endTime, hallucinationCap) + shift,
@@ -343,6 +347,36 @@ public final class MeetingTranscriptionSession {
         if !retainAudioProvider() {
             try? store.purgeAudio(for: sessionID)
         }
+    }
+
+    /// Detect Whisper hallucination patterns on near-silent audio: long monotonous
+    /// repetitions ("yeah, yeah, yeah, ..." for 30+ seconds), single-word loops, and
+    /// very low unique-word ratios over multi-second windows. Returns true if the
+    /// segment should be dropped.
+    private func isHallucinated(_ seg: TranscriptSegment) -> Bool {
+        let normalized = seg.text
+            .lowercased()
+            .replacingOccurrences(of: ",", with: " ")
+            .replacingOccurrences(of: ".", with: " ")
+            .replacingOccurrences(of: "!", with: " ")
+            .replacingOccurrences(of: "?", with: " ")
+        let words = normalized.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        let total = words.count
+        let duration = seg.endTime - seg.startTime
+        guard total >= 6 else { return false }
+
+        let uniqueRatio = Double(Set(words).count) / Double(total)
+        if uniqueRatio < 0.20 && duration > 3 { return true }
+
+        // Same word repeating in a long run (e.g. "yeah, yeah, yeah, ..." × 30+).
+        if let head = words.first {
+            var run = 1
+            for w in words.dropFirst() {
+                if w == head { run += 1 } else { break }
+            }
+            if run >= 8 { return true }
+        }
+        return false
     }
 
     /// Trim leading/trailing silence from a stream before chunking. If detection or trim
