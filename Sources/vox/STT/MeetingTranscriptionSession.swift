@@ -131,9 +131,18 @@ public final class MeetingTranscriptionSession {
 
         guard let recorder = self.recorder else { throw SessionError.notRecording }
         let audioURL = try await recorder.stop()
+        let captureFailureReason = recorder.lastFailureReason
         self.recorder = nil
 
         let sid = current.id
+        if let reason = captureFailureReason {
+            updateSession { s in
+                s.status = .failed
+                s.failureReason = reason
+            }
+            return
+        }
+
         uploadTask = Task { [weak self] in
             await self?.runChunkAndUpload(audioURL: audioURL, sessionID: sid)
         }

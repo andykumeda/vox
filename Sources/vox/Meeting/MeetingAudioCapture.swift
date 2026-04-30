@@ -13,6 +13,15 @@ public protocol MeetingAudioRecording: AnyObject {
     /// Stops the in-flight recording, flushes the writer, and returns the file URL.
     /// Throws if recording was never started.
     func stop() async throws -> URL
+
+    /// Set when capture finished but produced no usable audio (no sample buffers, writer
+    /// failure, etc). Read by MeetingTranscriptionSession after stop to surface a clean
+    /// failure rather than handing an empty file to the chunker.
+    var lastFailureReason: String? { get }
+}
+
+public extension MeetingAudioRecording {
+    var lastFailureReason: String? { nil }
 }
 
 public enum MeetingAudioCaptureError: Error, CustomStringConvertible {
