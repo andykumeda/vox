@@ -102,25 +102,17 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         config.height = 2
         config.minimumFrameInterval = CMTime(value: 1, timescale: 1)  // 1 fps video — discarded
         config.capturesAudio = true
-        config.sampleRate = 16000
-        config.channelCount = 1
+        // Do NOT override sampleRate/channelCount — let SCStream emit its native PCM
+        // (typically Float32 stereo 48kHz). The AAC encoder handles whatever the source
+        // format is once we hand it a sourceFormatHint from the first buffer.
         config.excludesCurrentProcessAudio = true
         sampleBufferCount = 0
         lastFailureReason = nil
         NSLog("[vox] MeetingAudioCapture starting → \(outputURL.path)")
 
-        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 16000,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 64000,
-        ]
-        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
-        input.expectsMediaDataInRealTime = true
-        writer.add(input)
-        self.writer = writer
-        self.writerInput = input
+        // Writer is created lazily on the first audio sample buffer so we can pass the
+        // source format description as sourceFormatHint to the AAC encoder. Without that
+        // hint the encoder rejects the SCStream PCM input with "Cannot Encode Media".
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         do {
@@ -137,19 +129,20 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
     }
 
     public func stop() async throws -> URL {
-        guard let stream = stream, let writer = writer,
-              let input = writerInput, let outputURL = outputURL else {
+        guard let stream = stream, let outputURL = outputURL else {
             throw MeetingAudioCaptureError.notRecording
         }
         try? await stream.stopCapture()
-        input.markAsFinished()
-        await writer.finishWriting()
-        if writer.status != .completed {
-            let reason = "writer status=\(writer.status.rawValue) error=\(writer.error?.localizedDescription ?? "nil") sampleBuffers=\(sampleBufferCount)"
-            NSLog("[vox] MeetingAudioCapture finishWriting failed: \(reason)")
-            lastFailureReason = reason
-        } else {
-            NSLog("[vox] MeetingAudioCapture finishWriting ok sampleBuffers=\(sampleBufferCount)")
+        if let input = writerInput, let writer = writer {
+            input.markAsFinished()
+            await writer.finishWriting()
+            if writer.status != .completed {
+                let reason = "writer status=\(writer.status.rawValue) error=\(writer.error?.localizedDescription ?? "nil") sampleBuffers=\(sampleBufferCount)"
+                NSLog("[vox] MeetingAudioCapture finishWriting failed: \(reason)")
+                lastFailureReason = reason
+            } else {
+                NSLog("[vox] MeetingAudioCapture finishWriting ok sampleBuffers=\(sampleBufferCount)")
+            }
         }
         if sampleBufferCount == 0 {
             lastFailureReason = "No system audio captured (\(sampleBufferCount) sample buffers received). Check that audio was actually playing during recording and Screen Recording permission is granted."
@@ -178,11 +171,47 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         of type: SCStreamOutputType
     ) {
         guard type == .audio,
-              let writer = writer,
-              let input = writerInput,
               CMSampleBufferIsValid(sampleBuffer),
               CMSampleBufferDataIsReady(sampleBuffer) else { return }
         sampleBufferCount += 1
+
+        // Lazy writer init using the first buffer's format description so the encoder
+        // sees a matching sourceFormatHint.
+        if writer == nil {
+            guard let outputURL = outputURL,
+                  let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+                return
+            }
+            let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)?.pointee
+            let sampleRate = asbd?.mSampleRate ?? 48000
+            let channels = Int(asbd?.mChannelsPerFrame ?? 2)
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: sampleRate,
+                AVNumberOfChannelsKey: channels,
+                AVEncoderBitRateKey: 64000 * channels,
+            ]
+            do {
+                let w = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
+                let input = AVAssetWriterInput(
+                    mediaType: .audio,
+                    outputSettings: settings,
+                    sourceFormatHint: formatDesc
+                )
+                input.expectsMediaDataInRealTime = true
+                w.add(input)
+                self.writer = w
+                self.writerInput = input
+                NSLog("[vox] MeetingAudioCapture writer created sampleRate=\(sampleRate) channels=\(channels)")
+            } catch {
+                lastFailureReason = "Could not create writer: \(error.localizedDescription)"
+                NSLog("[vox] MeetingAudioCapture writer init failed: \(error)")
+                return
+            }
+        }
+
+        guard let writer = writer, let input = writerInput else { return }
+
         if !sessionStarted {
             let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let started = writer.startWriting()
