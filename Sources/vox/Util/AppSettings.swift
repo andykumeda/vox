@@ -35,6 +35,22 @@ enum MeetingCaptureBackend: String, CaseIterable, Sendable {
     }
 }
 
+public enum DictationHistoryRetention: String, CaseIterable, Sendable {
+    case forever
+    case year
+    case ninetyDays
+    case thirtyDays
+
+    public var displayName: String {
+        switch self {
+        case .forever:    return "Forever"
+        case .year:       return "1 year"
+        case .ninetyDays: return "90 days"
+        case .thirtyDays: return "30 days"
+        }
+    }
+}
+
 public enum ModeOverride: String, CaseIterable, Sendable {
     case auto      // ContextDetector decides (terminal apps → command, others → prose)
     case prose     // always prose
@@ -130,6 +146,16 @@ enum AppSettings {
     static var meetingRetainAudio: Bool {
         get { UserDefaults.standard.bool(forKey: meetingRetainAudioKey) }
         set { UserDefaults.standard.set(newValue, forKey: meetingRetainAudioKey) }
+    }
+
+    private static let dictationHistoryRetentionKey = "dictationHistoryRetention"
+
+    static var dictationHistoryRetention: DictationHistoryRetention {
+        get {
+            let raw = UserDefaults.standard.string(forKey: dictationHistoryRetentionKey)
+            return raw.flatMap(DictationHistoryRetention.init(rawValue:)) ?? .forever
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: dictationHistoryRetentionKey) }
     }
 
     private static let recordHotkeyKey = "recordHotkey"
