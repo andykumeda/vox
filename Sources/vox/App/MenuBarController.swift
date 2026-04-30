@@ -2,6 +2,16 @@ import AppKit
 import ApplicationServices
 import Sparkle
 
+/// Mutex hook: returns true when something else (currently only meeting recording)
+/// has taken over the audio path and dictation hotkey must be ignored.
+/// Production resolves to `MeetingTranscriptionSession.shared.isRecording`.
+/// Tests swap this for a stub.
+public enum DictationMutex {
+    public static var isBlocked: () -> Bool = {
+        MeetingTranscriptionSession.shared.isRecording
+    }
+}
+
 private let logURL: URL = {
     let fm = FileManager.default
     let logs = fm.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs")
@@ -320,6 +330,10 @@ final class MenuBarController: NSObject {
 
     private func beginRecording() {
         guard state == .idle else { return }
+        if DictationMutex.isBlocked() {
+            dlog("dictation Fn ignored — meeting recording active")
+            return
+        }
         switch AppSettings.modeOverride {
         case .auto:    currentMode = contextDetector.modeForFrontmost()
         case .prose:   currentMode = .prose
