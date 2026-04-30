@@ -61,7 +61,10 @@ public struct OpenAITranscriber {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func sendWithRetry(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    static func sendWithRetry(
+        _ request: URLRequest,
+        session: URLSession = .shared
+    ) async throws -> (Data, URLResponse) {
         let retriable: Set<URLError.Code> = [
             .timedOut, .networkConnectionLost, .dnsLookupFailed,
             .notConnectedToInternet, .cannotConnectToHost
@@ -69,7 +72,7 @@ public struct OpenAITranscriber {
         var lastError: Error?
         for attempt in 0..<2 {
             do {
-                return try await URLSession.shared.data(for: request)
+                return try await session.data(for: request)
             } catch let urlError as URLError where retriable.contains(urlError.code) {
                 lastError = urlError
                 if attempt == 0 { try? await Task.sleep(nanoseconds: 500_000_000) }
@@ -78,6 +81,97 @@ public struct OpenAITranscriber {
             }
         }
         throw lastError ?? URLError(.timedOut)
+    }
+
+    private struct WhisperVerboseResponse: Decodable {
+        struct Segment: Decodable {
+            let start: Double
+            let end: Double
+            let text: String
+        }
+        let segments: [Segment]
+    }
+
+    /// Transcribe one meeting audio chunk via Whisper `verbose_json` and stitch each
+    /// segment's start/end onto an absolute meeting timeline using `offsetSeconds`.
+    /// Caller (`MeetingTranscriptionSession`) is responsible for the outer infinite-retry
+    /// loop on transport errors.
+    public static func transcribeMeetingChunk(
+        fileURL: URL,
+        offsetSeconds: Double,
+        apiKey: String,
+        endpoint: URL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
+        urlSession: URLSession = .shared
+    ) async throws -> [TranscriptSegment] {
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw TranscriptionError.missingAPIKey }
+
+        let audioData = try Data(contentsOf: fileURL)
+        let boundary = "vox-\(UUID().uuidString)"
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = buildMeetingBody(
+            boundary: boundary,
+            audio: audioData,
+            filename: fileURL.lastPathComponent
+        )
+        request.timeoutInterval = 120.0
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await sendWithRetry(request, session: urlSession)
+        } catch {
+            throw TranscriptionError.transportError(error)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw TranscriptionError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw TranscriptionError.httpError(http.statusCode, body)
+        }
+
+        let decoded: WhisperVerboseResponse
+        do {
+            decoded = try JSONDecoder().decode(WhisperVerboseResponse.self, from: data)
+        } catch {
+            throw TranscriptionError.invalidResponse
+        }
+
+        return decoded.segments.map { seg in
+            TranscriptSegment(
+                startTime: seg.start + offsetSeconds,
+                endTime: seg.end + offsetSeconds,
+                text: seg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+    }
+
+    private static func buildMeetingBody(boundary: String, audio: Data, filename: String) -> Data {
+        var body = Data()
+        func field(_ name: String, _ value: String) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append(value.data(using: .utf8)!)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        field("model", "whisper-1")
+        field("response_format", "verbose_json")
+        field("timestamp_granularities[]", "segment")
+
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append(
+            "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
+                .data(using: .utf8)!
+        )
+        body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
+        body.append(audio)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        return body
     }
 
     private func buildBody(boundary: String, wav: Data, mode: TranscriptionMode, model: String) -> Data {
