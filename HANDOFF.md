@@ -1,4 +1,40 @@
-# Handoff — Vox state as of 2026-04-29 (PM)
+# Handoff — Vox state as of 2026-04-29 (Evening)
+
+## Session 2026-04-29 Evening — M2 polish + bug hunt (paused mid-debug)
+
+**Status:** M2 fully shipped (commits up through `9db3111`, all on `origin/main`). Then a series of fixes for issues surfaced by the first manual smoke. Last attempted recording showed two stuck states. **Next session must finish the debug loop before declaring M2 production-ready.**
+
+**Polish landed and pushed in this session:**
+- `361ba20` — menu rebuilds when Meeting Mode toggle flips (was static after launch).
+- `dc91e89` — SCStream needs non-zero `width`/`height` even for audio-only; added delegate logging + `TranscriptSession.failureReason` field surfaced in detail pane.
+- `6e4f0a7` — Meeting toggle hotkey, default `Cmd+Shift+M` (tap-toggle), wired through `HotkeyMonitor` like `modeToggle`. Editable in Settings → Hotkeys.
+- `7da4112` — Floating HUD panel near menu bar during recording (red dot, `mm:ss` elapsed, stop button). NSPanel `.borderless`, `.nonactivatingPanel`, level=`.statusBar`. Self-dismisses when session goes inactive via 0.5s polling timer.
+- `9db3111` — Auto-prompt Screen Recording permission on first Meeting Mode toggle (`CGRequestScreenCaptureAccess()`). Added "Open Screen Recording Settings" button to existing Permissions section.
+- `bd9c007` — Surface zero-sample-buffer capture failure cleanly (was crashing chunker with `Cannot Open / media may be damaged`).
+- `0cd597d` — Lazy AVAssetWriter init from first sample buffer's CMFormatDescription. SCStream emits Float32 PCM in its own native rate/layout (typically 48kHz stereo); the prior 16kHz mono AAC settings caused `Cannot Encode Media` (writer status=3) once 984 buffers had streamed in.
+
+**Still broken — pick up here next session:**
+
+1. **Singleton not clearing on terminal status** (just observed). After a session completes/fails/cancels, `MeetingTranscriptionSession.shared.session` is never reset to nil, so the next `start()` throws `SessionError.alreadyActive` ("A meeting session is already active.").
+   - Fix in `Sources/vox/STT/MeetingTranscriptionSession.swift`: in `runChunkAndUpload`, after the final `updateSession` that flips status to `.completed`/`.cancelled`/`.failed`, also clear the singleton's `session` var. Also clear in the early-return paths in `stop()` (capture failure / chunking failure).
+   - Or: simpler — check `session?.status` in `start()`. If terminal (`.completed`/`.cancelled`/`.failed`), clear and proceed. If active (`.recording`/`.chunking`/`.transcribing`), throw alreadyActive.
+   - Tests: `MeetingTranscriptionSessionTests` need a new case `testCanStartSecondSessionAfterFirstCompletes` to lock this in.
+
+2. **Probably still need to verify the lazy-writer fix actually produced a playable .m4a.** Today's last test never got past the "alreadyActive" guard, so we don't know if `0cd597d` actually solves the `Cannot Encode Media` case end-to-end. Re-run after the singleton fix, with audio playing through speakers.
+
+3. **`/usr/bin/log show` for vox doesn't show our `NSLog("[vox] MeetingAudioCapture …")` lines** unless `--info` is passed. Consider switching MeetingAudioCapture to write through the same `dlog` helper that `MenuBarController` uses (writes to `~/Library/Logs/vox.log`). Currently `dlog` is private to `MenuBarController.swift` — promote to file-scope or move to a shared `Sources/vox/Util/Log.swift`.
+
+4. **`_LSOpenURLsWithCompletionHandler() failed with error -600`** — user saw this in the terminal during today's testing but did not nail down which click triggered it. Probably stale Vox process during `open dist/Vox.app`. Diagnose on next launch loop if it recurs.
+
+**Test suite at end of session:** 239/239 passing. Dictation regression baseline: failure_rate=0.0, quality_score=1.0, latency≈4.5ms (within noise).
+
+**Branch state:** `main` clean, in sync with `origin/main` (last push includes the lazy-writer fix). `tools/` (stt-bench) still untracked.
+
+**Spec + plan docs (unchanged today):**
+- `docs/superpowers/specs/2026-04-29-meeting-transcription-m2-design.md`
+- `docs/superpowers/plans/2026-04-29-meeting-transcription-m2-implementation.md`
+
+---
 
 ## Session 2026-04-29 PM — Meeting Transcription M2 pipeline shipped
 
