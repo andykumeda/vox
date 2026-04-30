@@ -6,6 +6,26 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.5.1</title>
+            <pubDate>Thu, 30 Apr 2026 22:00:00 +0000</pubDate>
+            <sparkle:version>9</sparkle:version>
+            <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>New icon:</strong> chrome V on a squircle. Replaces the previous bubble glyph.</li>
+                    <li><strong>Per-mode menu bar icon:</strong> cyan/teal in prose mode, amber/gold in command/terminal mode. Updates immediately when you switch frontmost app.</li>
+                    <li><strong>Recording / transcribing</strong> still signaled by a small colored dot badge over the V (red / orange).</li>
+                    <li><strong>Fix:</strong> mode toggle hotkey now flips directly between prose and command on a single press (skips .auto so the change is always visible).</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.5.1/Vox.dmg"
+                sparkle:edSignature="9FxKEGXFFnIFYoSaPoJUS9qXBcqJ4Lp6qAPpkqFNBHtmVDqxmJ6haLkdinY+yDPwSw9GzYXOKlaeyqAjpnMJDw=="
+                length="2361350"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.5.0</title>
             <pubDate>Thu, 30 Apr 2026 21:05:00 +0000</pubDate>
             <sparkle:version>8</sparkle:version>
