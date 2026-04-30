@@ -1,5 +1,50 @@
 # Handoff — Vox state as of 2026-04-29 (PM)
 
+## Session 2026-04-29 PM — Meeting Transcription M2 pipeline shipped
+
+**Status:** All M2 deliverables implemented and committed on `main`. `swift build` clean. Full suite passes: 239 tests (was 221), 0 failures. Dictation regression baseline holds: `failure_rate=0.0 quality_score=1.0 latency_ms≈4.5` (was 2.5; small jitter, well within tolerance). `dist/Vox.app` built via `./scripts/build-app.sh`.
+
+**What landed (commits in order):**
+- `Tests/voxTests/Support/URLProtocolStub.swift` — reusable HTTP mock for tests.
+- `Sources/vox/Util/MeetingTranscriptStore.swift` + `TranscriptSegment`/`TranscriptSession` Codable models. Atomic JSON writes under `~/Library/Application Support/Vox/MeetingTranscripts/<uuid>/`. `recoverInFlightSessions()` cold-recovery sweep.
+- `Sources/vox/Util/AppSettings.swift` — added `meetingRetainAudio` (default off).
+- `Sources/vox/App/SettingsWindow.swift` — "Keep audio recording after transcription" toggle in Meeting (Beta) section.
+- `Sources/vox/STT/OpenAITranscriber.swift` — additive `transcribeMeetingChunk(fileURL:offsetSeconds:apiKey:endpoint:urlSession:)` returning `[TranscriptSegment]` from Whisper `verbose_json`. Promoted `sendWithRetry` to `static` with optional `session` param so tests can inject `URLProtocolStub`. Existing dictation `transcribe(...)` untouched.
+- `Sources/vox/STT/MeetingChunker.swift` — splits .m4a into ordered 5-min AAC chunks via `AVAssetExportSession`/`AVAssetExportPresetAppleM4A`.
+- `Sources/vox/Meeting/MeetingAudioCapture.swift` — `MeetingAudioRecording` protocol + `SCStream` wrapper (macOS 13+) that writes AAC m4a via `AVAssetWriter`. Excludes Vox's own audio.
+- `Sources/vox/STT/MeetingTranscriptionSession.swift` — singleton state machine: `idle → recording → chunking → transcribing → completed/cancelled/failed`. Serial upload (parallelism=1), infinite retry on `URLError` transport codes with backoff `[1,2,4,8,16,30]s`, user-cancellable via `Task.cancel()`. Exposes `isRecording`, `isActive`, `activeSessionID`, `statusSnapshot`, `waitForCompletion()`.
+- `Sources/vox/Meeting/MeetingPreflight.swift` — replaced stub `backendStatusProvider` with `liveStatus(for:)` using `CGPreflightScreenCaptureAccess()`. New `MeetingGateError` cases: `.permissionDenied(.screenRecording)`, `.captureFailed`, `.chunkingFailed`.
+- `Sources/vox/App/MenuBarController.swift` — `DictationMutex.isBlocked` injectable hook (early-returns Fn-hold when meeting recording). Live `Start Meeting Transcript` (gates dictation-active via `state == .recording`), `Stop Meeting Transcript` (calls session, opens transcripts window), new `Show Meeting Transcripts…` item.
+- `Sources/vox/App/MeetingTranscriptsWindow.swift` — lazy NSWindow + SwiftUI sidebar (sessions list with status badge + cancel button) + detail (segments with `mm:ss` timestamps) + Export menu (Plain / Timestamped Text) + Delete (NSAlert confirm).
+- `Sources/vox/App/AppDelegate.swift` — `MeetingTranscriptStore().recoverInFlightSessions()` on launch.
+- Tests: `MeetingTranscriptStoreTests` (6), `OpenAITranscriberMeetingTests` (3), `MeetingChunkerTests` (2 with generated AAC fixture via `AVAudioFile`), `MeetingTranscriptionSessionTests` (5: happy/transient-retry/cancel/audio-retain×2), `MeetingMutexTests` (2). Total +18 tests.
+
+**How to manually verify (run from this Mac):**
+1. `pkill -9 -f 'Vox.app/Contents/MacOS/vox'`
+2. `open dist/Vox.app`
+3. Settings → Meeting Transcription (Beta) → enable Mode + acknowledge consent. Verify "Keep audio recording after transcription" toggle present (default off).
+4. Menu bar → Start Meeting Transcript. Approve Screen Recording prompt if shown. Hold Fn — verify dictation does NOT activate.
+5. Play 30s of speech audio. Stop Meeting Transcript. Window opens with `Transcribing N/M` then `Done`.
+6. Export → Plain Text / Timestamped Text → verify file content.
+7. Cancel mid-transcribe path: record 12+ min, click `(x)` while transcribing — confirms `.cancelled` with partial segments.
+8. Audio retain toggle: enable, record short meeting, confirm `audio.m4a` exists in `~/Library/Application Support/Vox/MeetingTranscripts/<uuid>/`. Disable, record another, confirm not retained for the new one.
+
+**Known limitations / M3 candidates:**
+- No telemetry or redaction.
+- No live transcription during recording (locked spec decision: end-of-meeting only).
+- No background continuation if app quits mid-recording — `audio.m4a` truncates; cold-recovery flips status to `.failed` on next launch.
+- Meeting + dictation are mutually exclusive via `DictationMutex` + `state == .recording` checks.
+
+**Outstanding pre-existing items (not part of M2):**
+- 0.3.3 DMG/appcast/GH Release blocked on AKsMini for Sparkle EdDSA signing.
+- `tools/` (stt-bench) untracked locally; lives on `feat/stt-bench` branch.
+
+**Spec + plan docs:**
+- `docs/superpowers/specs/2026-04-29-meeting-transcription-m2-design.md`
+- `docs/superpowers/plans/2026-04-29-meeting-transcription-m2-implementation.md`
+
+---
+
 ## Session 2026-04-29 PM — Meeting Transcription M1 scaffolding shipped
 
 **Status:** Committed as `12d508e` on `origin/main`. All M1 deliverables implemented except AudioRecorder backend abstraction (deferred to M2 — see plan note). Builds clean (`swift build` ok). Full suite passes (`swift test` → 221 tests, 0 failures, was 209). Dictation regression baseline still: failure_rate=0.0, quality_score=1.0, latency=4ms.
