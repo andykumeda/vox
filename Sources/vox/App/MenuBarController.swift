@@ -321,6 +321,7 @@ final class MenuBarController: NSObject {
         Task { @MainActor in
             do {
                 try await MeetingTranscriptionSession.shared.start()
+                MeetingHUDPanel.shared.show()
             } catch {
                 self.presentMeetingError("Could not start meeting: \(error)")
             }
