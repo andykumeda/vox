@@ -108,7 +108,7 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         config.excludesCurrentProcessAudio = true
         sampleBufferCount = 0
         lastFailureReason = nil
-        NSLog("[vox] MeetingAudioCapture starting → \(outputURL.path)")
+        dlog("MeetingAudioCapture starting → \(outputURL.path)")
 
         // Writer is created lazily on the first audio sample buffer so we can pass the
         // source format description as sourceFormatHint to the AAC encoder. Without that
@@ -121,11 +121,11 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
             try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
             try await stream.startCapture()
         } catch {
-            NSLog("[vox] MeetingAudioCapture stream.startCapture failed: \(error)")
+            dlog("MeetingAudioCapture stream.startCapture failed: \(error)")
             throw MeetingAudioCaptureError.streamStartFailed(error)
         }
         self.stream = stream
-        NSLog("[vox] MeetingAudioCapture stream started")
+        dlog("MeetingAudioCapture stream started")
     }
 
     public func stop() async throws -> URL {
@@ -138,10 +138,10 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
             await writer.finishWriting()
             if writer.status != .completed {
                 let reason = "writer status=\(writer.status.rawValue) error=\(writer.error?.localizedDescription ?? "nil") sampleBuffers=\(sampleBufferCount)"
-                NSLog("[vox] MeetingAudioCapture finishWriting failed: \(reason)")
+                dlog("MeetingAudioCapture finishWriting failed: \(reason)")
                 lastFailureReason = reason
             } else {
-                NSLog("[vox] MeetingAudioCapture finishWriting ok sampleBuffers=\(sampleBufferCount)")
+                dlog("MeetingAudioCapture finishWriting ok sampleBuffers=\(sampleBufferCount)")
             }
         }
         if sampleBufferCount == 0 {
@@ -159,7 +159,7 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
     // MARK: - SCStreamDelegate
 
     public func stream(_ stream: SCStream, didStopWithError error: Error) {
-        NSLog("[vox] MeetingAudioCapture SCStream didStopWithError: \(error)")
+        dlog("MeetingAudioCapture SCStream didStopWithError: \(error)")
         lastFailureReason = "SCStream stopped: \(error.localizedDescription)"
     }
 
@@ -202,10 +202,10 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
                 w.add(input)
                 self.writer = w
                 self.writerInput = input
-                NSLog("[vox] MeetingAudioCapture writer created sampleRate=\(sampleRate) channels=\(channels)")
+                dlog("MeetingAudioCapture writer created sampleRate=\(sampleRate) channels=\(channels)")
             } catch {
                 lastFailureReason = "Could not create writer: \(error.localizedDescription)"
-                NSLog("[vox] MeetingAudioCapture writer init failed: \(error)")
+                dlog("MeetingAudioCapture writer init failed: \(error)")
                 return
             }
         }
@@ -216,12 +216,12 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
             let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let started = writer.startWriting()
             if !started {
-                NSLog("[vox] MeetingAudioCapture writer.startWriting returned false: \(writer.error?.localizedDescription ?? "nil")")
+                dlog("MeetingAudioCapture writer.startWriting returned false: \(writer.error?.localizedDescription ?? "nil")")
                 return
             }
             writer.startSession(atSourceTime: startTime)
             sessionStarted = true
-            NSLog("[vox] MeetingAudioCapture session started at PTS \(startTime.seconds)")
+            dlog("MeetingAudioCapture session started at PTS \(startTime.seconds)")
         }
         if input.isReadyForMoreMediaData {
             input.append(sampleBuffer)
