@@ -6,6 +6,28 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.4.0</title>
+            <pubDate>Thu, 30 Apr 2026 15:55:00 +0000</pubDate>
+            <sparkle:version>7</sparkle:version>
+            <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Meeting transcription M2:</strong> captures local mic in parallel with system audio. Segments tagged local/remote, interleaved on a shared timeline.</li>
+                    <li><strong>Silence trim:</strong> leading/trailing silence is clipped before transcription so starting a recording before anyone joins doesn't pollute the transcript.</li>
+                    <li><strong>Fix:</strong> Whisper pinned to language=en, temperature=0 — no more random Japanese hallucinations on silent audio.</li>
+                    <li><strong>Visual:</strong> distinct red+pulsing menu bar icon during meeting recording. Audible cue when Fn-dictation is suppressed because a meeting is active.</li>
+                    <li><strong>Fix:</strong> hotkey recorder accepts multi-modifier combos (Ctrl+Opt+M, etc); existing global hotkey is muted while configuring a new one.</li>
+                    <li><strong>Fix:</strong> stale meeting session bug — could not start a new session after completing/failing one.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.4.0/Vox.dmg"
+                sparkle:edSignature="msbF1Lz0pfFfqAvXi/ZofU7B8QP9TK7JI7QAuMBCdlvIADpJHUyB0dWuYubYl1OEzdN+kiWXYvVL+Ze9s08zDA=="
+                length="2860524"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.3.2</title>
             <pubDate>Wed, 29 Apr 2026 16:45:00 +0000</pubDate>
             <sparkle:version>6</sparkle:version>
