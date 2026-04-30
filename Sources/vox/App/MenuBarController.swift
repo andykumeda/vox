@@ -104,6 +104,15 @@ final class MenuBarController: NSObject {
         ) { [weak self] _ in
             self?.refreshIcon()
         }
+        // Refresh menu-bar icon when the frontmost app changes so the mode badge
+        // reflects auto-detected command vs prose for the new context.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshIcon()
+        }
 
         Task {
             let granted = await recorder.requestPermission()
@@ -159,17 +168,45 @@ final class MenuBarController: NSObject {
         updaterController.checkForUpdates(nil)
     }
 
-    private func appIconForMenuBar() -> NSImage? {
-        let icon = NSApp.applicationIconImage
-            ?? NSImage(named: NSImage.applicationIconName)
-        guard let icon else { return nil }
+    private func appIconForMenuBar(
+        badgeColor: NSColor? = nil,
+        commandMode: Bool = false
+    ) -> NSImage? {
+        let base: NSImage? = {
+            if commandMode, let cmd = NSImage(named: "AppIcon-Command") { return cmd }
+            return NSApp.applicationIconImage ?? NSImage(named: NSImage.applicationIconName)
+        }()
+        guard let base else { return nil }
         let size = NSSize(width: 18, height: 18)
         let result = NSImage(size: size)
         result.lockFocus()
-        icon.draw(in: NSRect(origin: .zero, size: size))
+        base.draw(in: NSRect(origin: .zero, size: size))
+        if let badgeColor {
+            let d: CGFloat = 8
+            let badgeRect = NSRect(
+                x: size.width - d - 0.5,
+                y: size.height - d - 0.5,
+                width: d, height: d
+            )
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: badgeRect.insetBy(dx: -1, dy: -1)).fill()
+            badgeColor.setFill()
+            NSBezierPath(ovalIn: badgeRect).fill()
+        }
         result.unlockFocus()
         result.isTemplate = false
         return result
+    }
+
+    /// Returns the mode currently in effect: explicit override if set, otherwise
+    /// `ContextDetector.modeForFrontmost()`. Used to drive the menu-bar mode badge so
+    /// terminal mode is always visually distinguishable from prose.
+    private func effectiveMode() -> TranscriptionMode {
+        switch AppSettings.modeOverride {
+        case .auto:    return contextDetector.modeForFrontmost()
+        case .prose:   return .prose
+        case .command: return .command
+        }
     }
 
     private func whiteBackgroundIcon() -> NSImage? {
@@ -244,29 +281,17 @@ final class MenuBarController: NSObject {
             return
         }
 
+        let cmd = (effectiveMode() == .command)
+
         switch state {
         case .idle:
-            // Bubble glyph on transparent background. Tint differs by mode.
-            let candidates = ["text.bubble", "bubble.left", "ellipsis.bubble", "bubble.left.fill"]
-            let base = candidates.lazy
-                .compactMap { NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") }
-                .first
-            let tint: NSColor
-            switch AppSettings.modeOverride {
-            case .auto:    tint = .labelColor
-            case .prose:   tint = .systemBlue
-            case .command: tint = .systemPurple
-            }
-            let cfg = NSImage.SymbolConfiguration(paletteColors: [tint])
-            let tinted = base?.withSymbolConfiguration(cfg)
-            tinted?.isTemplate = false
-            button.image = tinted
+            button.image = appIconForMenuBar(commandMode: cmd)
             button.contentTintColor = nil
         case .recording:
-            button.image = tintedSymbol(color: .systemRed)
+            button.image = appIconForMenuBar(badgeColor: .systemRed, commandMode: cmd)
             button.contentTintColor = nil
         case .transcribing:
-            button.image = tintedSymbol(color: .systemOrange)
+            button.image = appIconForMenuBar(badgeColor: .systemOrange, commandMode: cmd)
             button.contentTintColor = nil
         case .error:
             let candidates = ["exclamationmark.triangle", "exclamationmark.circle"]
@@ -360,7 +385,10 @@ final class MenuBarController: NSObject {
     }
 
     private func handleModeToggle() {
-        AppSettings.modeOverride = AppSettings.modeOverride.next()
+        // Toggle directly between prose and command based on the currently effective mode.
+        // Skipping .auto means a single press is always visible (was: auto→prose→command
+        // could swallow the first press when auto already resolved to the same mode).
+        AppSettings.modeOverride = (effectiveMode() == .command) ? .prose : .command
         refreshIcon()
         NSSound(named: NSSound.Name("Tink"))?.play()
     }

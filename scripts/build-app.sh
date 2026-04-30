@@ -27,6 +27,7 @@ mkdir -p "$APP_PATH/Contents/Resources"
 cp "$BUILD_DIR/$BINARY_NAME" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
 cp Resources/Info.plist "$APP_PATH/Contents/Info.plist"
 cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
+cp Resources/AppIcon-Command.png "$APP_PATH/Contents/Resources/"
 cp Resources/help.md "$APP_PATH/Contents/Resources/"
 
 # Embed Sparkle.framework for in-app updates.
