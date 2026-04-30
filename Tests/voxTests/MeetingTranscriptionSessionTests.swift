@@ -156,6 +156,77 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioPath))
     }
 
+    func testCanStartSecondSessionAfterFirstCompletes() async throws {
+        let recorder = MockRecorder()
+        let url = tempRoot.appendingPathComponent("c.m4a")
+        try Data([0]).write(to: url)
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [url] },
+            transcribe: { _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+
+        try await session.start()
+        XCTAssertEqual(session.statusSnapshot, .recording)
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+    }
+
+    func testCanStartAfterPriorFailure() async throws {
+        let recorder = MockRecorder()
+        let url = tempRoot.appendingPathComponent("c.m4a")
+        try Data([0]).write(to: url)
+        var failOnce = true
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [url] },
+            transcribe: { _, _ in
+                if failOnce {
+                    failOnce = false
+                    throw TranscriptionError.invalidResponse
+                }
+                return [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .failed)
+
+        try await session.start()
+        XCTAssertEqual(session.statusSnapshot, .recording)
+    }
+
+    func testStartWhileActiveThrowsAlreadyActive() async throws {
+        let recorder = MockRecorder()
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [] },
+            transcribe: { _, _ in [] },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+        try await session.start()
+        do {
+            try await session.start()
+            XCTFail("expected alreadyActive")
+        } catch MeetingTranscriptionSession.SessionError.alreadyActive {
+            // ok
+        }
+    }
+
     func testAudioRetainedTrueKeepsAudio() async throws {
         let recorder = MockRecorder()
         let url = tempRoot.appendingPathComponent("c.m4a")

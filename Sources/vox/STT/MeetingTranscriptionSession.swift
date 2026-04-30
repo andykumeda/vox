@@ -99,7 +99,14 @@ public final class MeetingTranscriptionSession {
 
     public func start() async throws {
         lock.lock()
-        guard session == nil else { lock.unlock(); throw SessionError.alreadyActive }
+        if let existing = session {
+            switch existing.status {
+            case .recording, .chunking, .transcribing:
+                lock.unlock(); throw SessionError.alreadyActive
+            case .completed, .cancelled, .failed:
+                session = nil
+            }
+        }
         let id = UUID()
         let now = Date()
         let title = "Meeting \(Self.titleFormatter.string(from: now))"
