@@ -70,4 +70,11 @@ public extension Hotkey {
         triggerMode: .tapToggle,
         enabled: true
     )
+
+    static let defaultMeeting = Hotkey(
+        key: .keycode(UInt16(kVK_ANSI_M)),
+        modifiers: [.command, .shift],
+        triggerMode: .tapToggle,
+        enabled: true
+    )
 }

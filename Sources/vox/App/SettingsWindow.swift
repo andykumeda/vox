@@ -251,10 +251,20 @@ struct SettingsView: View {
                     allowTriggerModePicker: false
                 )
 
+                HotkeyRecorderField(
+                    hotkey: Binding(
+                        get: { AppSettings.meetingHotkey },
+                        set: { AppSettings.meetingHotkey = $0 }
+                    ),
+                    label: "Start / stop meeting transcript",
+                    allowTriggerModePicker: false
+                )
+
                 Button("Reset all to defaults") {
                     AppSettings.recordHotkey = .defaultRecord
                     AppSettings.modeToggleHotkey = .defaultModeToggle
                     AppSettings.pasteHotkey = .defaultPaste
+                    AppSettings.meetingHotkey = .defaultMeeting
                 }
                 .controlSize(.small)
             }

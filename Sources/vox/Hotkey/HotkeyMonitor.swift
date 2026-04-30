@@ -9,9 +9,11 @@ public final class HotkeyMonitor {
     public var onRecordPress: (() -> Void)?
     public var onRecordRelease: (() -> Void)?
     public var onModeToggle: (() -> Void)?
+    public var onMeetingToggle: (() -> Void)?
 
     private var record: Hotkey
     private var modeToggle: Hotkey
+    private var meeting: Hotkey
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -19,17 +21,20 @@ public final class HotkeyMonitor {
     private var isRecordActive = false            // pressHold-held or tapToggle-on
     private var pressedKeycode: UInt16?           // captured at keyDown, used at keyUp
     private var lastModeToggleAt: CFAbsoluteTime = 0
+    private var lastMeetingToggleAt: CFAbsoluteTime = 0
     private static let modeToggleDebounceSeconds: CFAbsoluteTime = 0.150
 
-    public init(record: Hotkey? = nil, modeToggle: Hotkey? = nil) {
+    public init(record: Hotkey? = nil, modeToggle: Hotkey? = nil, meeting: Hotkey? = nil) {
         self.record = record ?? AppSettings.recordHotkey
         self.modeToggle = modeToggle ?? AppSettings.modeToggleHotkey
+        self.meeting = meeting ?? AppSettings.meetingHotkey
     }
 
     /// Update bindings without restarting the tap.
-    public func configure(record: Hotkey, modeToggle: Hotkey) {
+    public func configure(record: Hotkey, modeToggle: Hotkey, meeting: Hotkey) {
         self.record = record
         self.modeToggle = modeToggle
+        self.meeting = meeting
         // If recording was active under an old binding, finalize it.
         if isRecordActive {
             isRecordActive = false
@@ -103,6 +108,22 @@ public final class HotkeyMonitor {
             if now - lastModeToggleAt >= Self.modeToggleDebounceSeconds {
                 lastModeToggleAt = now
                 DispatchQueue.main.async { [weak self] in self?.onModeToggle?() }
+            }
+            return
+        }
+
+        // Meeting toggle (always tap-toggle, debounced).
+        let meetingEvent: Bool
+        switch meeting.key {
+        case .fn, .modifier: meetingEvent = (type == .flagsChanged)
+        case .keycode:       meetingEvent = (type == .keyDown)
+        }
+        if meetingEvent,
+           Self.matches(keycode: keycode, flags: flags, hotkey: meeting) {
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastMeetingToggleAt >= Self.modeToggleDebounceSeconds {
+                lastMeetingToggleAt = now
+                DispatchQueue.main.async { [weak self] in self?.onMeetingToggle?() }
             }
             return
         }

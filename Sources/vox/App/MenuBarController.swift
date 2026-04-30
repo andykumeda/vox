@@ -90,6 +90,9 @@ final class MenuBarController: NSObject {
         hotkey.onModeToggle = { [weak self] in
             self?.handleModeToggle()
         }
+        hotkey.onMeetingToggle = { [weak self] in
+            self?.handleMeetingToggle()
+        }
 
         NotificationCenter.default.addObserver(
             forName: .recordHotkeyChanged,
@@ -112,6 +115,13 @@ final class MenuBarController: NSObject {
             queue: .main
         ) { [weak self] _ in
             self?.configureMenu()
+        }
+        NotificationCenter.default.addObserver(
+            forName: .meetingHotkeyChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reconfigureHotkey()
         }
 
         Task {
@@ -353,9 +363,22 @@ final class MenuBarController: NSObject {
         hotkey.stop()
         hotkey.configure(
             record: AppSettings.recordHotkey,
-            modeToggle: AppSettings.modeToggleHotkey
+            modeToggle: AppSettings.modeToggleHotkey,
+            meeting: AppSettings.meetingHotkey
         )
         _ = hotkey.start()
+    }
+
+    private func handleMeetingToggle() {
+        guard AppSettings.meetingModeEnabled else {
+            presentMeetingError(MeetingGateError.modeDisabled.userMessage)
+            return
+        }
+        if MeetingTranscriptionSession.shared.isRecording {
+            stopMeetingTranscript()
+        } else {
+            startMeetingTranscript()
+        }
     }
 
     // MARK: - Record / Transcribe
