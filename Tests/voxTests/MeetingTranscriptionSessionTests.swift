@@ -1,0 +1,204 @@
+import XCTest
+@testable import vox
+
+final class MeetingTranscriptionSessionTests: XCTestCase {
+    var tempRoot: URL!
+    var store: MeetingTranscriptStore!
+
+    override func setUp() {
+        super.setUp()
+        tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-session-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        store = MeetingTranscriptStore(rootDirectory: tempRoot)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: tempRoot)
+        super.tearDown()
+    }
+
+    final class MockRecorder: MeetingAudioRecording {
+        var output: URL?
+        func start(outputURL: URL) async throws {
+            try FileManager.default.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data([0xFA, 0xCE]).write(to: outputURL)
+            self.output = outputURL
+        }
+        func stop() async throws -> URL {
+            guard let out = output else {
+                throw MeetingAudioCaptureError.notRecording
+            }
+            return out
+        }
+    }
+
+    func testHappyPath() async throws {
+        let recorder = MockRecorder()
+        let chunkURLs = (0..<3).map { i in
+            tempRoot.appendingPathComponent("chunk-\(i).m4a")
+        }
+        for url in chunkURLs {
+            try Data([0]).write(to: url)
+        }
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in chunkURLs },
+            transcribe: { url, offset in
+                let i = chunkURLs.firstIndex(of: url)!
+                return [TranscriptSegment(
+                    startTime: offset, endTime: offset + 1.0,
+                    text: "chunk \(i)"
+                )]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let id = session.activeSessionID!
+        let stored = try XCTUnwrap(store.load(id: id))
+        XCTAssertEqual(stored.segments.count, 3)
+        XCTAssertEqual(stored.segments[0].text, "chunk 0")
+    }
+
+    func testTransientRetrySucceedsAfterFailures() async throws {
+        let recorder = MockRecorder()
+        let chunkURL = tempRoot.appendingPathComponent("chunk-0.m4a")
+        try Data([0]).write(to: chunkURL)
+        let attemptsBox = AtomicInt()
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [chunkURL] },
+            transcribe: { _, offset in
+                let n = await attemptsBox.increment()
+                if n < 3 {
+                    throw TranscriptionError.transportError(URLError(.timedOut))
+                }
+                return [TranscriptSegment(startTime: offset, endTime: offset + 1, text: "ok")]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            backoffSchedule: [0.01, 0.01, 0.01]
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let attempts = await attemptsBox.value
+        XCTAssertEqual(attempts, 3)
+    }
+
+    func testUserCancelMidUploadPreservesPartialSegments() async throws {
+        let recorder = MockRecorder()
+        let urls = (0..<5).map { tempRoot.appendingPathComponent("c-\($0).m4a") }
+        for u in urls { try Data([0]).write(to: u) }
+        let cancelAfter = AsyncSemaphore(initial: 0)
+        let countBox = AtomicInt()
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in urls },
+            transcribe: { _, offset in
+                let n = await countBox.increment()
+                if n == 2 {
+                    await cancelAfter.signal()
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    try Task.checkCancellation()
+                }
+                return [TranscriptSegment(startTime: offset, endTime: offset+1, text: "x")]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+        try await session.start()
+        try await session.stop()
+        await cancelAfter.wait()
+        session.cancel()
+        await session.waitForCompletion()
+
+        XCTAssertEqual(session.statusSnapshot, .cancelled)
+        let id = session.activeSessionID!
+        let stored = try XCTUnwrap(store.load(id: id))
+        XCTAssertGreaterThanOrEqual(stored.segments.count, 1)
+        XCTAssertLessThan(stored.segments.count, 5)
+    }
+
+    func testAudioRetainedFalseDeletesAudio() async throws {
+        let recorder = MockRecorder()
+        let url = tempRoot.appendingPathComponent("c.m4a")
+        try Data([0]).write(to: url)
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [url] },
+            transcribe: { _, _ in
+                [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false }
+        )
+        try await session.start()
+        let id = session.activeSessionID!
+        let audioPath = store.audioFile(id: id).path
+        XCTAssertTrue(FileManager.default.fileExists(atPath: audioPath))
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: audioPath))
+    }
+
+    func testAudioRetainedTrueKeepsAudio() async throws {
+        let recorder = MockRecorder()
+        let url = tempRoot.appendingPathComponent("c.m4a")
+        try Data([0]).write(to: url)
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [url] },
+            transcribe: { _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
+            apiKey: { "sk-test" },
+            retainAudio: { true }
+        )
+        try await session.start()
+        let id = session.activeSessionID!
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioFile(id: id).path))
+    }
+}
+
+/// Minimal async semaphore for cancellation tests.
+actor AsyncSemaphore {
+    private var value: Int
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    init(initial: Int) { self.value = initial }
+    func signal() {
+        if let w = waiters.first {
+            waiters.removeFirst()
+            w.resume()
+        } else {
+            value += 1
+        }
+    }
+    func wait() async {
+        if value > 0 { value -= 1; return }
+        await withCheckedContinuation { c in waiters.append(c) }
+    }
+}
+
+actor AtomicInt {
+    private(set) var value: Int = 0
+    func increment() -> Int {
+        value += 1
+        return value
+    }
+}
