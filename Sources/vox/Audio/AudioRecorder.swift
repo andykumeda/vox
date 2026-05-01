@@ -16,7 +16,11 @@ public enum AudioRecorderError: Error {
 /// until `stop()` patches them; see `RecordingArchive.repairOrphans` for the
 /// crash-recovery path.
 public final class AudioRecorder {
-    private let engine = AVAudioEngine()
+    /// Fresh engine per recording. Reusing one engine across recordings causes
+    /// the inputNode to return silent (all-zero) buffers after another consumer
+    /// (e.g. AVAudioRecorder used by MeetingMicCapture) has held the input
+    /// device — the engine's cached input format goes stale.
+    private var engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private let targetSampleRate: Double = 16_000
     private let lock = NSLock()
@@ -64,8 +68,14 @@ public final class AudioRecorder {
             throw AudioRecorderError.fileOpenFailed(error)
         }
 
+        // Rebuild the engine each time. See note on `engine` declaration —
+        // reusing across recordings produced all-zero input after a meeting
+        // session. `prepare()` re-queries the current default input device.
+        engine = AVAudioEngine()
+
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
+        dlog("AudioRecorder.start inputFormat sampleRate=\(inputFormat.sampleRate) channels=\(inputFormat.channelCount)")
         guard inputFormat.sampleRate > 0 else { throw AudioRecorderError.noInputNode }
 
         guard let targetFormat = AVAudioFormat(
@@ -165,6 +175,17 @@ public final class AudioRecorder {
         let bytes = Int(outBuf.frameLength) * 2
         let data = Data(bytes: int16Channel, count: bytes)
         lock.lock()
+        // One-shot probe: log peak amplitude of the first decoded buffer so we
+        // can tell the difference between "tap not firing" (no log) vs "tap
+        // firing with silent samples" (log shows peak=0).
+        if pcmBytesWritten == 0 {
+            var peak: Int16 = 0
+            for f in 0..<Int(outBuf.frameLength) {
+                let s = abs(int16Channel[f])
+                if s > peak { peak = s }
+            }
+            dlog("AudioRecorder first buffer frames=\(outBuf.frameLength) peak=\(peak)")
+        }
         if let handle = fileHandle {
             do {
                 try handle.write(contentsOf: data)

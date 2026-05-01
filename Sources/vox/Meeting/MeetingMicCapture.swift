@@ -83,13 +83,22 @@ public final class MeetingMicCapture: NSObject, MeetingAudioRecording, AVAudioRe
             throw MeetingMicCaptureError.notRecording
         }
         recorder.stop()
+        // Drop delegate before releasing so AVAudioRecorder fully tears down
+        // its CoreAudio input handle. Without this, dictation taken from
+        // AVAudioEngine immediately after the meeting produced all-zero
+        // buffers — the HAL device was still flagged in-use by the prior
+        // recorder.
+        recorder.delegate = nil
+        self.recorder = nil
+        self.outputURL = nil
+        // Yield so CoreAudio finalises the release before any subsequent
+        // dictation tap installs on the same input.
+        try? await Task.sleep(nanoseconds: 200_000_000)
         let bytes = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int) ?? 0
         dlog("MeetingMicCapture stopped bytes=\(bytes)")
         if bytes < 4096 {
             lastFailureReason = "Mic recording empty (\(bytes) bytes). Mic may be muted or another app holds the input device."
         }
-        self.recorder = nil
-        self.outputURL = nil
         return outputURL
     }
 

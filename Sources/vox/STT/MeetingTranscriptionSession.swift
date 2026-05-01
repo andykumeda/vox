@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// Coordinates a single end-to-end meeting capture: record system audio + local mic in
@@ -289,6 +290,7 @@ public final class MeetingTranscriptionSession {
             for (i, chunkURL) in chunks.enumerated() {
                 if Task.isCancelled { break }
                 let offset = Double(i) * chunkDuration
+
                 let segments: [TranscriptSegment]
                 do {
                     segments = try await transcribeWithInfiniteRetry(
@@ -303,11 +305,20 @@ public final class MeetingTranscriptionSession {
                     }
                     return
                 }
+
+                // Collapse repetition cascades across consecutive segments
+                // (e.g. 200× "I don't know." each on a 1-second grid). This
+                // catches per-segment hallucinations that the per-segment
+                // word-count gate misses.
+                let deCascaded = MeetingTranscriptionSession.collapseRepetitionRuns(
+                    segments, minRun: 4, source: source
+                )
+
                 // Drop Whisper hallucinations whose timestamps fall outside the actual
                 // audible portion of the stream (Whisper sometimes invents segments past
                 // the end of the file or right after a long silence).
                 let hallucinationCap = audibleDuration > 0 ? audibleDuration + 1.5 : .greatestFiniteMagnitude
-                let shifted: [TranscriptSegment] = segments.compactMap { seg in
+                let shifted: [TranscriptSegment] = deCascaded.compactMap { seg in
                     if seg.startTime > hallucinationCap { return nil }
                     if isHallucinated(seg) {
                         dlog("Meeting hallucination dropped [\(source.rawValue)] \(seg.startTime)-\(seg.endTime)s: \(seg.text.prefix(80))")
@@ -347,6 +358,83 @@ public final class MeetingTranscriptionSession {
         if !retainAudioProvider() {
             try? store.purgeAudio(for: sessionID)
         }
+    }
+
+    /// Returns the fraction of 100ms windows in `url` whose RMS is above the
+    /// SilenceTrim threshold. Used as a pre-upload gate so we don't waste API
+    /// calls (and don't ingest hallucinations) on chunks that are mostly silent.
+    /// Returns 1.0 on read failure to fail open — better to send than drop real audio.
+    static func audibleFraction(url: URL) -> Double {
+        guard let file = try? AVAudioFile(forReading: url) else { return 1.0 }
+        let format = file.processingFormat
+        let sampleRate = format.sampleRate
+        let channels = Int(format.channelCount)
+        let totalFrames = file.length
+        guard sampleRate > 0, channels > 0, totalFrames > 0 else { return 1.0 }
+        let windowFrames = AVAudioFrameCount(max(1, Int(sampleRate * SilenceTrim.windowSec)))
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: windowFrames) else {
+            return 1.0
+        }
+        var pos: Int64 = 0
+        var windows = 0
+        var audibleWindows = 0
+        while pos < totalFrames {
+            do {
+                try file.read(into: buf, frameCount: windowFrames)
+            } catch { break }
+            let n = Int(buf.frameLength)
+            if n == 0 { break }
+            windows += 1
+            guard let data = buf.floatChannelData else { pos += Int64(n); continue }
+            var sumSq: Float = 0
+            for f in 0..<n {
+                for c in 0..<channels {
+                    let s = data[c][f]
+                    sumSq += s * s
+                }
+            }
+            let rms = sqrt(sumSq / Float(n * channels))
+            if rms > SilenceTrim.rmsThreshold { audibleWindows += 1 }
+            pos += Int64(n)
+        }
+        return windows > 0 ? Double(audibleWindows) / Double(windows) : 0
+    }
+
+    /// Drops runs of `minRun` or more consecutive segments whose normalised text
+    /// matches. This is Whisper's hallucination signature on uniform/silent
+    /// audio: identical short text repeated on a fixed time grid (e.g. one
+    /// "I don't know." per second for an entire 5-minute mic chunk).
+    static func collapseRepetitionRuns(
+        _ segments: [TranscriptSegment],
+        minRun: Int,
+        source: SegmentSource
+    ) -> [TranscriptSegment] {
+        guard segments.count >= minRun else { return segments }
+        var result: [TranscriptSegment] = []
+        result.reserveCapacity(segments.count)
+        var i = 0
+        while i < segments.count {
+            let start = i
+            let key = normaliseForRunDetection(segments[i].text)
+            var j = i + 1
+            while j < segments.count, normaliseForRunDetection(segments[j].text) == key { j += 1 }
+            let runLength = j - start
+            if runLength >= minRun, !key.isEmpty {
+                dlog("Meeting cascade dropped [\(source.rawValue)] ×\(runLength) of \"\(segments[start].text.prefix(40))\"")
+            } else {
+                result.append(contentsOf: segments[start..<j])
+            }
+            i = j
+        }
+        return result
+    }
+
+    private static func normaliseForRunDetection(_ s: String) -> String {
+        return s
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "[\\p{P}\\p{S}]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 
     /// Detect Whisper hallucination patterns on near-silent audio: long monotonous
