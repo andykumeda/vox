@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.1</title>
+            <pubDate>Fri, 01 May 2026 23:30:00 +0000</pubDate>
+            <sparkle:version>11</sparkle:version>
+            <sparkle:shortVersionString>0.6.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> dictation no longer deadlocks AVAudioEngine after a meeting + several recordings. The 0.6.0 build recreated the engine on every <code>start()</code>; that triggered an internal IOUnitDispose vs IOUnitConfigurationChanged livelock under audio-config flux. Engine is now reused with an explicit <code>stop()</code> + <code>reset()</code> at the start of each recording.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.1/Vox.dmg"
+                sparkle:edSignature="UGJhxlg3nH1B7EqG1qd56TVLb5lSfQ/ARE0Z7/wPR7ocg3VtS2MU4ibaEHFbPkZN5bRiF+x7w1FD1/awRMF+CQ=="
+                length="2417437"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.0</title>
             <pubDate>Fri, 01 May 2026 19:30:00 +0000</pubDate>
             <sparkle:version>10</sparkle:version>

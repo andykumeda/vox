@@ -16,11 +16,15 @@ public enum AudioRecorderError: Error {
 /// until `stop()` patches them; see `RecordingArchive.repairOrphans` for the
 /// crash-recovery path.
 public final class AudioRecorder {
-    /// Fresh engine per recording. Reusing one engine across recordings causes
-    /// the inputNode to return silent (all-zero) buffers after another consumer
-    /// (e.g. AVAudioRecorder used by MeetingMicCapture) has held the input
-    /// device — the engine's cached input format goes stale.
-    private var engine = AVAudioEngine()
+    /// Single long-lived engine, reused across recordings. The 0.6.0 build
+    /// recreated this on every `start()` to clear post-meeting silent-buffer
+    /// state, but that pattern deadlocked AVAudioEngine internally
+    /// (IOUnitDispose vs IOUnitConfigurationChanged on a recursive_mutex)
+    /// after a meeting + several dictations. The post-meeting silent-buffer
+    /// case observed during testing turned out to be a hardware-level mic
+    /// stall, not framework state, so this rolls back to the original
+    /// single-engine pattern with explicit reset on each start.
+    private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private let targetSampleRate: Double = 16_000
     private let lock = NSLock()
@@ -68,10 +72,15 @@ public final class AudioRecorder {
             throw AudioRecorderError.fileOpenFailed(error)
         }
 
-        // Rebuild the engine each time. See note on `engine` declaration —
-        // reusing across recordings produced all-zero input after a meeting
-        // session. `prepare()` re-queries the current default input device.
-        engine = AVAudioEngine()
+        // Defensive cleanup of any prior recording's tap before reusing the
+        // engine. Stop / reset clears in-flight render state without tearing
+        // down the IO unit (which is what triggered the recursive_mutex
+        // deadlock in 0.6.0).
+        if engine.isRunning {
+            engine.stop()
+        }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.reset()
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
