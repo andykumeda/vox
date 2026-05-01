@@ -15,7 +15,7 @@ struct SettingsView: View {
     @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider(
         AppSettings.meetingCaptureBackend
     )
-    @State private var meetingRetainAudio: Bool = AppSettings.meetingRetainAudio
+    @State private var audioRetention: AudioRetention = AppSettings.audioRetention
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
     let keychain: KeychainStore
@@ -177,17 +177,40 @@ struct SettingsView: View {
                             .font(.caption)
                     }
 
-                    Toggle("Keep audio recording after transcription", isOn: Binding(
-                        get: { meetingRetainAudio },
-                        set: { newValue in
-                            meetingRetainAudio = newValue
-                            AppSettings.meetingRetainAudio = newValue
-                        }
-                    ))
-                    Text("Off by default. Audio file is deleted after Whisper finishes transcribing. Turn on to keep the .m4a in Application Support for replay or re-transcribe.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Recordings storage")
+                    .font(.headline)
+                Picker("Delete audio older than", selection: Binding(
+                    get: { audioRetention },
+                    set: { newValue in
+                        audioRetention = newValue
+                        AppSettings.audioRetention = newValue
+                    }
+                )) {
+                    ForEach(AudioRetention.allCases, id: \.self) { r in
+                        Text(r.displayName).tag(r)
+                    }
+                }
+                Text("Transcripts are kept indefinitely. Only the raw audio (dictation WAVs and meeting recordings) is purged. Sweep runs at app launch.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    Button("Reveal Dictation Recordings") {
+                        NSWorkspace.shared.activateFileViewerSelecting([RecordingArchive.directory()])
+                    }
+                    Button("Reveal Meeting Recordings") {
+                        NSWorkspace.shared.activateFileViewerSelecting([MeetingTranscriptStore.defaultRoot()])
+                    }
+                }
+                Text(storageUsageLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
@@ -333,7 +356,7 @@ struct SettingsView: View {
             meetingMode = AppSettings.meetingModeEnabled
             meetingConsent = AppSettings.meetingConsentAcknowledged
             meetingBackendStatus = MeetingPreflight.backendStatusProvider(AppSettings.meetingCaptureBackend)
-            meetingRetainAudio = AppSettings.meetingRetainAudio
+            audioRetention = AppSettings.audioRetention
         }
     }
 
@@ -346,6 +369,15 @@ struct SettingsView: View {
         } catch {
             savedMessage = "Save failed: \(error.localizedDescription)"
         }
+    }
+
+    private var storageUsageLine: String {
+        let dict = RecordingArchive.diskBytes()
+        let meeting = MeetingTranscriptStore().audioDiskBytes()
+        let fmt = ByteCountFormatter()
+        fmt.allowedUnits = [.useMB, .useGB]
+        fmt.countStyle = .file
+        return "On disk now: \(fmt.string(fromByteCount: Int64(dict))) dictation, \(fmt.string(fromByteCount: Int64(meeting))) meetings."
     }
 }
 
