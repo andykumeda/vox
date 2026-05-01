@@ -55,8 +55,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                     text: "chunk \(i)"
                 )]
             },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
 
         try await session.start()
@@ -87,7 +86,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return [TranscriptSegment(startTime: offset, endTime: offset + 1, text: "ok")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             backoffSchedule: [0.01, 0.01, 0.01]
         )
         try await session.start()
@@ -117,8 +115,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 }
                 return [TranscriptSegment(startTime: offset, endTime: offset+1, text: "x")]
             },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
         try await session.start()
         try await session.stop()
@@ -133,7 +130,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertLessThan(stored.segments.count, 5)
     }
 
-    func testAudioIsRetainedEvenWhenSettingIsFalse() async throws {
+    func testMeetingAudioIsRetainedAfterTranscription() async throws {
         let recorder = MockRecorder()
         let url = tempRoot.appendingPathComponent("c.m4a")
         try Data([0]).write(to: url)
@@ -144,8 +141,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             transcribe: { _, _, _ in
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
             },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
         try await session.start()
         let id = session.activeSessionID!
@@ -165,8 +161,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             recorder: recorder,
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
         try await session.start()
         try await session.stop()
@@ -196,8 +191,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 }
                 return [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
             },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
         try await session.start()
         try await session.stop()
@@ -215,8 +209,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             recorder: recorder,
             chunker: { _, _ in [] },
             transcribe: { _, _, _ in [] },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
         try await session.start()
         do {
@@ -225,25 +218,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         } catch MeetingTranscriptionSession.SessionError.alreadyActive {
             // ok
         }
-    }
-
-    func testAudioRetainedTrueKeepsAudio() async throws {
-        let recorder = MockRecorder()
-        let url = tempRoot.appendingPathComponent("c.m4a")
-        try Data([0]).write(to: url)
-        let session = MeetingTranscriptionSession(
-            store: store,
-            recorder: recorder,
-            chunker: { _, _ in [url] },
-            transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
-            apiKey: { "sk-test" },
-            retainAudio: { true }
-        )
-        try await session.start()
-        let id = session.activeSessionID!
-        try await session.stop()
-        await session.waitForCompletion()
-        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioFile(id: id).path))
     }
 
     func testInterleavesSystemAndMicSegmentsByStartTime() async throws {
@@ -277,8 +251,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 }
                 return []
             },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
 
         try await session.start()
@@ -307,8 +280,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             transcribe: { _, _, source in
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "ok", source: source)]
             },
-            apiKey: { "sk-test" },
-            retainAudio: { false }
+            apiKey: { "sk-test" }
         )
 
         try await session.start()

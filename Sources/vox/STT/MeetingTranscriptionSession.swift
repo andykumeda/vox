@@ -22,8 +22,7 @@ public final class MeetingTranscriptionSession {
                 fileURL: url, offsetSeconds: offset, apiKey: key, source: source
             )
         },
-        apiKey: { KeychainStore().read() },
-        retainAudio: { true }
+        apiKey: { KeychainStore().read() }
     )
 
     public let store: MeetingTranscriptStore
@@ -70,7 +69,6 @@ public final class MeetingTranscriptionSession {
         chunker: @escaping Chunker,
         transcribe: @escaping Transcribe,
         apiKey: @escaping () -> String?,
-        retainAudio: @escaping () -> Bool,
         backoffSchedule: [Double] = [1, 2, 4, 8, 16, 30]
     ) {
         self.store = store
