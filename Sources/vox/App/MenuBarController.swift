@@ -140,6 +140,10 @@ final class MenuBarController: NSObject {
         _ = updaterController
 
         let menu = NSMenu()
+        let version = NSMenuItem(title: "Vox \(Self.appVersion)", action: nil, keyEquivalent: "")
+        version.isEnabled = false
+        menu.addItem(version)
+        menu.addItem(.separator())
         menu.addItem(makeMenuItem(
             title: "Home", symbol: "house",
             action: #selector(openMainWindow)
@@ -163,7 +167,7 @@ final class MenuBarController: NSObject {
         ))
         menu.addItem(makeMenuItem(
             title: "Help", symbol: "questionmark.circle",
-            action: #selector(showHelpAction(_:))
+            action: #selector(openHelp)
         ))
         menu.addItem(.separator())
         let quit = NSMenuItem(
@@ -197,6 +201,14 @@ final class MenuBarController: NSObject {
 
     @objc private func openSettings() {
         Task { @MainActor in MainWindowController.shared.showSettings() }
+    }
+
+    @objc private func openHelp() {
+        Task { @MainActor in MainWindowController.shared.showHelp() }
+    }
+
+    static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     }
 
     @objc private func checkForUpdatesAction() {
