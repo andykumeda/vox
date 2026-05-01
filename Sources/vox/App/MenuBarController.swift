@@ -31,7 +31,6 @@ final class MenuBarController: NSObject {
     private lazy var liveLLMCleaner: CleanupProcessor.LLMCleanFunc = makeLiveLLMCleaner(
         apiKeyProvider: { [keychain] in keychain.read() }
     )
-    private lazy var settingsController = SettingsWindowController(keychain: keychain)
     private lazy var updaterController: SPUStandardUpdaterController = {
         let c = SPUStandardUpdaterController(
             startingUpdater: true,
@@ -141,27 +140,63 @@ final class MenuBarController: NSObject {
         _ = updaterController
 
         let menu = NSMenu()
-        let home = NSMenuItem(title: "Home", action: #selector(openMainWindow), keyEquivalent: "")
-        home.target = self
-        menu.addItem(home)
+        menu.addItem(makeMenuItem(
+            title: "Home", symbol: "house",
+            action: #selector(openMainWindow)
+        ))
+        menu.addItem(makeMenuItem(
+            title: "Meeting", symbol: "person.2.wave.2",
+            action: #selector(openMeetingPanel)
+        ))
+        menu.addItem(makeMenuItem(
+            title: "Dictionary", symbol: "character.book.closed",
+            action: #selector(openDictionary)
+        ))
+        menu.addItem(makeMenuItem(
+            title: "Settings", symbol: "gearshape",
+            action: #selector(openSettings)
+        ))
         menu.addItem(.separator())
-        let updateItem = NSMenuItem(
-            title: "Check for Updates…",
-            action: #selector(checkForUpdatesAction),
-            keyEquivalent: ""
+        menu.addItem(makeMenuItem(
+            title: "Check for Updates…", symbol: "arrow.triangle.2.circlepath",
+            action: #selector(checkForUpdatesAction)
+        ))
+        menu.addItem(makeMenuItem(
+            title: "Help", symbol: "questionmark.circle",
+            action: #selector(showHelpAction(_:))
+        ))
+        menu.addItem(.separator())
+        let quit = NSMenuItem(
+            title: "Quit Vox",
+            action: #selector(NSApp.terminate(_:)),
+            keyEquivalent: "q"
         )
-        updateItem.target = self
-        menu.addItem(updateItem)
-        let helpItem = NSMenuItem(title: "Help", action: #selector(showHelpAction(_:)), keyEquivalent: "")
-        helpItem.target = self
-        menu.addItem(helpItem)
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Vox", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
+        quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+        menu.addItem(quit)
         statusItem.menu = menu
     }
 
+    private func makeMenuItem(title: String, symbol: String, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        return item
+    }
+
     @objc private func openMainWindow() {
-        Task { @MainActor in MainWindowController.shared.showWindow() }
+        Task { @MainActor in MainWindowController.shared.showHome() }
+    }
+
+    @objc private func openMeetingPanel() {
+        Task { @MainActor in MeetingHUDPanel.shared.show() }
+    }
+
+    @objc private func openDictionary() {
+        Task { @MainActor in MainWindowController.shared.showDictionary() }
+    }
+
+    @objc private func openSettings() {
+        Task { @MainActor in MainWindowController.shared.showSettings() }
     }
 
     @objc private func checkForUpdatesAction() {
@@ -319,10 +354,6 @@ final class MenuBarController: NSObject {
         }()
     }
 
-    @objc private func openSettings() {
-        settingsController.show()
-    }
-
     public func showHelp() {
         if helpWindowController == nil {
             helpWindowController = HelpWindowController()
@@ -404,14 +435,11 @@ final class MenuBarController: NSObject {
     }
 
     private func handleMeetingToggle() {
-        guard AppSettings.meetingModeEnabled else {
-            presentMeetingError(MeetingGateError.modeDisabled.userMessage)
-            return
-        }
-        if MeetingTranscriptionSession.shared.isRecording {
-            stopMeetingTranscript()
-        } else {
-            startMeetingTranscript()
+        // Hotkey now toggles the floating meeting panel rather than starting/
+        // stopping the session directly. The session itself is started or
+        // stopped only when the user clicks Record/Stop in the panel.
+        Task { @MainActor in
+            MeetingHUDPanel.shared.toggle()
         }
     }
 

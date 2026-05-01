@@ -8,6 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
+        // `.accessory` keeps Vox out of the Dock — it's primarily a menu-bar
+        // app. Windows that need to come to the front (e.g. the transcript
+        // browser after a meeting ends) raise their `level` to .floating
+        // rather than promoting the activation policy.
         app.setActivationPolicy(.accessory)
         app.run()
     }
