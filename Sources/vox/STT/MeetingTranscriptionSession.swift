@@ -23,7 +23,7 @@ public final class MeetingTranscriptionSession {
             )
         },
         apiKey: { KeychainStore().read() },
-        retainAudio: { AppSettings.meetingRetainAudio }
+        retainAudio: { true }
     )
 
     public let store: MeetingTranscriptStore
@@ -32,7 +32,6 @@ public final class MeetingTranscriptionSession {
     private let chunker: Chunker
     private let transcribe: Transcribe
     private let apiKeyProvider: () -> String?
-    private let retainAudioProvider: () -> Bool
     private let backoffSchedule: [Double]
     private let chunkDuration: Double = 300
 
@@ -93,7 +92,6 @@ public final class MeetingTranscriptionSession {
         self.chunker = chunker
         self.transcribe = transcribe
         self.apiKeyProvider = apiKey
-        self.retainAudioProvider = retainAudio
         self.backoffSchedule = backoffSchedule
     }
 
@@ -127,7 +125,7 @@ public final class MeetingTranscriptionSession {
         let initial = TranscriptSession(
             id: id, title: title, startedAt: now, endedAt: nil,
             status: .recording, chunksTotal: 0, chunksCompleted: 0,
-            segments: [], audioRetained: retainAudioProvider()
+            segments: [], audioRetained: true
         )
         self.session = initial
         lock.unlock()
@@ -343,9 +341,6 @@ public final class MeetingTranscriptionSession {
         }
         for (_, _, dir, _, _) in streams {
             try? FileManager.default.removeItem(at: dir)
-        }
-        if !retainAudioProvider() {
-            try? store.purgeAudio(for: sessionID)
         }
     }
 

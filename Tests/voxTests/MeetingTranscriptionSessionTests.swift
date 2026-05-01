@@ -133,7 +133,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertLessThan(stored.segments.count, 5)
     }
 
-    func testAudioRetainedFalseDeletesAudio() async throws {
+    func testAudioIsRetainedEvenWhenSettingIsFalse() async throws {
         let recorder = MockRecorder()
         let url = tempRoot.appendingPathComponent("c.m4a")
         try Data([0]).write(to: url)
@@ -153,7 +153,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: audioPath))
         try await session.stop()
         await session.waitForCompletion()
-        XCTAssertFalse(FileManager.default.fileExists(atPath: audioPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: audioPath))
     }
 
     func testCanStartSecondSessionAfterFirstCompletes() async throws {
