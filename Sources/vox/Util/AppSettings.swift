@@ -51,6 +51,37 @@ public enum DictationHistoryRetention: String, CaseIterable, Sendable {
     }
 }
 
+/// Retention for raw audio files (dictation WAVs + meeting m4a). Transcripts
+/// are kept indefinitely regardless; only the heavy audio is purged.
+public enum AudioRetention: String, CaseIterable, Sendable {
+    case forever
+    case oneYear
+    case threeMonths
+    case oneMonth
+    case sevenDays
+
+    public var displayName: String {
+        switch self {
+        case .forever:      return "Forever"
+        case .oneYear:      return "1 year"
+        case .threeMonths:  return "3 months"
+        case .oneMonth:     return "1 month"
+        case .sevenDays:    return "7 days"
+        }
+    }
+
+    /// Cutoff date relative to `now`. `nil` means never purge.
+    public func cutoffDate(now: Date = Date()) -> Date? {
+        switch self {
+        case .forever:      return nil
+        case .oneYear:      return now.addingTimeInterval(-365 * 86400)
+        case .threeMonths:  return now.addingTimeInterval(-90 * 86400)
+        case .oneMonth:     return now.addingTimeInterval(-30 * 86400)
+        case .sevenDays:    return now.addingTimeInterval(-7 * 86400)
+        }
+    }
+}
+
 public enum ModeOverride: String, CaseIterable, Sendable {
     case auto      // ContextDetector decides (terminal apps → command, others → prose)
     case prose     // always prose
@@ -146,6 +177,16 @@ enum AppSettings {
     static var meetingRetainAudio: Bool {
         get { UserDefaults.standard.bool(forKey: meetingRetainAudioKey) }
         set { UserDefaults.standard.set(newValue, forKey: meetingRetainAudioKey) }
+    }
+
+    private static let audioRetentionKey = "audioRetention"
+
+    static var audioRetention: AudioRetention {
+        get {
+            let raw = UserDefaults.standard.string(forKey: audioRetentionKey)
+            return raw.flatMap(AudioRetention.init(rawValue:)) ?? .oneMonth
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: audioRetentionKey) }
     }
 
     private static let dictationHistoryRetentionKey = "dictationHistoryRetention"

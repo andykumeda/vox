@@ -431,7 +431,7 @@ final class MenuBarController: NSObject {
         case .command: currentMode = .command
         }
         do {
-            try recorder.start()
+            try recorder.start(mode: currentMode == .prose ? "prose" : "command")
             state = .recording
             sound.play(.start)
         } catch {
@@ -443,15 +443,32 @@ final class MenuBarController: NSObject {
 
     private func endRecordingAndTranscribe() {
         guard state == .recording else { return }
-        let wav = recorder.stop()
+        let recordingURL = recorder.stop()
         sound.play(.stop)
         let mode = currentMode
 
-        // Silence gate: skip the transcription API if too short or too quiet.
+        guard let url = recordingURL else {
+            dlog("recorder.stop returned no file")
+            state = .idle
+            return
+        }
+        // The recording is already on disk (streamed during capture). Read it
+        // back as a buffer for the transcription API call.
+        let wav = (try? Data(contentsOf: url)) ?? Data()
+        dlog("recording saved: \(url.path) bytes=\(wav.count)")
+
+        // Silence gate: skip the transcription API on clearly empty clips.
         // Whisper hallucinates / echoes the system prompt when fed silence.
+        // Tiered by duration so quiet-but-real long recordings still transcribe.
         let (durationSec, rms) = wavStats(wav)
         dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) mode=\(mode)")
-        if durationSec < 0.35 || rms < 150 {
+        let silenceGated: Bool = {
+            if durationSec < 0.35 { return true }
+            if durationSec < 2.0 && rms < 150 { return true }
+            if rms < 40 { return true }
+            return false
+        }()
+        if silenceGated {
             dlog("silence gate tripped — skipping transcription")
             state = .idle
             return

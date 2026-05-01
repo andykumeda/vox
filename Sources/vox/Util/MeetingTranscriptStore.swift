@@ -168,10 +168,50 @@ public final class MeetingTranscriptStore {
                 try FileManager.default.removeItem(at: url)
             }
         }
+        // chunk dirs are also raw audio; drop them along with the source files.
+        for dir in [chunksDirectory(id: id),
+                    chunksDirectory(id: id, source: .local),
+                    chunksDirectory(id: id, source: .remote)] {
+            if FileManager.default.fileExists(atPath: dir.path) {
+                try? FileManager.default.removeItem(at: dir)
+            }
+        }
         if var session = load(id: id) {
             session.audioRetained = false
             try save(session)
         }
+    }
+
+    /// Deletes raw audio (system + mic + chunk dirs) for every completed session
+    /// whose `endedAt` is older than `cutoff`. Transcript JSON is preserved.
+    /// Returns the number of sessions whose audio was purged.
+    @discardableResult
+    public func purgeAudioOlderThan(_ cutoff: Date) -> Int {
+        var purged = 0
+        for session in list() {
+            guard session.audioRetained else { continue }
+            guard let endedAt = session.endedAt, endedAt < cutoff else { continue }
+            // Only purge terminal-state sessions.
+            switch session.status {
+            case .completed, .cancelled, .failed:
+                if (try? purgeAudio(for: session.id)) != nil { purged += 1 }
+            case .recording, .chunking, .transcribing:
+                continue
+            }
+        }
+        return purged
+    }
+
+    /// Total bytes of audio.m4a + mic.m4a across all sessions.
+    public func audioDiskBytes() -> UInt64 {
+        var total: UInt64 = 0
+        for session in list() {
+            for url in [audioFile(id: session.id), micFile(id: session.id)] {
+                let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+                total += UInt64(size)
+            }
+        }
+        return total
     }
 
     /// Cold-recovery sweep: any session left in an in-flight state from a prior process

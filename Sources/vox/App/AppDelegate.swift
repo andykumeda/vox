@@ -14,6 +14,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Relocator.offerMoveToApplicationsIfNeeded()
+        // Patch headers on any dictation WAVs left half-finished by a prior crash.
+        RecordingArchive.repairOrphans()
+        // Purge audio older than the configured retention. Transcript text is
+        // kept indefinitely; only heavy WAV/m4a files are deleted.
+        if let cutoff = AppSettings.audioRetention.cutoffDate() {
+            let dictDeleted = RecordingArchive.purgeOlderThan(cutoff)
+            let meetingDeleted = MeetingTranscriptStore().purgeAudioOlderThan(cutoff)
+            if dictDeleted > 0 || meetingDeleted > 0 {
+                dlog("audio retention sweep: dictation=\(dictDeleted) meeting=\(meetingDeleted) cutoff=\(cutoff)")
+            }
+        }
         menuController.start()
         MeetingTranscriptStore().recoverInFlightSessions()
         DictionaryStore.shared.load()

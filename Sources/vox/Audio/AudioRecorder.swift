@@ -6,18 +6,30 @@ public enum AudioRecorderError: Error {
     case engineStartFailed(Error)
     case noInputNode
     case formatConversionFailed
+    case fileOpenFailed(Error)
 }
 
-/// Records microphone input and produces a 16kHz mono 16-bit PCM WAV blob on stop.
+/// Records microphone input as 16kHz mono 16-bit PCM and streams the WAV to disk
+/// while capture is in progress. The output URL lives under
+/// `RecordingArchive.directory()` so the recording survives crashes, silence
+/// gating, transcription failure, or replays. Header sizes are placeholders
+/// until `stop()` patches them; see `RecordingArchive.repairOrphans` for the
+/// crash-recovery path.
 public final class AudioRecorder {
     private let engine = AVAudioEngine()
-    private var outputBuffer = Data()
     private var converter: AVAudioConverter?
     private let targetSampleRate: Double = 16_000
     private let lock = NSLock()
     private var isRecording = false
 
-    public init() {}
+    private var fileHandle: FileHandle?
+    private var currentURL: URL?
+    private var pcmBytesWritten: UInt32 = 0
+    private let mode: String
+
+    public init(mode: String = "prose") {
+        self.mode = mode
+    }
 
     public func requestPermission() async -> Bool {
         await withCheckedContinuation { cont in
@@ -36,12 +48,21 @@ public final class AudioRecorder {
         }
     }
 
-    public func start() throws {
+    /// Begins capture and opens the on-disk WAV stream. The file is created
+    /// immediately with a placeholder header so that even an instant crash
+    /// leaves a recoverable file behind.
+    public func start(mode modeOverride: String? = nil) throws {
         lock.lock()
         defer { lock.unlock() }
         guard !isRecording else { return }
 
-        outputBuffer.removeAll(keepingCapacity: true)
+        let resolvedMode = modeOverride ?? mode
+        let url: URL
+        do {
+            url = try RecordingArchive.newRecordingURL(mode: resolvedMode)
+        } catch {
+            throw AudioRecorderError.fileOpenFailed(error)
+        }
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
@@ -59,6 +80,30 @@ public final class AudioRecorder {
         }
         self.converter = conv
 
+        // Create the file with a 44-byte placeholder header (sizes = 0).
+        let placeholder = wavHeader(
+            sampleRate: Int(targetSampleRate),
+            channels: 1,
+            bitsPerSample: 16,
+            pcmByteCount: 0
+        )
+        do {
+            try placeholder.write(to: url, options: .atomic)
+        } catch {
+            throw AudioRecorderError.fileOpenFailed(error)
+        }
+
+        let handle: FileHandle
+        do {
+            handle = try FileHandle(forUpdating: url)
+            try handle.seekToEnd()
+        } catch {
+            throw AudioRecorderError.fileOpenFailed(error)
+        }
+        self.fileHandle = handle
+        self.currentURL = url
+        self.pcmBytesWritten = 0
+
         input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.handle(buffer: buffer, targetFormat: targetFormat)
         }
@@ -69,22 +114,29 @@ public final class AudioRecorder {
             isRecording = true
         } catch {
             input.removeTap(onBus: 0)
+            try? handle.close()
+            self.fileHandle = nil
             throw AudioRecorderError.engineStartFailed(error)
         }
     }
 
-    /// Stops recording and returns a complete WAV file as Data.
-    public func stop() -> Data {
+    /// Stops capture, finalises the WAV header on disk, and returns the URL.
+    /// Returns nil if no recording was in progress.
+    @discardableResult
+    public func stop() -> URL? {
         lock.lock()
         defer { lock.unlock() }
-        guard isRecording else { return Data() }
+        guard isRecording else { return nil }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRecording = false
 
-        let pcm = outputBuffer
-        outputBuffer = Data()
-        return wavWrap(pcm: pcm, sampleRate: Int(targetSampleRate), channels: 1, bitsPerSample: 16)
+        guard let handle = self.fileHandle, let url = self.currentURL else { return nil }
+        finaliseHeader(handle: handle, pcmByteCount: pcmBytesWritten)
+        try? handle.close()
+        self.fileHandle = nil
+        self.currentURL = nil
+        return url
     }
 
     private func handle(buffer: AVAudioPCMBuffer, targetFormat: AVAudioFormat) {
@@ -113,35 +165,54 @@ public final class AudioRecorder {
         let bytes = Int(outBuf.frameLength) * 2
         let data = Data(bytes: int16Channel, count: bytes)
         lock.lock()
-        outputBuffer.append(data)
+        if let handle = fileHandle {
+            do {
+                try handle.write(contentsOf: data)
+                let nextTotal = UInt64(pcmBytesWritten) + UInt64(bytes)
+                pcmBytesWritten = UInt32(min(nextTotal, UInt64(UInt32.max)))
+            } catch {
+                // Don't crash the audio thread; the next stop() will still
+                // patch what we did write so far. Repair sweep handles header.
+            }
+        }
         lock.unlock()
     }
 
     // MARK: - WAV header
 
-    private func wavWrap(pcm: Data, sampleRate: Int, channels: Int, bitsPerSample: Int) -> Data {
+    private func wavHeader(
+        sampleRate: Int,
+        channels: Int,
+        bitsPerSample: Int,
+        pcmByteCount: UInt32
+    ) -> Data {
         var header = Data()
         let byteRate = sampleRate * channels * bitsPerSample / 8
         let blockAlign = channels * bitsPerSample / 8
-        let dataSize = UInt32(pcm.count)
-        let chunkSize = 36 + dataSize
+        let chunkSize: UInt32 = pcmByteCount == 0 ? 36 : (36 + pcmByteCount)
 
         header.append(contentsOf: "RIFF".utf8)
-        header.appendLE(UInt32(chunkSize))
+        header.appendLE(chunkSize)
         header.append(contentsOf: "WAVE".utf8)
         header.append(contentsOf: "fmt ".utf8)
-        header.appendLE(UInt32(16))           // fmt chunk size
-        header.appendLE(UInt16(1))            // PCM format
+        header.appendLE(UInt32(16))
+        header.appendLE(UInt16(1))
         header.appendLE(UInt16(channels))
         header.appendLE(UInt32(sampleRate))
         header.appendLE(UInt32(byteRate))
         header.appendLE(UInt16(blockAlign))
         header.appendLE(UInt16(bitsPerSample))
         header.append(contentsOf: "data".utf8)
-        header.appendLE(dataSize)
-
-        header.append(pcm)
+        header.appendLE(pcmByteCount)
         return header
+    }
+
+    private func finaliseHeader(handle: FileHandle, pcmByteCount: UInt32) {
+        let riffSize = UInt32(36) &+ pcmByteCount
+        try? handle.seek(toOffset: 4)
+        try? handle.write(contentsOf: RecordingArchive.littleEndianBytes(riffSize))
+        try? handle.seek(toOffset: 40)
+        try? handle.write(contentsOf: RecordingArchive.littleEndianBytes(pcmByteCount))
     }
 }
 
