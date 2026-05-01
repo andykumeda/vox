@@ -447,11 +447,27 @@ final class MenuBarController: NSObject {
         sound.play(.stop)
         let mode = currentMode
 
-        // Silence gate: skip the transcription API if too short or too quiet.
+        // Always archive the raw WAV first. Recording loss is unrecoverable;
+        // transcription can be re-run later from the saved file.
+        let modeTag = mode == .prose ? "prose" : "command"
+        if let archived = RecordingArchive.save(wav: wav, mode: modeTag) {
+            dlog("recording archived: \(archived.path)")
+        } else {
+            dlog("recording archive failed (wav bytes=\(wav.count))")
+        }
+
+        // Silence gate: skip the transcription API on clearly empty clips.
         // Whisper hallucinates / echoes the system prompt when fed silence.
+        // Tiered by duration so quiet-but-real long recordings still transcribe.
         let (durationSec, rms) = wavStats(wav)
         dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) mode=\(mode)")
-        if durationSec < 0.35 || rms < 150 {
+        let silenceGated: Bool = {
+            if durationSec < 0.35 { return true }
+            if durationSec < 2.0 && rms < 150 { return true }
+            if rms < 40 { return true }
+            return false
+        }()
+        if silenceGated {
             dlog("silence gate tripped — skipping transcription")
             state = .idle
             return
