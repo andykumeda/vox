@@ -66,6 +66,10 @@ final class SidebarSelection: ObservableObject {
 private struct MainWindowRootView: View {
     @ObservedObject var selection: SidebarSelection
 
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
+
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
@@ -86,6 +90,12 @@ private struct MainWindowRootView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
+                Text("Vox \(appVersion)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
             }
             .navigationTitle("Vox")
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)

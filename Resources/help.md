@@ -24,17 +24,64 @@ A replacement that ends with one of these words fires that key after pasting:
 - `escape`, `esc` — Esc
 - `control X` — Ctrl+X (any letter)
 
+## Meetings
+Vox can transcribe meetings end-to-end by capturing system audio (the people on
+the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
+
+- Press the **Meeting hotkey** (default `⌃⌥⇧M`) or pick **Meeting** from the
+  menu-bar dropdown to open the floating Meeting panel.
+- Click the **green Record disc** to start the session. Click the **red Stop
+  square** to end it.
+- Closing the panel with the `X` only hides the UI — recording continues.
+  Re-open the panel via hotkey or menu to see the running timer or stop.
+- When you click Stop, Vox chunks both audio streams, transcribes them via
+  OpenAI, interleaves segments by time, and opens the transcript browser.
+- Meeting audio is kept in `~/Library/Application Support/Vox/MeetingTranscripts/<id>/`
+  so you can replay or re-transcribe later. See **Settings → Recordings storage**
+  to set a retention cutoff (default: delete audio after 1 month, transcripts
+  always kept).
+
+### Permissions for Meetings
+- **Screen Recording** — required for system-audio capture via ScreenCaptureKit.
+- **Microphone** — required for the local-mic stream.
+Grant both in System Settings → Privacy & Security.
+
+### Quality tips
+- Mic-side hallucinations (e.g. "I don't know." × 200) usually mean your mic was
+  muted in Zoom while still hot at the OS level. Vox auto-collapses these
+  cascades but you'll get a cleaner transcript if you mute Vox-side too:
+  unplug the mic or switch the system input to a different device before the
+  call.
+- Whisper invents filler phrases ("you", "thanks for watching", "subscribe")
+  on silent leading audio. Vox drops these automatically.
+
 ## Hotkeys
 Settings → Hotkeys lets you rebind:
 - **Record dictation** (default Fn, press-and-hold).
 - **Toggle mode** (default `⌃⌥M`, tap).
+- **Meeting panel** (default `⌃⌥⇧M`, tap — toggles the floating Meeting panel).
 - **Paste keystroke** (default `⌘V`, sent to the focused app to inject text).
 
 ## Files
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
+- Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
+- Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
+- Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`
 - Logs: `~/Library/Logs/vox.log`
 
 ## Troubleshooting
-- **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`, not the binary directly. TCC attributes Accessibility permissions to the launching process.
-- **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to" must be **Do Nothing**.
-- **Wrong transcription on short phrases** — add a Dictionary entry to fix the specific misfire (e.g., spoken `-shell` → `-l`).
+- **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`,
+  not the binary directly. TCC attributes Accessibility permissions to the
+  launching process.
+- **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
+  must be **Do Nothing**.
+- **Wrong transcription on short phrases** — add a Dictionary entry to fix
+  the specific misfire (e.g., spoken `-shell` → `-l`).
+- **Meeting recording starts but mic is silent** — happens when another app
+  (or a prior meeting session) left CoreAudio holding the input device.
+  Quitting Vox + reselecting the input device in System Settings → Sound
+  usually clears it. `sudo killall coreaudiod` is the heavy hammer.
+- **Dictation captures silence after a meeting** — Vox rebuilds its audio
+  engine on each recording to avoid this, but if you ever see `peak=0` lines
+  in `vox.log` immediately after a meeting, the mic device is stuck. Same
+  recovery as above.
