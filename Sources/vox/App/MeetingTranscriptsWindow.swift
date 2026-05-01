@@ -10,8 +10,7 @@ public final class MeetingTranscriptsWindow {
 
     public func show() {
         if let window = window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            bringToFront(window)
             return
         }
         let view = MeetingTranscriptsView()
@@ -23,8 +22,12 @@ public final class MeetingTranscriptsWindow {
         win.center()
         win.isReleasedWhenClosed = false
         self.window = win
-        win.makeKeyAndOrderFront(nil)
+        bringToFront(win)
+    }
+
+    private func bringToFront(_ window: NSWindow) {
         NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
     }
 }
 

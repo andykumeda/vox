@@ -349,18 +349,30 @@ public final class MeetingTranscriptionSession {
         }
     }
 
-    /// Detect Whisper hallucination patterns on near-silent audio: long monotonous
-    /// repetitions ("yeah, yeah, yeah, ..." for 30+ seconds), single-word loops, and
-    /// very low unique-word ratios over multi-second windows. Returns true if the
-    /// segment should be dropped.
+    /// Known Whisper hallucinations on silent / very low-energy audio. These
+    /// strings are the model's standard fillers when given nothing useful to
+    /// transcribe (especially around leading/trailing silence). Match after
+    /// case-insensitive, punctuation-stripped, whitespace-collapsed normalisation.
+    private static let whisperFillerPhrases: Set<String> = [
+        "you", "thank you", "thanks", "thank you for watching",
+        "thanks for watching", "subscribe", "please subscribe",
+        "bye", "goodbye", "see you next time"
+    ]
+
+    /// Detect Whisper hallucination patterns on near-silent audio: known
+    /// filler phrases ("you", "thanks for watching"), long monotonous
+    /// repetitions ("yeah, yeah, yeah, ..." for 30+ seconds), single-word
+    /// loops, and very low unique-word ratios over multi-second windows.
+    /// Returns true if the segment should be dropped.
     private func isHallucinated(_ seg: TranscriptSegment) -> Bool {
-        let normalized = seg.text
+        let stripped = seg.text
             .lowercased()
-            .replacingOccurrences(of: ",", with: " ")
-            .replacingOccurrences(of: ".", with: " ")
-            .replacingOccurrences(of: "!", with: " ")
-            .replacingOccurrences(of: "?", with: " ")
-        let words = normalized.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+            .replacingOccurrences(of: "[\\p{P}\\p{S}]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        if Self.whisperFillerPhrases.contains(stripped) { return true }
+
+        let words = stripped.split(separator: " ").map(String.init).filter { !$0.isEmpty }
         let total = words.count
         let duration = seg.endTime - seg.startTime
         guard total >= 6 else { return false }

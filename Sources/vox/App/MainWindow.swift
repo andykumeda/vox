@@ -9,6 +9,7 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
     public static let shared = MainWindowController()
 
     private var window: NSWindow?
+    let selection = SidebarSelection()
 
     private override init() { super.init() }
 
@@ -18,6 +19,17 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         if !window.isVisible { window.center() }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    public func showHome()       { showWindow(section: .home) }
+    public func showDictionary() { showWindow(section: .dictionary) }
+    public func showMeeting()    { showWindow(section: .meeting) }
+    public func showSettings()   { showWindow(section: .settings) }
+    public func showHelp()       { showWindow(section: .help) }
+
+    private func showWindow(section: SidebarItem) {
+        selection.current = section
+        showWindow()
     }
 
     private func build() {
@@ -33,7 +45,7 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         win.tabbingMode = .disallowed
         win.delegate = self
 
-        let host = NSHostingController(rootView: MainWindowRootView())
+        let host = NSHostingController(rootView: MainWindowRootView(selection: selection))
         win.contentViewController = host
 
         win.center()
@@ -46,13 +58,21 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+@MainActor
+final class SidebarSelection: ObservableObject {
+    @Published var current: SidebarItem = .home
+}
+
 private struct MainWindowRootView: View {
-    @State private var selection: SidebarItem = .home
+    @ObservedObject var selection: SidebarSelection
 
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                List(SidebarItem.allCases, selection: $selection) { item in
+                List(SidebarItem.allCases, selection: Binding(
+                    get: { selection.current },
+                    set: { if let v = $0 { selection.current = v } }
+                )) { item in
                     Label(item.label, systemImage: item.systemImage).tag(item)
                 }
                 .listStyle(.sidebar)
@@ -70,7 +90,7 @@ private struct MainWindowRootView: View {
             .navigationTitle("Vox")
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
         } detail: {
-            switch selection {
+            switch selection.current {
             case .home:       HomeView()
             case .dictionary: DictionaryDestinationView()
             case .meeting:    MeetingDestinationView()
@@ -82,7 +102,7 @@ private struct MainWindowRootView: View {
     }
 }
 
-private enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
+enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
     case home, dictionary, meeting, settings, help
     var id: String { rawValue }
     var label: String {
