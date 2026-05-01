@@ -6,6 +6,31 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.0</title>
+            <pubDate>Fri, 01 May 2026 19:30:00 +0000</pubDate>
+            <sparkle:version>10</sparkle:version>
+            <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Dictation streamed to disk:</strong> every recording is written to <code>~/Library/Application Support/Vox/Recordings/</code> as it captures, so silence-gated, hallucination-guarded, or crashed dictations leave a recoverable WAV. Crash-recovery patches half-finished WAV headers on launch.</li>
+                    <li><strong>Audio retention sweep:</strong> Settings → Recordings storage. Default 1 month; transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.</li>
+                    <li><strong>Tiered silence gate:</strong> long quiet recordings now transcribe instead of being dropped. Short+quiet still gated to suppress Whisper hallucinations.</li>
+                    <li><strong>Meeting cascade fix:</strong> kills the "I don't know." × N hallucination Whisper produced when the mic was muted in Zoom. Drops runs of 4+ identical short segments.</li>
+                    <li><strong>Whisper filler filter:</strong> drops single-segment hallucinations like "you", "thanks for watching", "subscribe", "bye" that Whisper inserts on silent leading audio.</li>
+                    <li><strong>Manual meeting Record/Stop panel:</strong> meeting hotkey now toggles the floating panel. Click Record to start, Stop to end. Closing the panel hides the UI but doesn't stop the recording. Stop auto-opens the transcript browser.</li>
+                    <li><strong>Status-bar menu refresh:</strong> Meeting / Dictionary / Settings entries deep-link the matching tab in the main window. SF Symbol icons on every row.</li>
+                    <li><strong>Audio engine reset per recording:</strong> dictation no longer captures silent buffers after a meeting session releases the mic.</li>
+                </ul>
+                <p><em>Reminder: macOS TCC re-prompts for Microphone / Input Monitoring / Accessibility on each ad-hoc-signed release. Re-grant in System Settings → Privacy &amp; Security after updating.</em></p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.0/Vox.dmg"
+                sparkle:edSignature="o/KxiH3srPX9wRdxjcQXx0itaZPfsTm9PQKtPyCjqII8v68g49QXUcF1etuHxPcFlr4/eMGyt2y2UGldada2DA=="
+                length="2414040"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.5.1</title>
             <pubDate>Thu, 30 Apr 2026 22:00:00 +0000</pubDate>
             <sparkle:version>9</sparkle:version>
