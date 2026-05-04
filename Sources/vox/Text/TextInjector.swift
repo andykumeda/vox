@@ -155,11 +155,16 @@ public struct TextInjector {
     }
 
     private func schedulePasteboardClear(previous: String?) {
-        guard let previous else { return }
+        // Always clear after the paste lands, even when there was no prior
+        // string content. Otherwise the transcript lingers on the clipboard
+        // (e.g. when the prior clipboard held an image or was empty) and
+        // subsequent ⌘V pastes the transcript again.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             let pb = NSPasteboard.general
             pb.clearContents()
-            pb.setString(previous, forType: .string)
+            if let previous {
+                pb.setString(previous, forType: .string)
+            }
         }
     }
 }
