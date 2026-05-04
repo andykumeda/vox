@@ -318,15 +318,6 @@ struct SettingsView: View {
 
                 HotkeyRecorderField(
                     hotkey: Binding(
-                        get: { AppSettings.pasteHotkey },
-                        set: { AppSettings.pasteHotkey = $0 }
-                    ),
-                    label: "Paste keystroke (sent to focused app)",
-                    allowTriggerModePicker: false
-                )
-
-                HotkeyRecorderField(
-                    hotkey: Binding(
                         get: { AppSettings.meetingHotkey },
                         set: { AppSettings.meetingHotkey = $0 }
                     ),
@@ -334,11 +325,20 @@ struct SettingsView: View {
                     allowTriggerModePicker: false
                 )
 
+                HotkeyRecorderField(
+                    hotkey: Binding(
+                        get: { AppSettings.pasteLastHotkey },
+                        set: { AppSettings.pasteLastHotkey = $0 }
+                    ),
+                    label: "Paste last transcription (disabled by default)",
+                    allowTriggerModePicker: false
+                )
+
                 Button("Reset all to defaults") {
                     AppSettings.recordHotkey = .defaultRecord
                     AppSettings.modeToggleHotkey = .defaultModeToggle
-                    AppSettings.pasteHotkey = .defaultPaste
                     AppSettings.meetingHotkey = .defaultMeeting
+                    AppSettings.pasteLastHotkey = .defaultPasteLast
                 }
                 .controlSize(.small)
             }

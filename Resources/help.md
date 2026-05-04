@@ -9,6 +9,12 @@ Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-ta
 - **Command** — verbatim shell commands, no capitalization, no trailing punctuation. Auto-selected when the focused app is a terminal (Terminal, iTerm, Wave, etc.).
 Press your **Mode toggle** hotkey (default `⌃⌥M`) to force prose regardless of focus. The menu-bar icon shows a lock when prose is forced.
 
+## Verbatim mode
+Smart Cleanup (Settings → Mode) polishes prose dictations — removes false starts, fillers, self-corrections. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
+
+- **Hold Option while pressing Fn** — that recording is pasted raw, no cleanup, no trigger expansion.
+- **Say "verbatim" or "literal" as the first word** of the dictation. The prefix is stripped and the rest is pasted as Whisper transcribed it. Example: speaking *"verbatim he literally said um maybe yeah"* pastes `he literally said um maybe yeah`.
+
 ## Dictionary
 Settings → Dictionary lets you define custom substitutions:
 - Spoken `vox` → replacement `Vox` (proper-noun fix in prose).
@@ -60,7 +66,9 @@ Settings → Hotkeys lets you rebind:
 - **Record dictation** (default Fn, press-and-hold).
 - **Toggle mode** (default `⌃⌥M`, tap).
 - **Meeting panel** (default `⌃⌥⇧M`, tap — toggles the floating Meeting panel).
-- **Paste keystroke** (default `⌘V`, sent to the focused app to inject text).
+- **Paste last transcription** (disabled by default — pick a combo to enable).
+  Re-pastes the most recent dictation into the focused app. Also available
+  from the Vox menu bar → "Paste Last Transcription".
 
 ## Files
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`

@@ -121,17 +121,18 @@ public struct TextInjector {
         }
     }
 
-    /// Writes `text` to the pasteboard and synthesizes the configured paste shortcut.
+    /// Writes `text` to the pasteboard and synthesizes ⌘V into the focused app.
+    /// ⌘V is hardcoded because virtually every macOS responder chain binds Paste
+    /// to it; user-configurable outbound shortcuts silently broke paste in apps
+    /// that didn't honor the rebind.
     /// - Parameters:
     ///   - text: the string to paste
     ///   - keepOnClipboard: when true, leaves `text` on the clipboard so the user
     ///     can manually paste again if focus was lost. When false (default), restores the
     ///     prior clipboard contents after ~400ms.
-    ///   - shortcut: the hotkey combination to synthesize. When nil (default), uses `AppSettings.pasteHotkey`.
     public func paste(
         _ text: String,
-        keepOnClipboard: Bool = false,
-        shortcut: Hotkey? = nil
+        keepOnClipboard: Bool = false
     ) {
         let pb = NSPasteboard.general
         let previous = keepOnClipboard ? nil : pb.string(forType: .string)
@@ -139,21 +140,7 @@ public struct TextInjector {
         pb.clearContents()
         pb.setString(text, forType: .string)
 
-        let hk = shortcut ?? AppSettings.pasteHotkey
-        guard hk.enabled, case .keycode(let kc) = hk.key else {
-            // Fn or invalid binding — fall back to ⌘V (defensive).
-            sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
-            if !keepOnClipboard { schedulePasteboardClear(previous: previous) }
-            return
-        }
-
-        var mods: CGEventFlags = []
-        if hk.modifiers.contains(.command) { mods.insert(.maskCommand) }
-        if hk.modifiers.contains(.control) { mods.insert(.maskControl) }
-        if hk.modifiers.contains(.option)  { mods.insert(.maskAlternate) }
-        if hk.modifiers.contains(.shift)   { mods.insert(.maskShift) }
-
-        sendKeyCombo(keycode: kc, modifiers: mods)
+        sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         if !keepOnClipboard { schedulePasteboardClear(previous: previous) }
     }
 

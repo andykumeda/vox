@@ -63,6 +63,13 @@ final class HotkeyTests: XCTestCase {
         XCTAssertTrue(Hotkey.defaultRecord.isValid)
         XCTAssertTrue(Hotkey.defaultModeToggle.isValid)
         XCTAssertTrue(Hotkey.defaultPaste.isValid)
+        XCTAssertTrue(Hotkey.defaultPasteLast.isValid)
+    }
+
+    func testDefaultPasteLastIsDisabled() {
+        // Paste-last is opt-in; default must ship disabled so the placeholder
+        // combo can't accidentally fire on a fresh install.
+        XCTAssertFalse(Hotkey.defaultPasteLast.enabled)
     }
 
     func testConflictDetectionFindsClash() {

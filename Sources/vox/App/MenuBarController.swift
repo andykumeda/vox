@@ -43,6 +43,7 @@ final class MenuBarController: NSObject {
     private var helpWindowController: HelpWindowController?
 
     private var currentMode: TranscriptionMode = .prose
+    private var currentVerbatim: Bool = false
     private var pulseTimer: Timer?
     private var state: MenuIconState = .idle {
         didSet { refreshIcon() }
@@ -52,9 +53,9 @@ final class MenuBarController: NSObject {
         configureMenu()
         refreshIcon()
 
-        hotkey.onRecordPress = { [weak self] in
-            dlog("Fn press")
-            self?.beginRecording()
+        hotkey.onRecordPress = { [weak self] verbatim in
+            dlog("Fn press verbatim=\(verbatim)")
+            self?.beginRecording(verbatim: verbatim)
         }
         hotkey.onRecordRelease = { [weak self] in
             dlog("Fn release")
@@ -65,6 +66,9 @@ final class MenuBarController: NSObject {
         }
         hotkey.onMeetingToggle = { [weak self] in
             self?.handleMeetingToggle()
+        }
+        hotkey.onPasteLast = { [weak self] in
+            self?.pasteLastTranscription()
         }
 
         NotificationCenter.default.addObserver(
@@ -97,11 +101,25 @@ final class MenuBarController: NSObject {
             self?.reconfigureHotkey()
         }
         NotificationCenter.default.addObserver(
+            forName: .pasteLastHotkeyChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reconfigureHotkey()
+        }
+        NotificationCenter.default.addObserver(
             forName: .meetingTranscriptStoreDidChange,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             self?.refreshIcon()
+        }
+        NotificationCenter.default.addObserver(
+            forName: .dictationHistoryDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.configureMenu()
         }
         // Refresh menu-bar icon when the frontmost app changes so the mode badge
         // reflects auto-detected command vs prose for the new context.
@@ -156,6 +174,15 @@ final class MenuBarController: NSObject {
             title: "Dictionary", symbol: "character.book.closed",
             action: #selector(openDictionary)
         ))
+        menu.addItem(.separator())
+        let pasteLastItem = makeMenuItem(
+            title: "Paste Last Transcription",
+            symbol: "doc.on.clipboard",
+            action: #selector(pasteLastTranscriptionMenuAction)
+        )
+        pasteLastItem.isEnabled = (DictationHistoryStore.shared.last() != nil)
+        menu.addItem(pasteLastItem)
+        menu.addItem(.separator())
         menu.addItem(makeMenuItem(
             title: "Settings", symbol: "gearshape",
             action: #selector(openSettings)
@@ -205,6 +232,20 @@ final class MenuBarController: NSObject {
 
     @objc private func openHelp() {
         Task { @MainActor in MainWindowController.shared.showHelp() }
+    }
+
+    @objc private func pasteLastTranscriptionMenuAction() {
+        pasteLastTranscription()
+    }
+
+    /// Pastes the most recent dictation entry's text into the focused app.
+    /// Triggered by the menu item or by the optional pasteLast global hotkey.
+    private func pasteLastTranscription() {
+        guard let entry = DictationHistoryStore.shared.last(), !entry.text.isEmpty else {
+            sound.play(.error)
+            return
+        }
+        injector.paste(entry.text, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
     }
 
     static var appVersion: String {
@@ -441,7 +482,8 @@ final class MenuBarController: NSObject {
         hotkey.configure(
             record: AppSettings.recordHotkey,
             modeToggle: AppSettings.modeToggleHotkey,
-            meeting: AppSettings.meetingHotkey
+            meeting: AppSettings.meetingHotkey,
+            pasteLast: AppSettings.pasteLastHotkey
         )
         _ = hotkey.start()
     }
@@ -457,7 +499,7 @@ final class MenuBarController: NSObject {
 
     // MARK: - Record / Transcribe
 
-    private func beginRecording() {
+    private func beginRecording(verbatim: Bool = false) {
         guard state == .idle else { return }
         if DictationMutex.isBlocked() {
             dlog("dictation Fn ignored — meeting recording active")
@@ -465,6 +507,7 @@ final class MenuBarController: NSObject {
             NSSound(named: NSSound.Name("Funk"))?.play()
             return
         }
+        currentVerbatim = verbatim
         switch AppSettings.modeOverride {
         case .auto:    currentMode = contextDetector.modeForFrontmost()
         case .prose:   currentMode = .prose
@@ -544,14 +587,19 @@ final class MenuBarController: NSObject {
                     PostProcessor(mode: mode).process(raw)
                 }
 
-                let cleanupEnabled = AppSettings.smartCleanupEnabled
+                // Verbatim modifier (Fn+Option) bypasses smart cleanup so the
+                // raw transcribed text is pasted as-is. Setting `enabled: false`
+                // also skips trigger phrases ("scratch that", "new paragraph"),
+                // which is intentional — verbatim means literal.
+                let verbatimMode = await MainActor.run { self.currentVerbatim }
+                let cleanupEnabled = AppSettings.smartCleanupEnabled && !verbatimMode
                 let cleaner = CleanupProcessor(
                     mode: mode,
                     enabled: cleanupEnabled,
                     llmCleaner: cleanupEnabled ? self.liveLLMCleaner : nil
                 )
                 let cleanedText = await cleaner.process(processed.text)
-                dlog("cleaned=\(cleanedText)")
+                dlog("cleaned=\(cleanedText) verbatim=\(verbatimMode)")
 
                 let wordCount = cleanedText.split(whereSeparator: { $0.isWhitespace }).count
                 let model = AppSettings.transcriptionModel

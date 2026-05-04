@@ -69,6 +69,10 @@ public final class DictationHistoryStore {
         queue.sync { readAll() }
     }
 
+    public func last() -> DictationEntry? {
+        queue.sync { readAll().last }
+    }
+
     public func record(_ entry: DictationEntry) {
         queue.async { [weak self] in
             guard let self else { return }

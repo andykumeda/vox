@@ -77,4 +77,13 @@ public extension Hotkey {
         triggerMode: .tapToggle,
         enabled: true
     )
+
+    /// Re-paste the last completed dictation. Disabled by default — user opts in
+    /// from Settings → Hotkeys. The combo is only a placeholder until then.
+    static let defaultPasteLast = Hotkey(
+        key: .keycode(UInt16(kVK_ANSI_V)),
+        modifiers: [.command, .control, .option],
+        triggerMode: .tapToggle,
+        enabled: false
+    )
 }

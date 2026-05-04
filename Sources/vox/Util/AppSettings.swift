@@ -203,6 +203,7 @@ enum AppSettings {
     private static let modeToggleHotkeyKey = "modeToggleHotkey"
     private static let pasteHotkeyKey = "pasteHotkey"
     private static let meetingHotkeyKey = "meetingHotkey"
+    private static let pasteLastHotkeyKey = "pasteLastHotkey"
 
     static var recordHotkey: Hotkey {
         get { readHotkey(forKey: recordHotkeyKey) ?? .defaultRecord }
@@ -233,6 +234,14 @@ enum AppSettings {
         }
     }
 
+    static var pasteLastHotkey: Hotkey {
+        get { readHotkey(forKey: pasteLastHotkeyKey) ?? .defaultPasteLast }
+        set {
+            writeHotkey(newValue, forKey: pasteLastHotkeyKey)
+            NotificationCenter.default.post(name: .pasteLastHotkeyChanged, object: nil)
+        }
+    }
+
     private static func readHotkey(forKey key: String) -> Hotkey? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(Hotkey.self, from: data)
@@ -250,4 +259,5 @@ extension Notification.Name {
     static let modeToggleHotkeyChanged = Notification.Name("vox.modeToggleHotkeyChanged")
     static let meetingModeChanged = Notification.Name("vox.meetingModeChanged")
     static let meetingHotkeyChanged = Notification.Name("vox.meetingHotkeyChanged")
+    static let pasteLastHotkeyChanged = Notification.Name("vox.pasteLastHotkeyChanged")
 }

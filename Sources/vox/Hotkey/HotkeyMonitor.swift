@@ -6,35 +6,48 @@ import Foundation
 /// Monitors the configured record and mode-toggle hotkeys via a single CGEventTap.
 /// Emits press / release / mode-toggle callbacks on the main queue.
 public final class HotkeyMonitor {
-    public var onRecordPress: (() -> Void)?
+    /// `verbatim` is true when the user pressed the record hotkey while
+    /// holding Option — signals "skip cleanup, paste raw transcript".
+    public var onRecordPress: ((_ verbatim: Bool) -> Void)?
     public var onRecordRelease: (() -> Void)?
     public var onModeToggle: (() -> Void)?
     public var onMeetingToggle: (() -> Void)?
+    public var onPasteLast: (() -> Void)?
 
     private var record: Hotkey
     private var modeToggle: Hotkey
     private var meeting: Hotkey
+    private var pasteLast: Hotkey
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
     private var isRecordActive = false            // pressHold-held or tapToggle-on
     private var pressedKeycode: UInt16?           // captured at keyDown, used at keyUp
+    private var pressedVerbatim = false           // captured at press, replayed for telemetry only
     private var lastModeToggleAt: CFAbsoluteTime = 0
     private var lastMeetingToggleAt: CFAbsoluteTime = 0
+    private var lastPasteLastAt: CFAbsoluteTime = 0
     private static let modeToggleDebounceSeconds: CFAbsoluteTime = 0.150
 
-    public init(record: Hotkey? = nil, modeToggle: Hotkey? = nil, meeting: Hotkey? = nil) {
+    public init(
+        record: Hotkey? = nil,
+        modeToggle: Hotkey? = nil,
+        meeting: Hotkey? = nil,
+        pasteLast: Hotkey? = nil
+    ) {
         self.record = record ?? AppSettings.recordHotkey
         self.modeToggle = modeToggle ?? AppSettings.modeToggleHotkey
         self.meeting = meeting ?? AppSettings.meetingHotkey
+        self.pasteLast = pasteLast ?? AppSettings.pasteLastHotkey
     }
 
     /// Update bindings without restarting the tap.
-    public func configure(record: Hotkey, modeToggle: Hotkey, meeting: Hotkey) {
+    public func configure(record: Hotkey, modeToggle: Hotkey, meeting: Hotkey, pasteLast: Hotkey) {
         self.record = record
         self.modeToggle = modeToggle
         self.meeting = meeting
+        self.pasteLast = pasteLast
         // If recording was active under an old binding, finalize it.
         if isRecordActive {
             isRecordActive = false
@@ -133,6 +146,22 @@ public final class HotkeyMonitor {
             return
         }
 
+        // Paste-last (always tap-toggle on keyDown / flagsChanged, debounced).
+        let pasteLastEvent: Bool
+        switch pasteLast.key {
+        case .fn, .modifier: pasteLastEvent = (type == .flagsChanged)
+        case .keycode:       pasteLastEvent = (type == .keyDown)
+        }
+        if pasteLastEvent,
+           Self.matches(keycode: keycode, flags: flags, hotkey: pasteLast) {
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastPasteLastAt >= Self.modeToggleDebounceSeconds {
+                lastPasteLastAt = now
+                DispatchQueue.main.async { [weak self] in self?.onPasteLast?() }
+            }
+            return
+        }
+
         // Record hotkey.
         let recordEvent: Bool
         switch record.key {
@@ -147,13 +176,14 @@ public final class HotkeyMonitor {
 
         switch record.triggerMode {
         case .pressHold:
-            handlePressHold(type: type, isMatch: isMatch, keycode: keycode)
+            handlePressHold(type: type, isMatch: isMatch, keycode: keycode, flags: flags)
         case .tapToggle:
-            handleTapToggle(type: type, isMatch: isMatch)
+            handleTapToggle(type: type, isMatch: isMatch, flags: flags)
         }
     }
 
-    private func handlePressHold(type: CGEventType, isMatch: Bool, keycode: UInt16?) {
+    private func handlePressHold(type: CGEventType, isMatch: Bool, keycode: UInt16?, flags: CGEventFlags) {
+        let verbatim = flags.contains(.maskAlternate)
         switch type {
         case .flagsChanged:
             // Used for Fn / single-modifier bindings. isMatch reflects whether
@@ -166,17 +196,20 @@ public final class HotkeyMonitor {
             }()
             if isMatch && !isRecordActive {
                 isRecordActive = true
-                DispatchQueue.main.async { [weak self] in self?.onRecordPress?() }
+                pressedVerbatim = verbatim
+                DispatchQueue.main.async { [weak self] in self?.onRecordPress?(verbatim) }
             } else if !isMatch && isRecordActive && isModifierKey {
                 isRecordActive = false
                 pressedKeycode = nil
+                pressedVerbatim = false
                 DispatchQueue.main.async { [weak self] in self?.onRecordRelease?() }
             }
         case .keyDown:
             if isMatch && !isRecordActive {
                 isRecordActive = true
                 pressedKeycode = keycode
-                DispatchQueue.main.async { [weak self] in self?.onRecordPress?() }
+                pressedVerbatim = verbatim
+                DispatchQueue.main.async { [weak self] in self?.onRecordPress?(verbatim) }
             }
         case .keyUp:
             // Modifier flags may already be cleared by the time keyUp fires, so
@@ -184,6 +217,7 @@ public final class HotkeyMonitor {
             if let kc = keycode, kc == pressedKeycode, isRecordActive {
                 isRecordActive = false
                 pressedKeycode = nil
+                pressedVerbatim = false
                 DispatchQueue.main.async { [weak self] in self?.onRecordRelease?() }
             }
         default:
@@ -191,29 +225,19 @@ public final class HotkeyMonitor {
         }
     }
 
-    private func handleTapToggle(type: CGEventType, isMatch: Bool) {
+    private func handleTapToggle(type: CGEventType, isMatch: Bool, flags: CGEventFlags) {
         guard type == .keyDown, isMatch else { return }
+        let verbatim = flags.contains(.maskAlternate)
         isRecordActive.toggle()
         if isRecordActive {
-            DispatchQueue.main.async { [weak self] in self?.onRecordPress?() }
+            pressedVerbatim = verbatim
+            DispatchQueue.main.async { [weak self] in self?.onRecordPress?(verbatim) }
         } else {
+            pressedVerbatim = false
             DispatchQueue.main.async { [weak self] in self?.onRecordRelease?() }
         }
     }
 
-    // MARK: - Temporary back-compat aliases (removed in HK6)
-
-    @available(*, deprecated, message: "Use onRecordPress")
-    public var onPress: (() -> Void)? {
-        get { onRecordPress }
-        set { onRecordPress = newValue }
-    }
-
-    @available(*, deprecated, message: "Use onRecordRelease")
-    public var onRelease: (() -> Void)? {
-        get { onRecordRelease }
-        set { onRecordRelease = newValue }
-    }
 
     // MARK: - Static helper (kept from HK3)
 
@@ -221,9 +245,12 @@ public final class HotkeyMonitor {
         guard hotkey.enabled else { return false }
         switch hotkey.key {
         case .fn:
-            let otherMods: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            // Option is allowed as the "verbatim" modifier — caller derives
+            // verbatim mode from the flags at press time. Other modifiers
+            // disqualify the match.
+            let disallowedMods: CGEventFlags = [.maskCommand, .maskControl, .maskShift]
             return flags.contains(.maskSecondaryFn)
-                && flags.intersection(otherMods).isEmpty
+                && flags.intersection(disallowedMods).isEmpty
                 && keycode == nil
         case .modifier(let m):
             // Single modifier held alone (no key, no other modifiers).
