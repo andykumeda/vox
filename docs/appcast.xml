@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.3</title>
+            <pubDate>Mon, 04 May 2026 20:30:00 +0000</pubDate>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>0.6.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> dictation no longer pastes the prior clipboard contents instead of the transcript. The clipboard restore was racing the target app's paste handler in slower apps (Slack, Electron, browser inputs) — by the time the app actually executed ⌘V, Vox had already restored the prior clipboard. Restore is now delayed to 1.5s and skipped if anything else has written to the clipboard in the meantime.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.3/Vox.dmg"
+                sparkle:edSignature="RwzFVPbYp3Biis+I0wqv11w7HzrB+oUDVZ4M9Vmbo8t3mmo7Npe/7BsAMwPAS7+wugqdMhTtQZhtY0i3fdfyBw=="
+                length="2422694"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.2</title>
             <pubDate>Mon, 04 May 2026 19:45:00 +0000</pubDate>
             <sparkle:version>12</sparkle:version>

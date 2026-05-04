@@ -129,7 +129,9 @@ public struct TextInjector {
     ///   - text: the string to paste
     ///   - keepOnClipboard: when true, leaves `text` on the clipboard so the user
     ///     can manually paste again if focus was lost. When false (default), restores the
-    ///     prior clipboard contents after ~400ms.
+    ///     prior clipboard contents after ~1.5s — long enough that even slow
+    ///     apps (Slack, Electron, web inputs) read the transcript before the
+    ///     restore lands.
     public func paste(
         _ text: String,
         keepOnClipboard: Bool = false
@@ -139,9 +141,12 @@ public struct TextInjector {
 
         pb.clearContents()
         pb.setString(text, forType: .string)
+        let expectedChangeCount = pb.changeCount
 
         sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
-        if !keepOnClipboard { schedulePasteboardClear(previous: previous) }
+        if !keepOnClipboard {
+            schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
+        }
     }
 
     private func sendKeyCombo(keycode: UInt16, modifiers: CGEventFlags) {
@@ -154,13 +159,18 @@ public struct TextInjector {
         up?.post(tap: .cghidEventTap)
     }
 
-    private func schedulePasteboardClear(previous: String?) {
-        // Always clear after the paste lands, even when there was no prior
-        // string content. Otherwise the transcript lingers on the clipboard
-        // (e.g. when the prior clipboard held an image or was empty) and
-        // subsequent ⌘V pastes the transcript again.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+    private func schedulePasteboardClear(previous: String?, expectedChangeCount: Int) {
+        // 1.5s lets even slow paste handlers (Slack, Electron, browser inputs)
+        // read the transcript before we overwrite the clipboard. Earlier
+        // restores raced the target app's paste and inserted the prior
+        // clipboard contents instead of the transcript.
+        //
+        // Guard against clobbering: if changeCount moved, the user (or
+        // another app) wrote new clipboard content in the meantime — leave
+        // it alone rather than overwriting their work.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             let pb = NSPasteboard.general
+            guard pb.changeCount == expectedChangeCount else { return }
             pb.clearContents()
             if let previous {
                 pb.setString(previous, forType: .string)
