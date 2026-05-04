@@ -6,6 +6,26 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.2</title>
+            <pubDate>Mon, 04 May 2026 19:45:00 +0000</pubDate>
+            <sparkle:version>12</sparkle:version>
+            <sparkle:shortVersionString>0.6.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Paste Last Transcription:</strong> new entry in the menu-bar dropdown re-pastes the most recent dictation into the focused app. Works regardless of whether the dictation paste landed in the right window the first time.</li>
+                    <li><strong>Opt-in paste-last hotkey:</strong> Settings → Hotkeys → "Paste last transcription". Disabled by default — pick any combo to enable. Independent of the dictation hotkey.</li>
+                    <li><strong>Outbound paste shortcut hardcoded to ⌘V:</strong> the previous "Paste keystroke (sent to focused app)" setting was a footgun — remapping it broke paste in apps that only honor ⌘V. Removed from Settings.</li>
+                    <li><strong>Fix:</strong> clipboard now restores correctly after dictation when "Keep transcription on clipboard" is off. Prior code skipped the restore when the prior clipboard held an image or was empty, leaving the transcript stuck on the clipboard.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.2/Vox.dmg"
+                sparkle:edSignature="QLnGMooXeHohvmUJgSX042+ZEuwKmKyvk5KpJN9P3+yW45arHQJUFuAoa4H/+QAS4yUtBfy1okCz0dkzlS9cDg=="
+                length="2423022"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.1</title>
             <pubDate>Fri, 01 May 2026 23:30:00 +0000</pubDate>
             <sparkle:version>11</sparkle:version>
