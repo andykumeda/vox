@@ -28,6 +28,11 @@ public final class HotkeyMonitor {
     private var lastModeToggleAt: CFAbsoluteTime = 0
     private var lastMeetingToggleAt: CFAbsoluteTime = 0
     private var lastPasteLastAt: CFAbsoluteTime = 0
+    /// Tracks the prior flagsChanged match state when the record key is
+    /// `.fn` or `.modifier` and triggerMode is `.tapToggle`. Toggle fires
+    /// only on rising edges (false → true) so each physical tap of the
+    /// modifier yields exactly one toggle.
+    private var tapModifierLastMatch: Bool = false
     private static let modeToggleDebounceSeconds: CFAbsoluteTime = 0.150
 
     public init(
@@ -226,7 +231,27 @@ public final class HotkeyMonitor {
     }
 
     private func handleTapToggle(type: CGEventType, isMatch: Bool, flags: CGEventFlags) {
-        guard type == .keyDown, isMatch else { return }
+        // For .fn / .modifier hotkeys the dispatcher routes flagsChanged
+        // events here; treat the rising edge (last=false → now=true) as
+        // the "tap" and ignore the falling edge so each physical tap
+        // toggles exactly once.
+        let isModifierKey: Bool = {
+            switch record.key {
+            case .fn, .modifier: return true
+            case .keycode:       return false
+            }
+        }()
+        let shouldFire: Bool = {
+            if isModifierKey {
+                guard type == .flagsChanged else { return false }
+                let rising = isMatch && !tapModifierLastMatch
+                tapModifierLastMatch = isMatch
+                return rising
+            } else {
+                return type == .keyDown && isMatch
+            }
+        }()
+        guard shouldFire else { return }
         let verbatim = flags.contains(.maskAlternate)
         isRecordActive.toggle()
         if isRecordActive {

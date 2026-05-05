@@ -34,12 +34,21 @@ public final class MeetingHUDPanel {
                         try await MeetingTranscriptionSession.shared.start()
                     } catch {
                         dlog("Meeting start failed: \(error)")
+                        let alert = NSAlert()
+                        alert.messageText = "Meeting Transcription"
+                        alert.informativeText = String(describing: error)
+                        alert.alertStyle = .warning
+                        alert.runModal()
                     }
                 }
             },
             onStop: {
                 Task { @MainActor in
-                    try? await MeetingTranscriptionSession.shared.stop()
+                    do {
+                        try await MeetingTranscriptionSession.shared.stop()
+                    } catch {
+                        dlog("Meeting stop failed: \(error)")
+                    }
                     // Auto-open the transcript browser so the user can read
                     // the just-finished meeting without an extra step.
                     MeetingTranscriptsWindow.shared.show()
