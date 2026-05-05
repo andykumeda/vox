@@ -41,6 +41,7 @@ final class MenuBarController: NSObject {
         return c
     }()
     private var helpWindowController: HelpWindowController?
+    private let meetingDetector = MeetingDetector()
 
     private var currentMode: TranscriptionMode = .prose
     private var currentVerbatim: Bool = false
@@ -108,6 +109,13 @@ final class MenuBarController: NSObject {
             self?.reconfigureHotkey()
         }
         NotificationCenter.default.addObserver(
+            forName: .autoShowMeetingPanelChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reconfigureMeetingDetector()
+        }
+        NotificationCenter.default.addObserver(
             forName: .meetingTranscriptStoreDidChange,
             object: nil,
             queue: .main
@@ -135,6 +143,17 @@ final class MenuBarController: NSObject {
             let granted = await recorder.requestPermission()
             dlog("mic permission granted=\(granted)")
         }
+
+        meetingDetector.onMeetingStarted = { [weak self] in
+            // Don't pop the panel mid-recording; HUD is already up. Don't
+            // pop if user disabled auto-show after we started.
+            guard self != nil else { return }
+            guard AppSettings.autoShowMeetingPanel else { return }
+            guard !MeetingTranscriptionSession.shared.isActive else { return }
+            dlog("MeetingDetector: meeting started — showing HUD")
+            Task { @MainActor in MeetingHUDPanel.shared.show() }
+        }
+        reconfigureMeetingDetector()
 
         let hkStarted = hotkey.start()
         dlog("hotkey.start() -> \(hkStarted)")
@@ -486,6 +505,14 @@ final class MenuBarController: NSObject {
             pasteLast: AppSettings.pasteLastHotkey
         )
         _ = hotkey.start()
+    }
+
+    private func reconfigureMeetingDetector() {
+        if AppSettings.autoShowMeetingPanel {
+            meetingDetector.start()
+        } else {
+            meetingDetector.stop()
+        }
     }
 
     private func handleMeetingToggle() {

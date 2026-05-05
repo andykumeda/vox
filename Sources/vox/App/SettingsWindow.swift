@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
     @State private var meetingMode: Bool = AppSettings.meetingModeEnabled
     @State private var meetingConsent: Bool = AppSettings.meetingConsentAcknowledged
+    @State private var autoShowMeetingPanel: Bool = AppSettings.autoShowMeetingPanel
+    @State private var meetingSummaryEnabled: Bool = AppSettings.meetingSummaryEnabled
     @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider(
         AppSettings.meetingCaptureBackend
     )
@@ -177,6 +179,27 @@ struct SettingsView: View {
                             .font(.caption)
                     }
 
+                    Toggle("Auto-show meeting panel when a call starts", isOn: Binding(
+                        get: { autoShowMeetingPanel },
+                        set: { newValue in
+                            autoShowMeetingPanel = newValue
+                            AppSettings.autoShowMeetingPanel = newValue
+                        }
+                    ))
+                    Text("Detects Teams, Zoom, Meet (web), Webex, Slack huddle, Discord, Skype calls by polling window titles. Pops the floating panel — does NOT auto-record. You still click Record to start.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Generate meeting summary after transcription (gpt-4o-mini)", isOn: Binding(
+                        get: { meetingSummaryEnabled },
+                        set: { newValue in
+                            meetingSummaryEnabled = newValue
+                            AppSettings.meetingSummaryEnabled = newValue
+                        }
+                    ))
+                    Text("Adds ~$0.0005 per meeting. Summary appears at the top of the transcript browser. Won't run if no API key.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
