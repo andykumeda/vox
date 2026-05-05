@@ -114,6 +114,8 @@ enum AppSettings {
     private static let meetingConsentKey = "meetingConsentAcknowledged"
     private static let meetingBackendKey = "meetingCaptureBackend"
     private static let meetingRetainAudioKey = "meetingRetainAudio"
+    private static let autoShowMeetingPanelKey = "autoShowMeetingPanel"
+    private static let meetingSummaryEnabledKey = "meetingSummaryEnabled"
 
     static var keepTranscriptionOnClipboard: Bool {
         get { UserDefaults.standard.bool(forKey: keepKey) }
@@ -177,6 +179,30 @@ enum AppSettings {
     static var meetingRetainAudio: Bool {
         get { UserDefaults.standard.bool(forKey: meetingRetainAudioKey) }
         set { UserDefaults.standard.set(newValue, forKey: meetingRetainAudioKey) }
+    }
+
+    /// Auto-show the floating Meeting panel when a known meeting app
+    /// (Teams, Zoom, Meet, Webex, Slack huddle, etc.) starts a call.
+    /// Default OFF — user opts in. Recording is never auto-started.
+    static var autoShowMeetingPanel: Bool {
+        get { UserDefaults.standard.bool(forKey: autoShowMeetingPanelKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: autoShowMeetingPanelKey)
+            NotificationCenter.default.post(name: .autoShowMeetingPanelChanged, object: nil)
+        }
+    }
+
+    /// Generate an LLM summary of every completed meeting transcript.
+    /// Default ON. Cost is ~$0.0005 per meeting on gpt-4o-mini.
+    static var meetingSummaryEnabled: Bool {
+        get {
+            // Default to true on first read so users get summaries by default.
+            if UserDefaults.standard.object(forKey: meetingSummaryEnabledKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: meetingSummaryEnabledKey)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: meetingSummaryEnabledKey) }
     }
 
     private static let audioRetentionKey = "audioRetention"
@@ -260,4 +286,5 @@ extension Notification.Name {
     static let meetingModeChanged = Notification.Name("vox.meetingModeChanged")
     static let meetingHotkeyChanged = Notification.Name("vox.meetingHotkeyChanged")
     static let pasteLastHotkeyChanged = Notification.Name("vox.pasteLastHotkeyChanged")
+    static let autoShowMeetingPanelChanged = Notification.Name("vox.autoShowMeetingPanelChanged")
 }

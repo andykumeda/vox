@@ -8,6 +8,10 @@ import Foundation
 public final class MeetingTranscriptionSession {
     public typealias Chunker = (URL, URL) async throws -> [URL]
     public typealias Transcribe = (URL, Double, SegmentSource) async throws -> [TranscriptSegment]
+    /// Optional post-completion summarizer. Returns the summary markdown
+    /// or throws. Tests inject a mock; production injects the live OpenAI
+    /// chat-completions client.
+    public typealias Summarize = ([TranscriptSegment]) async throws -> String
 
     public static let shared = MeetingTranscriptionSession(
         store: MeetingTranscriptStore(),
@@ -24,7 +28,13 @@ public final class MeetingTranscriptionSession {
             )
         },
         apiKey: { KeychainStore().read() },
-        retainAudio: { AppSettings.meetingRetainAudio }
+        retainAudio: { AppSettings.meetingRetainAudio },
+        summarize: { segments in
+            try await MeetingSummarizer(
+                apiKeyProvider: { KeychainStore().read() }
+            ).summarize(segments: segments)
+        },
+        summarizeEnabled: { AppSettings.meetingSummaryEnabled }
     )
 
     public let store: MeetingTranscriptStore
@@ -34,6 +44,8 @@ public final class MeetingTranscriptionSession {
     private let transcribe: Transcribe
     private let apiKeyProvider: () -> String?
     private let retainAudioProvider: () -> Bool
+    private let summarize: Summarize?
+    private let summarizeEnabledProvider: () -> Bool
     private let backoffSchedule: [Double]
     private let chunkDuration: Double = 300
 
@@ -73,6 +85,8 @@ public final class MeetingTranscriptionSession {
         transcribe: @escaping Transcribe,
         apiKey: @escaping () -> String?,
         retainAudio: @escaping () -> Bool,
+        summarize: Summarize? = nil,
+        summarizeEnabled: @escaping () -> Bool = { false },
         backoffSchedule: [Double] = [1, 2, 4, 8, 16, 30]
     ) {
         self.store = store
@@ -95,6 +109,8 @@ public final class MeetingTranscriptionSession {
         self.transcribe = transcribe
         self.apiKeyProvider = apiKey
         self.retainAudioProvider = retainAudio
+        self.summarize = summarize
+        self.summarizeEnabledProvider = summarizeEnabled
         self.backoffSchedule = backoffSchedule
     }
 
@@ -357,6 +373,27 @@ public final class MeetingTranscriptionSession {
         }
         if !retainAudioProvider() {
             try? store.purgeAudio(for: sessionID)
+        }
+
+        await runSummarizationIfEnabled()
+    }
+
+    /// Calls `summarize` on the completed session's segments and persists
+    /// the result. Failures are logged and swallowed — a missing summary
+    /// is non-fatal.
+    private func runSummarizationIfEnabled() async {
+        guard summarizeEnabledProvider(), let summarize = summarize else { return }
+        let snapshot: TranscriptSession? = {
+            lock.lock(); defer { lock.unlock() }
+            return session
+        }()
+        guard let s = snapshot, s.status == .completed, !s.segments.isEmpty else { return }
+        do {
+            let summary = try await summarize(s.segments)
+            updateSession { $0.summary = summary }
+            dlog("Meeting summary generated (\(summary.count) chars)")
+        } catch {
+            dlog("Meeting summary failed: \(error)")
         }
     }
 

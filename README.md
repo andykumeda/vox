@@ -129,7 +129,23 @@ Vox transcribes meetings end-to-end by capturing **system audio** (Zoom/Meet/etc
 - On Stop, Vox chunks both audio streams, transcribes them via OpenAI, interleaves segments by wall-clock time, and opens the transcript browser.
 - Meeting audio + transcripts persist at `~/Library/Application Support/Vox/MeetingTranscripts/<id>/`. Audio is auto-purged per Settings → Recordings storage; transcripts kept forever.
 
-Permissions: **Screen Recording** (system audio), **Microphone** (local stream).
+Permissions: **Screen Recording** (system audio + window-title polling for auto-detect), **Microphone** (local stream).
+
+### Auto-show panel when a call starts (opt-in)
+
+Settings → Meeting → **Auto-show meeting panel when a call starts**. Vox polls window titles every ~3 seconds and pops the floating Meeting panel as soon as it sees a known meeting in progress:
+
+- Teams desktop (`Meeting in`, `Meeting with`, `Meeting compact view`, `Call with`, `(Meeting)`)
+- Zoom desktop (`Zoom Meeting`, `Zoom Webinar`)
+- Webex desktop (`Webex Meeting`, `Webex Personal Room`)
+- Slack huddle, Discord voice/video, Skype call
+- Web meetings: Google Meet, Zoom web, Webex web, Teams web (active tab in Chrome / Safari / Edge / Arc / Brave / Firefox)
+
+Recording is **never** auto-started — the user still clicks Record on the panel. Detection requires Screen Recording permission so `CGWindowListCopyWindowInfo` can return window titles. To debug detection, run `swift scripts/dump-windows.swift` from terminal (note: terminal-launched scripts will see empty titles unless you grant Terminal Screen Recording too).
+
+### Meeting summary (opt-out)
+
+Settings → Meeting → **Generate meeting summary after transcription** (default ON). After Vox finishes transcribing, segments are sent to gpt-4o-mini with a structured prompt; the markdown summary (Summary / Key decisions / Action items) is stored on the transcript and rendered in a disclosure section at the top of the transcript browser. Cost is ~$0.0005 per meeting. If the API key is missing or the call fails, summary is silently skipped — the transcript still works.
 
 ## Menu bar icon
 

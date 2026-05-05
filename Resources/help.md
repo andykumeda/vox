@@ -52,6 +52,30 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
 - **Microphone** — required for the local-mic stream.
 Grant both in System Settings → Privacy & Security.
 
+### Auto-show meeting panel
+Settings → Meeting → **Auto-show meeting panel when a call starts**. When
+on, Vox polls window titles every few seconds and pops the floating
+panel as soon as a known meeting is detected:
+- Teams (desktop + new "work or school" variant)
+- Zoom desktop
+- Webex desktop
+- Slack huddle
+- Discord voice/video call
+- Skype call
+- Google Meet, Microsoft Teams web, Zoom web, Webex web (active tab in
+  Chrome / Safari / Edge / Arc / Brave / Firefox)
+
+Recording is **never** auto-started — you still click Record on the
+panel when you're ready. Disable any time in Settings.
+
+### Meeting summary
+Settings → Meeting → **Generate meeting summary after transcription**
+(default on). After Vox finishes transcribing, it sends the segments
+to gpt-4o-mini and stores a markdown summary with key decisions and
+action items. The summary appears at the top of the transcript browser
+(click the **Summary** disclosure to expand). Cost ~$0.0005 per
+meeting. Summary is skipped silently if no API key.
+
 ### Quality tips
 - Mic-side hallucinations (e.g. "I don't know." × 200) usually mean your mic was
   muted in Zoom while still hot at the OS level. Vox auto-collapses these

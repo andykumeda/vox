@@ -170,6 +170,23 @@ struct MeetingTranscriptsView: View {
                     }.padding()
                     Divider()
                 }
+                if let summary = s.summary, !summary.isEmpty {
+                    DisclosureGroup {
+                        Text(summary)
+                            .textSelection(.enabled)
+                            .font(.callout)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkles")
+                            Text("Summary").font(.subheadline).bold()
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    Divider()
+                }
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(s.segments.enumerated()), id: \.offset) { _, seg in
