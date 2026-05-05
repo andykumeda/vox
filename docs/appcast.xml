@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.4</title>
+            <pubDate>Tue, 05 May 2026 00:30:00 +0000</pubDate>
+            <sparkle:version>14</sparkle:version>
+            <sparkle:shortVersionString>0.6.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Verbatim / literal prefix:</strong> say "verbatim" or "literal" as the first word of a prose dictation and Vox skips both trigger expansion and the LLM cleanup pass. The prefix is stripped; the rest is pasted as Whisper transcribed it. In-band escape hatch so a single dictation can stay literal without toggling Smart Cleanup off globally. Mid-sentence "verbatim" / "literal" is left intact.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.4/Vox.dmg"
+                sparkle:edSignature="ELjhm/hZmNVBvgV3TLRMKDkHxcZ24LdbvvL9po3PBW16FR7/3w2z+MbHuCXb+NXuWReOOdwET7orAc6X60V6BA=="
+                length="2423326"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.3</title>
             <pubDate>Mon, 04 May 2026 20:30:00 +0000</pubDate>
             <sparkle:version>13</sparkle:version>
