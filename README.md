@@ -1,20 +1,29 @@
 # Vox
 
-Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn** to speak, release to transcribe with OpenAI's `gpt-4o-mini-transcribe` (default) or `gpt-4o-transcribe` / `whisper-1`. Output is pasted at the cursor in whichever app has focus.
+Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn**, speak, release — Vox transcribes via OpenAI and pastes at the cursor in whichever app has focus. Also includes a meeting-transcription mode (system audio + your mic in parallel), a personal dictionary, and an opt-in LLM cleanup pass.
 
-Context-aware: when the frontmost app is a terminal (`Terminal.app`, `iTerm2`, `Warp`, `Ghostty`, `Alacritty`, `kitty`, `WezTerm`, `Hyper`, `Wave`, `Tabby`), Vox switches to **command mode** — no auto-capitalize, no trailing period, aggressive number-to-digit conversion, spoken-punctuation expansion (`dash`, `dot`, `pipe`), NATO phonetic letters after dashes, and trailing-keyword key-event synthesis (`tab`, `return`, `escape`, `control X`). Otherwise, **prose mode** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation.
+Default transcription model is `gpt-4o-mini-transcribe`. Switchable to `gpt-4o-transcribe` (best quality) or `whisper-1`.
+
+## Modes
+
+Vox runs in one of two text-shaping modes:
+
+- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation.
+- **Command** — no auto-capitalize, no trailing period, aggressive number-to-digit conversion, spoken-punctuation expansion (`dash`, `dot`, `pipe`), NATO phonetic letters after dashes, and trailing-keyword key-event synthesis (`tab`, `return`, `escape`, `control X`).
+
+Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`, `Warp`, `Ghostty`, `Alacritty`, `kitty`, `WezTerm`, `Hyper`, `Wave`, `Tabby`) → command; everything else → prose. Override via Settings → Mode (`auto` / `always prose` / `always command`) or the **mode-toggle hotkey** (default `⌃⌥M`).
 
 ## Requirements
 
-- macOS 13+ on Apple Silicon (M1/M2/M3/M4)
-- Xcode 16+ command-line tools (`xcode-select --install`) — ships with Swift 6
-- An [OpenAI API key](https://platform.openai.com/api-keys)
-- `git` (preinstalled on macOS)
-- *Optional but watch out:* if you have Homebrew OpenSSL 3 on `PATH` ahead of `/usr/bin/openssl`, `create-dev-cert.sh` may fail with `MAC verification failed` during the PKCS#12 import. The script pins `/usr/bin/openssl` internally to avoid this; if you still see it, run `which openssl` to confirm.
+- macOS 13+ on Apple Silicon (M1/M2/M3/M4).
+- Xcode 16+ command-line tools (`xcode-select --install`) — ships with Swift 6.
+- An [OpenAI API key](https://platform.openai.com/api-keys).
+- `git` (preinstalled on macOS).
+- *Watch out:* if Homebrew OpenSSL 3 is on `PATH` ahead of `/usr/bin/openssl`, `create-dev-cert.sh` may fail with `MAC verification failed` during the PKCS#12 import. The script pins `/usr/bin/openssl` internally; if you still see it, run `which openssl`.
 
-## Quick start (recommended)
+## Quick start
 
-From a fresh Mac, end to end:
+End-to-end from a fresh Mac:
 
 ```sh
 xcode-select --install                          # if not already installed
@@ -23,17 +32,17 @@ cd vox
 ./scripts/setup.sh
 ```
 
-`setup.sh` is one-shot bootstrap. Preflight checks (Xcode tools, Swift, `/usr/bin/openssl`, `security` CLI, arch), creates the `vox-dev` signing identity if missing (will prompt for your **login keychain password**), builds, kills any old running Vox, launches the new build, and prints the permission-grant checklist. Idempotent — safe to re-run.
+`setup.sh` is idempotent. Preflight checks (Xcode tools, Swift, `/usr/bin/openssl`, `security` CLI, arch), creates the `vox-dev` self-signed identity if missing (prompts for **login keychain password**), builds, kills any old running Vox, launches the new build, prints the permission-grant checklist.
 
-After `setup.sh` finishes:
+Then:
 
-1. Grant **Microphone**, **Input Monitoring**, **Accessibility** when macOS prompts (or in System Settings → Privacy & Security if a prompt was missed).
-2. Click the menu-bar bubble icon → **Settings…** → paste OpenAI API key → **Save** → click **Always Allow** on the keychain prompt.
+1. Grant **Microphone**, **Input Monitoring**, **Accessibility** when macOS prompts (or in System Settings → Privacy & Security if a prompt was missed). Meeting transcription also needs **Screen Recording**.
+2. Click the menu-bar Vox icon → **Settings** → paste OpenAI API key → **Save** → click **Always Allow** on the keychain prompt.
 3. Hold **Fn**, speak, release.
 
 ## Updating
 
-Already have Vox installed and want to upgrade to a newer release? See [docs/UPDATING.md](docs/UPDATING.md). Note: the release DMG is ad-hoc signed, so each update drops Input Monitoring / Accessibility / Microphone grants — re-grant them in System Settings after replacing the bundle.
+Vox ships in-app updates via **Sparkle**. Click the menu-bar icon → **Check for Updates…**, or wait for the daily auto-check. Releases are ad-hoc-signed, so each update drops Microphone / Input Monitoring / Accessibility grants — re-grant in System Settings → Privacy & Security after Sparkle reinstalls. See [docs/UPDATING.md](docs/UPDATING.md) for the manual fallback.
 
 ## Manual build
 
@@ -45,9 +54,7 @@ open dist/Vox.app
 
 `create-dev-cert.sh` creates a self-signed `vox-dev` identity in the login keychain. Signing every build with the same identity keeps macOS **TCC permissions sticky across rebuilds**. Skip it and the build falls back to ad-hoc signing — every rebuild revokes Accessibility / Input Monitoring / Microphone, forcing re-permit.
 
-`build-app.sh` probes for the `vox-dev` identity in two phases: (a) `find-identity -v -p codesigning` against the default search list (cert in System keychain, key in login — typical), then (b) the login keychain alone without `-v` (MDM-managed Macs where the cert can't reach System trust). Designated requirement is pinned to the cert SHA so Keychain ACLs don't re-prompt every rebuild.
-
-## Launch
+`build-app.sh` probes for the `vox-dev` identity in two phases: (a) `find-identity -v -p codesigning` against the default search list, then (b) the login keychain alone (MDM-managed Macs where the cert can't reach System trust). Designated requirement is pinned to the cert SHA so Keychain ACLs don't re-prompt every rebuild.
 
 Always launch via `open`, not by running the binary directly:
 
@@ -57,77 +64,96 @@ open dist/Vox.app
 
 Running `./dist/Vox.app/Contents/MacOS/vox` from a shell makes the process a child of the terminal, and TCC attributes Accessibility grants to the terminal instead of Vox — paste silently fails.
 
-### First-run permissions
+## Hotkeys
 
-macOS will prompt three times. Grant each:
+Settings → Hotkeys lets you rebind:
 
-1. **Microphone** — required to record audio.
-2. **Input Monitoring** — required for the `CGEventTap` that watches the Fn key.
-3. **Accessibility** — required to synthesize Cmd+V into the focused app.
+| Hotkey | Default | Trigger | Purpose |
+|---|---|---|---|
+| Record dictation | `Fn` | press-and-hold | hold to record, release to transcribe + paste |
+| Mode toggle | `⌃⌥M` | tap | flip between prose ↔ command (skips `.auto`) |
+| Meeting panel | `⌃⌥⇧M` | tap | toggles the floating Meeting Record/Stop panel |
+| Paste last transcription | *(disabled)* | tap | re-pastes the most recent dictation. Pick a combo to enable. |
 
-If Fn doesn't trigger: **System Settings → Keyboard → "Press 🌐 key to"** → set to *Do Nothing* (or rebind), otherwise macOS intercepts Fn for the emoji/dictation picker.
+Press-and-hold can be flipped to **tap-toggle** for the record hotkey.
+
+Hold **Option while pressing the record hotkey** to dictate **verbatim** — skip cleanup + trigger expansion, paste raw transcription.
+
+## Verbatim / literal
+
+Two ways to bypass Smart Cleanup for a single dictation:
+
+- **Hold Option + record hotkey** — that recording is pasted raw.
+- **Say "verbatim" or "literal" as the first word.** The prefix is stripped, the rest is pasted as Whisper transcribed it. Example: speaking *"verbatim he literally said um maybe yeah"* pastes `he literally said um maybe yeah`.
 
 ## Settings
 
-Click the menu bar bubble icon → **Settings…**
+Click the menu-bar Vox icon → **Settings**:
 
 - **OpenAI API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `openai-api-key`). Click **Always Allow** on the keychain prompt the first time.
-- **Model** — pick `gpt-4o-mini-transcribe` (~$0.003/min, default), `gpt-4o-transcribe` (~$0.006/min, best quality), or `whisper-1` (~$0.006/min, no prompt-following).
+- **Model** — `gpt-4o-mini-transcribe` (~$0.003/min, default), `gpt-4o-transcribe` (~$0.006/min, best quality), or `whisper-1` (~$0.006/min, no prompt-following).
 - **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`.
-- **Always use prose mode** — overrides terminal context detection. Flip on when dictating prose into a terminal (commit messages, READMEs, chat).
-- **Keep transcription on clipboard after paste** — when on, transcribed text remains on your clipboard so you can Cmd+V again. When off (default), prior clipboard is restored ~400 ms after paste.
+- **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`.
+- **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes false starts, fillers, self-corrections in prose. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
+- **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
+- **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
+- **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
+- **Paste behavior** → **Keep transcription on clipboard after paste** — when on, transcribed text remains on your clipboard. When off (default), prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime.
+- **Hotkeys** — rebind any of the four hotkeys (see table above).
+
+## Dictionary
+
+Settings → **Dictionary** lets you define custom substitutions:
+
+- Spoken `vox` → replacement `Vox` (proper-noun fix in prose).
+- Spoken `next field` → replacement `next tab` to insert "next" + Tab key.
+- Mode scope: command, prose, or both.
+- "Match only at start" anchors to the first word of an utterance.
+
+12 built-in fixups are active behind the scenes (e.g. `ls -shell` → `ls -l`). To silence one: **Reveal in Finder**, edit `dictionary.json`, set `"enabled": false`. Reloads automatically.
+
+A replacement that ends with one of these words fires that key after pasting:
+
+- `tab` — Tab (needs at least one preceding word)
+- `return`, `enter`, `newline` — Return
+- `escape`, `esc` — Esc
+- `control X` — Ctrl+X (any letter)
+
+## Meeting transcription
+
+Vox transcribes meetings end-to-end by capturing **system audio** (Zoom/Meet/etc, via ScreenCaptureKit) and your **local mic** in parallel.
+
+- Press the meeting hotkey (default `⌃⌥⇧M`) or pick **Meeting** from the menu bar to open the floating panel.
+- Click the green **Record** disc to start. Click the red **Stop** square to end.
+- Closing the panel with `X` only hides the UI — recording continues. Re-open the panel via hotkey or menu to see the running timer or stop.
+- On Stop, Vox chunks both audio streams, transcribes them via OpenAI, interleaves segments by wall-clock time, and opens the transcript browser.
+- Meeting audio + transcripts persist at `~/Library/Application Support/Vox/MeetingTranscripts/<id>/`. Audio is auto-purged per Settings → Recordings storage; transcripts kept forever.
+
+Permissions: **Screen Recording** (system audio), **Microphone** (local stream).
 
 ## Menu bar icon
 
 | State | Icon | Color |
 |---|---|---|
-| Idle | `text.bubble` outline | template (adapts) |
-| Recording | `text.bubble.fill` | red |
-| Transcribing | `text.bubble.fill` | orange, pulsing |
-| Error | `exclamationmark.triangle` | template |
+| Idle (prose) | chrome-V on squircle | cyan/teal |
+| Idle (command/terminal) | chrome-V on squircle | amber/gold |
+| Recording | V with red dot badge | — |
+| Transcribing | V with orange dot badge, pulsing | — |
+| Meeting recording | filled record circle | red, pulsing |
+| Meeting transcribing | waveform circle | orange, pulsing |
+| Error | exclamationmark.triangle | template |
 
-The orange macOS recording indicator dot also appears whenever Vox holds the mic — that's a system privacy feature, not a Vox icon.
+The orange macOS recording indicator dot also appears whenever Vox holds the mic — that's a system privacy feature.
 
-## Usage
+The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Hold **Fn**, speak, release. Bubble turns red while recording, orange-pulsing while transcribing, then pastes at the cursor.
+## Files
 
-### Prose mode
-
-- Capitalizes the first letter of each sentence.
-- Detects questions: sentences starting with `is/are/was/were/do/does/did/have/has/will/would/should/can/could/may/might/must/who/what/when/where/why/how/whose/which/shall` get `?` instead of `.` when terminator is missing.
-- Ensures `.`, `!`, `?` are followed by a space.
-- Pastes text without a trailing space, then synthesizes a discrete **Space keypress** for inter-sentence separation. (Some apps strip trailing whitespace from pasted text — keystrokes can't be stripped.)
-- Spelled-out numbers ≥10 or compound numbers convert to digits. Bare singles `<10` stay as words ("I have three apples").
-- URLs, domains, IP addresses, version strings, and common file names are shielded from sentence-splitting.
-
-### Command mode
-
-Triggered when frontmost app is a terminal (or override via Settings).
-
-- Lowercases mis-capitalized first letter, strips trailing `.!?`.
-- Aggressive number conversion — `head -n three` → `head -n 3`.
-- Splits joined flags — `ls-l` → `ls -l`.
-- Spoken punctuation:
-  - `dash` / `minus` → `-`
-  - `double dash` / `double minus` → `--`
-  - `dot` → `.` (glues filename: `readme dot md` → `readme.md`)
-  - `pipe` → `|`
-- NATO phonetic letters after `-` or `--`: `dash lima` → `-l`, `minus romeo foxtrot` → `-rf`, `double dash help` → `--help`.
-- Trailing-keyword key-event synthesis (stripped from text, fired as keystroke after paste):
-
-| Spoken | Action |
-|---|---|
-| `tab` (with prefix text) | sends Tab |
-| `return` / `enter` / `newline` | sends Return (fires alone too) |
-| `escape` / `esc` | sends Escape (fires alone too) |
-| `control X` / `ctrl X` (X = letter A–Z) | sends Ctrl+X (fires alone too) |
-
-Multiple keys allowed: `brew upd tab return` → pastes `brew upd`, sends Tab (completes to `brew update`), then Return (executes).
-
-### Silence gate
-
-Empty or very quiet recordings are dropped before hitting the transcription API (≥0.35s + RMS ≥150). Speech models hallucinate or echo the system prompt when fed silence.
+- Dictionary: `~/Library/Application Support/Vox/dictionary.json`
+- Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
+- Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
+- Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`
+- Logs: `~/Library/Logs/vox.log`
 
 ## Log file
 
@@ -135,28 +161,36 @@ Empty or very quiet recordings are dropped before hitting the transcription API 
 tail -f ~/Library/Logs/vox.log
 ```
 
-Lines: Fn press/release, WAV byte counts, raw API response, post-processor output (text + suffixKeys + word count + cost estimate).
+Lines: Fn press/release, AVAudioEngine state, WAV byte counts + RMS + duration, raw API response, post-processor output (text + suffixKeys + word count + cost estimate), hallucination-guard hits, meeting session lifecycle.
 
 ## Project layout
 
 ```
 Package.swift            swift-tools-version 6.0, macOS 13+, Swift 5 language mode
-Resources/               Info.plist, vox.entitlements, AppIcon.icns
+Resources/               Info.plist, vox.entitlements, AppIcon.icns, help.md, AppIcon variants
 scripts/
+  setup.sh               One-shot bootstrap (idempotent)
+  create-dev-cert.sh     One-time: persistent "vox-dev" code-signing identity
   build-app.sh           Builds release binary, wraps as .app, codesigns
-  create-dev-cert.sh     One-time: creates stable "vox-dev" code-signing identity
   generate-icon.sh       Renders AppIcon.icns from Swift + sips + iconutil
   generate-icon.swift    SF Symbols on gradient → 1024×1024 PNG
   make-dmg.sh            Drag-to-Applications DMG packager
+  run-dictation-regression.sh  Runs the dictation regression suite
 Sources/vox/
-  App/                   AppDelegate, MenuBarController (icon/state machine), SettingsWindow (SwiftUI)
-  Audio/                 AudioRecorder — AVAudioEngine → 16 kHz mono 16-bit WAV
+  App/                   AppDelegate, MenuBarController (icon/state machine), MainWindow, SettingsWindow, MeetingHUDPanel, MeetingTranscriptsWindow, HelpWindow
+  Audio/                 AudioRecorder — AVAudioEngine → 16 kHz mono 16-bit WAV (streamed to disk)
   Context/               ContextDetector — NSWorkspace frontmost → prose/command
-  Hotkey/                HotkeyMonitor — CGEventTap on Fn (kCGEventFlagMaskSecondaryFn)
-  STT/                   OpenAITranscriber, TranscriptionMode (per-mode prompt)
-  Text/                  PostProcessor, NumberNormalizer, TextInjector (paste + sendKey)
-  Util/                  KeychainStore, SoundPlayer, AppSettings, UsageTracker
-Tests/voxTests/          79 unit tests covering text-transform pipeline + context detection
+  Hotkey/                Hotkey, HotkeyMonitor (CGEventTap), HotkeyRecorder (NSEvent capture for Settings UI)
+  Meeting/               MeetingTranscriptionSession, MeetingMicCapture, ScreenCaptureKit system-audio tap, SilenceTrim, MeetingChunker, MeetingTranscriptStore, MeetingPreflight
+  STT/                   OpenAITranscriber, TranscriptionMode (per-mode prompt), hallucination guards
+  Text/                  PostProcessor, NumberNormalizer, CleanupProcessor (LLM + triggers + verbatim/literal prefix), DictionaryStore + DictionaryMatcher, TextInjector (paste + sendKey)
+  Util/                  KeychainStore, SoundPlayer, AppSettings, UsageTracker, DictationHistoryStore, RecordingArchive, Log
+docs/
+  appcast.xml            Sparkle update feed (served via GitHub Pages)
+  UPDATING.md            Update procedure (auto + manual fallback)
+  dictation-regression.md  Regression-suite policy + thresholds
+  index.html             Pages landing
+Tests/voxTests/          258 unit tests covering text pipeline, hotkey, meeting, retention, history
 ```
 
 ## Testing
@@ -165,56 +199,57 @@ Tests/voxTests/          79 unit tests covering text-transform pipeline + contex
 swift test
 ```
 
-## Distribution
-
-### Build a DMG
+Dictation regression with merge-blocking thresholds:
 
 ```sh
+./scripts/run-dictation-regression.sh
+```
+
+See [docs/dictation-regression.md](docs/dictation-regression.md) for thresholds and CI gating.
+
+## Releasing
+
+The Sparkle EdDSA private key for signing updates lives **on the kumedaa Dev workstation** (this Mac). Releases must be cut from there.
+
+```sh
+# 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist
+# 2. Build + sign DMG
 ./scripts/make-dmg.sh
-# → dist/Vox.dmg (drag-to-Applications installer)
+.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg
+# → prints sparkle:edSignature="…" length="…"
+
+# 3. Add a new <item> to docs/appcast.xml at the top, with the signature/length above
+# 4. Commit, tag, push
+git add Resources/Info.plist docs/appcast.xml
+git commit --no-gpg-sign -m "release: 0.X.Y — …"
+git tag v0.X.Y
+git push origin main && git push origin v0.X.Y
+
+# 5. Publish GitHub release with the DMG attached
+gh release create v0.X.Y --title "Vox 0.X.Y" --notes "…" dist/Vox.dmg
 ```
 
-### Publish a GitHub release
+GitHub Pages serves `docs/appcast.xml` at `https://andykumeda.github.io/vox/appcast.xml` (the `SUFeedURL` in `Info.plist`). Pages must remain enabled — disabling it breaks Sparkle for every existing install.
 
-```sh
-gh release create v0.1.0 --title "Vox 0.1.0" \
-    --notes "Initial release." dist/Vox.dmg
-```
+DMG asset URL is `https://github.com/andykumeda/vox/releases/download/v<version>/Vox.dmg`. The repo must remain **public** for anonymous Sparkle download; private repos block unauthenticated asset fetches.
 
-### First-launch on another Mac
+### First-launch on another Mac (no Sparkle)
 
 The DMG is **self-signed**, not Apple-notarized. Gatekeeper will say *"Vox.app cannot be opened because Apple cannot check it for malicious software."* Bypass once:
 
-1. Right-click **Vox.app** in `/Applications` → **Open** → **Open Anyway**.
-
-   *or equivalently from Terminal:*
-
-   ```sh
-   xattr -d com.apple.quarantine /Applications/Vox.app
-   ```
+1. Right-click **Vox.app** in `/Applications` → **Open** → **Open Anyway**, or
+2. From Terminal: `xattr -d com.apple.quarantine /Applications/Vox.app`.
 
 After the first launch, macOS remembers the exemption.
 
-Notarization ($99/yr Apple Developer Program) removes that first-launch friction — skip for now, add later if distributing widely.
-
-### Build from source
-
-```sh
-git clone git@github.com:andykumeda/vox.git
-cd vox
-./scripts/create-dev-cert.sh
-./scripts/build-app.sh
-open dist/Vox.app
-```
-
 ## Roadmap (not yet)
 
-- Custom vocabulary / personal dictionary
+- Meeting summarization (TL;DR via gpt-4o-mini after each meeting transcript completes)
 - SSH-vs-local detection inside a terminal
 - Streaming transcription
 - Separate mode for code editors
 - Floating HUD near the cursor
 - Homebrew cask
-- Notarized releases
+- Notarized releases (removes Gatekeeper friction + makes TCC grants persist across updates)
 - Per-call output token cost tracking (currently estimate is audio-only)
-- Mode toggle hotkey (instead of Settings checkbox for prose override)
+- Mission Control space-switcher via synthesized arrow keystrokes (currently filtered by macOS — needs Developer ID + notarization)
