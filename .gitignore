@@ -7,3 +7,6 @@ Resources/AppIcon.png
 
 # Git worktrees
 .worktrees/
+
+# Local STT benchmarking — contains .env with provider API keys.
+tools/
