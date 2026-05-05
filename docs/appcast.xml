@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.5</title>
+            <pubDate>Tue, 05 May 2026 17:30:00 +0000</pubDate>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>0.6.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Auto-show meeting panel when a call starts</strong> (Settings → Meeting; default off). Vox polls window titles every few seconds and pops the floating Meeting panel as soon as it sees Teams (channel meetings, 1:1, compact view), Zoom, Webex, Slack huddle, Discord voice/video, Skype, Google Meet, or web Zoom/Webex. Recording is never auto-started — you still click Record on the panel.</li>
+                    <li><strong>Meeting summary</strong> (Settings → Meeting; default on). After transcription completes, segments are sent to gpt-4o-mini and a markdown summary (Summary / Key decisions / Action items) is rendered as a disclosure at the top of the transcript browser. Cost ~$0.0005 per meeting. Skipped silently if API key missing.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.5/Vox.dmg"
+                sparkle:edSignature="uxsetdbmcreA8k5QzXai7YT/NrLQEWKugKugLd1ZD24DX3ALsd6VbRB3pZ4sqiXg5ehjh37CubI3Pp/Etzl9Dw=="
+                length="2453630"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.4</title>
             <pubDate>Tue, 05 May 2026 00:30:00 +0000</pubDate>
             <sparkle:version>14</sparkle:version>
