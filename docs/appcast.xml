@@ -6,6 +6,28 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.6</title>
+            <pubDate>Tue, 05 May 2026 23:00:00 +0000</pubDate>
+            <sparkle:version>16</sparkle:version>
+            <sparkle:shortVersionString>0.6.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> a failed meeting recorder start (TCC drop, device busy) used to leave the session pinned at <code>recording</code> on disk and in memory, so subsequent Record clicks bounced with "already active" until the app was relaunched. start() now resets state on failure and surfaces the error.</li>
+                    <li><strong>Fix:</strong> a failed recorder stop similarly stranded sessions at <code>chunking</code>. stop() now clears state on failure and bails cleanly.</li>
+                    <li><strong>Fix:</strong> the floating Meeting panel's Record button now runs the same preflight gate as the menu-bar entry — Meeting Mode disabled, no consent acknowledgement, or no API key now produces a visible error instead of starting a half-configured session.</li>
+                    <li><strong>Fix:</strong> silent meeting audio is no longer reported as audible. Pre-fix, a fully silent file longer than 100ms still passed the SilenceTrim gate and was sent to Whisper, defeating the hallucination filter.</li>
+                    <li><strong>Fix:</strong> tap-to-toggle works on Fn and single-modifier hotkeys. The dispatcher routed flagsChanged events for those keys but the tap handler only accepted keyDown — selecting tap mode on the default Fn binding silently disabled recording.</li>
+                    <li><strong>Fix:</strong> first-buffer peak probe in AudioRecorder no longer traps on a clipped <code>Int16.min</code> sample. <code>abs(-32768)</code> overflows Int16 — now widens to Int before negating.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.6/Vox.dmg"
+                sparkle:edSignature="ErAK22pSQYyeRZb4Z0s81tgfeYkJ3uSz9QhMIXnuE0QLWou8Zytd7ChDLiTqBCE6N+Y2Hz8yhQCY0NwFg/K/Cg=="
+                length="2456881"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.5</title>
             <pubDate>Tue, 05 May 2026 17:30:00 +0000</pubDate>
             <sparkle:version>15</sparkle:version>
