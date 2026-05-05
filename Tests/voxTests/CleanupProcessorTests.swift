@@ -350,6 +350,40 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, "Item one.\nItem two.")
     }
 
+    func testVerbatimPrefixSkipsTriggersAndLLM() async {
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            flag.value = true
+            return "should not be used"
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Verbatim, um he literally said scratch that um yeah okay.")
+        XCTAssertFalse(flag.value, "Verbatim prefix must skip the LLM cleaner")
+        XCTAssertEqual(result, "um he literally said scratch that um yeah okay.")
+    }
+
+    func testLiteralPrefixSkipsCleanup() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in "should not be used" }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("Literal: he said um maybe.")
+        XCTAssertEqual(result, "he said um maybe.")
+    }
+
+    func testVerbatimPrefixCaseInsensitive() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in "wrong" }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("VERBATIM the quick brown fox.")
+        XCTAssertEqual(result, "the quick brown fox.")
+    }
+
+    func testVerbatimMidSentenceNotStripped() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { input in "[cleaned] \(input)" }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let result = await proc.process("I want a verbatim quote here.")
+        XCTAssertEqual(result, "[cleaned] I want a verbatim quote here.")
+    }
+
     func testProseNoNewlinesStillInvokesLLM() async {
         // Sanity: when triggered text has no newlines, the LLM is still called.
         final class FlagBox { var value = false }

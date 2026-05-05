@@ -18,6 +18,13 @@ public struct CleanupProcessor {
     }
 
     public func process(_ input: String) async -> String {
+        // Spoken "verbatim" or "literal" prefix on a prose dictation skips
+        // both trigger expansion and the LLM cleaner — the user explicitly
+        // wants the raw transcribed text. Strip the prefix word and return
+        // the rest unchanged.
+        if let raw = stripVerbatimPrefix(input) {
+            return raw
+        }
         guard enabled else { return input }
         let triggered = applyTriggers(input)
 
@@ -73,6 +80,29 @@ public struct CleanupProcessor {
             FileHandle.standardError.write(Data("Cleanup error: \(error)\n".utf8))
             return triggered
         }
+    }
+
+    // MARK: - Verbatim prefix
+
+    /// If `input` starts with "verbatim" or "literal" (case-insensitive,
+    /// optional trailing punctuation), returns everything after the prefix
+    /// trimmed; otherwise nil. Used as an in-band escape hatch so the user
+    /// can keep a single dictation literal without changing the global
+    /// Smart Cleanup setting.
+    static let verbatimPrefixPattern: String = #"^\s*(verbatim|literal)\b[\s,:;.!?-]*"#
+
+    func stripVerbatimPrefix(_ input: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: Self.verbatimPrefixPattern,
+            options: [.caseInsensitive]
+        ) else { return nil }
+        let ns = input as NSString
+        guard let match = regex.firstMatch(in: input, range: NSRange(location: 0, length: ns.length)),
+              match.range.location == 0
+        else { return nil }
+        let after = match.range.location + match.range.length
+        let rest = ns.substring(from: after).trimmingCharacters(in: .whitespacesAndNewlines)
+        return rest
     }
 
     // MARK: - Triggers
