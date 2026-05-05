@@ -46,6 +46,9 @@ public final class MeetingTranscriptionSession {
     private let retainAudioProvider: () -> Bool
     private let summarize: Summarize?
     private let summarizeEnabledProvider: () -> Bool
+    /// Preflight gate. Default calls `MeetingPreflight.gate` with live
+    /// AppSettings; tests pass `{ .success(()) }` to bypass.
+    private let preflight: () -> Result<Void, MeetingGateError>
     private let backoffSchedule: [Double]
     private let chunkDuration: Double = 300
 
@@ -87,6 +90,7 @@ public final class MeetingTranscriptionSession {
         retainAudio: @escaping () -> Bool,
         summarize: Summarize? = nil,
         summarizeEnabled: @escaping () -> Bool = { false },
+        preflight: (() -> Result<Void, MeetingGateError>)? = nil,
         backoffSchedule: [Double] = [1, 2, 4, 8, 16, 30]
     ) {
         self.store = store
@@ -111,6 +115,17 @@ public final class MeetingTranscriptionSession {
         self.retainAudioProvider = retainAudio
         self.summarize = summarize
         self.summarizeEnabledProvider = summarizeEnabled
+        if let preflight = preflight {
+            self.preflight = preflight
+        } else {
+            // Capture the apiKey closure for the default preflight so the
+            // gate sees the same key the recorder will use.
+            let keyProvider = apiKey
+            self.preflight = {
+                let hasKey = (keyProvider()?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                return MeetingPreflight.gate(hasAPIKey: hasKey)
+            }
+        }
         self.backoffSchedule = backoffSchedule
     }
 
@@ -118,17 +133,28 @@ public final class MeetingTranscriptionSession {
         case alreadyActive
         case notRecording
         case missingAPIKey
+        case preflight(MeetingGateError)
+        case recorderStartFailed(String)
 
         public var description: String {
             switch self {
             case .alreadyActive: return "A meeting session is already active."
             case .notRecording: return "No active meeting session to stop."
             case .missingAPIKey: return "OpenAI API key missing."
+            case .preflight(let g): return g.userMessage
+            case .recorderStartFailed(let r): return "Could not start meeting recorder: \(r)"
             }
         }
     }
 
     public func start() async throws {
+        // Preflight: enforce Meeting Mode + consent + API key + backend gate.
+        // This guards against entry points that bypass the menu-bar wrapper
+        // (the floating HUD's Record button calls start() directly).
+        if case .failure(let err) = preflight() {
+            throw SessionError.preflight(err)
+        }
+
         lock.lock()
         if let existing = session {
             switch existing.status {
@@ -151,9 +177,24 @@ public final class MeetingTranscriptionSession {
 
         try store.save(initial)
 
+        // Recorder lifecycle is wrapped so any failure clears the in-memory
+        // session and persists the disk record as `.failed`. Without this
+        // the next start() throws .alreadyActive until the app is relaunched.
         let system = systemRecorderFactory()
         self.systemRecorder = system
-        try await system.start(outputURL: store.audioFile(id: id))
+        do {
+            try await system.start(outputURL: store.audioFile(id: id))
+        } catch {
+            dlog("MeetingTranscriptionSession start failed (system recorder): \(error)")
+            self.systemRecorder = nil
+            updateSession { s in
+                s.status = .failed
+                s.endedAt = Date()
+                s.failureReason = "Recorder start failed: \(error)"
+            }
+            lock.lock(); session = nil; lock.unlock()
+            throw SessionError.recorderStartFailed(String(describing: error))
+        }
 
         // Mic is best-effort: if it fails (denied/init error) we still want the system-audio
         // recording to proceed. Log the failure and continue with mic disabled for this session.
@@ -180,7 +221,26 @@ public final class MeetingTranscriptionSession {
         try store.save(current)
 
         guard let system = self.systemRecorder else { throw SessionError.notRecording }
-        let systemURL = try await system.stop()
+        let systemURL: URL
+        do {
+            systemURL = try await system.stop()
+        } catch {
+            // Stop threw — record the failure and clear in-memory state so
+            // subsequent start()s aren't permanently blocked by .alreadyActive.
+            dlog("MeetingTranscriptionSession stop failed (system recorder): \(error)")
+            self.systemRecorder = nil
+            // Best-effort: also stop the mic so its recorder isn't left dangling.
+            if let mic = self.micRecorder {
+                _ = try? await mic.stop()
+                self.micRecorder = nil
+            }
+            updateSession { s in
+                s.status = .failed
+                s.failureReason = "Recorder stop failed: \(error)"
+            }
+            lock.lock(); session = nil; lock.unlock()
+            throw error
+        }
         let systemFailureReason = system.lastFailureReason
         let systemStartedAt = system.audioStartedAt
         self.systemRecorder = nil

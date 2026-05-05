@@ -188,9 +188,12 @@ public final class AudioRecorder {
         // can tell the difference between "tap not firing" (no log) vs "tap
         // firing with silent samples" (log shows peak=0).
         if pcmBytesWritten == 0 {
-            var peak: Int16 = 0
+            // Widen to Int before negating: `abs(Int16.min)` traps because
+            // +32768 is not representable as Int16 (a clipped sample of
+            // -32768 from a hot mic would crash the audio callback).
+            var peak: Int = 0
             for f in 0..<Int(outBuf.frameLength) {
-                let s = abs(int16Channel[f])
+                let s = abs(Int(int16Channel[f]))
                 if s > peak { peak = s }
             }
             dlog("AudioRecorder first buffer frames=\(outBuf.frameLength) peak=\(peak)")

@@ -56,7 +56,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 )]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
 
         try await session.start()
@@ -88,6 +89,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             },
             apiKey: { "sk-test" },
             retainAudio: { false },
+            preflight: { .success(()) },
             backoffSchedule: [0.01, 0.01, 0.01]
         )
         try await session.start()
@@ -118,7 +120,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return [TranscriptSegment(startTime: offset, endTime: offset+1, text: "x")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
         try await session.start()
         try await session.stop()
@@ -145,7 +148,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
         try await session.start()
         let id = session.activeSessionID!
@@ -166,7 +170,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
         try await session.start()
         try await session.stop()
@@ -197,7 +202,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
         try await session.start()
         try await session.stop()
@@ -216,7 +222,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [] },
             transcribe: { _, _, _ in [] },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
         try await session.start()
         do {
@@ -237,7 +244,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
-            retainAudio: { true }
+            retainAudio: { true },
+            preflight: { .success(()) }
         )
         try await session.start()
         let id = session.activeSessionID!
@@ -278,7 +286,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return []
             },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
 
         try await session.start()
@@ -308,7 +317,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "ok", source: source)]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false }
+            retainAudio: { false },
+            preflight: { .success(()) }
         )
 
         try await session.start()
@@ -327,6 +337,106 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         }
         func stop() async throws -> URL {
             throw MeetingMicCaptureError.notRecording
+        }
+    }
+
+    /// Recorder whose start throws — simulates a TCC drop or device-busy
+    /// failure mid-launch.
+    final class StartFailRecorder: MeetingAudioRecording {
+        struct BoomError: Error {}
+        func start(outputURL: URL) async throws { throw BoomError() }
+        func stop() async throws -> URL {
+            throw MeetingAudioCaptureError.notRecording
+        }
+    }
+
+    /// Recorder whose stop throws — simulates a stream-shutdown failure.
+    final class StopFailRecorder: MeetingAudioRecording {
+        struct BoomError: Error {}
+        var output: URL?
+        func start(outputURL: URL) async throws {
+            try Data([0]).write(to: outputURL)
+            output = outputURL
+        }
+        func stop() async throws -> URL { throw BoomError() }
+    }
+
+    func testFailedStartClearsSessionAndAllowsRetry() async throws {
+        // P1.3 regression: pre-fix, a failed system.start() left the
+        // session pinned at .recording in memory and on disk; subsequent
+        // start() threw .alreadyActive until app relaunch.
+        let url = tempRoot.appendingPathComponent("c.m4a")
+        try Data([0]).write(to: url)
+        let goodRecorder = MockRecorder()
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: StartFailRecorder(),
+            chunker: { _, _ in [url] },
+            transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            preflight: { .success(()) }
+        )
+
+        do {
+            try await session.start()
+            XCTFail("Expected start to throw")
+        } catch {
+            // Expected. State should now be cleared.
+        }
+        XCTAssertNil(session.activeSessionID,
+                     "After a failed start, no in-memory session should remain.")
+        XCTAssertFalse(session.isActive,
+                       "isActive must report false so the next start() isn't blocked.")
+    }
+
+    func testFailedStopClearsSessionAndAllowsRetry() async throws {
+        // P1.4 regression: a system.stop() throw must not leave the session
+        // pinned at .chunking forever.
+        let url = tempRoot.appendingPathComponent("c.m4a")
+        try Data([0]).write(to: url)
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: StopFailRecorder(),
+            chunker: { _, _ in [url] },
+            transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            preflight: { .success(()) }
+        )
+        try await session.start()
+        do {
+            try await session.stop()
+            XCTFail("Expected stop to throw")
+        } catch {
+            // Expected.
+        }
+        XCTAssertNil(session.activeSessionID)
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testPreflightFailureBlocksStart() async throws {
+        // P1.1 regression: any entry point — including the floating HUD —
+        // must run the preflight gate. A blocked preflight throws and
+        // never touches the recorder.
+        let url = tempRoot.appendingPathComponent("c.m4a")
+        try Data([0]).write(to: url)
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: MockRecorder(),
+            chunker: { _, _ in [url] },
+            transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
+            apiKey: { nil },
+            retainAudio: { false },
+            preflight: { .failure(.missingAPIKey) }
+        )
+        do {
+            try await session.start()
+            XCTFail("Preflight failure must block start")
+        } catch let MeetingTranscriptionSession.SessionError.preflight(err) {
+            XCTAssertEqual(err, .missingAPIKey)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
         }
     }
 }

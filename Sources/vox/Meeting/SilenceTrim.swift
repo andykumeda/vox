@@ -5,8 +5,28 @@ public struct AudibleBounds: Equatable {
     public let firstAudibleSec: Double
     public let lastAudibleSec: Double
     public let totalDurationSec: Double
+    /// Whether any sample exceeded the silence threshold during the scan.
+    /// Required because a fully-silent file produces firstAudibleSec=0 /
+    /// lastAudibleSec=totalDurationSec by the prior coercion path, and a
+    /// duration-only check would call any silent file longer than 100ms
+    /// "audible" — sending pure silence to Whisper which then hallucinates.
+    public let hadAudibleSamples: Bool
 
-    public var hasAudibleContent: Bool { lastAudibleSec - firstAudibleSec > 0.1 }
+    public init(
+        firstAudibleSec: Double,
+        lastAudibleSec: Double,
+        totalDurationSec: Double,
+        hadAudibleSamples: Bool
+    ) {
+        self.firstAudibleSec = firstAudibleSec
+        self.lastAudibleSec = lastAudibleSec
+        self.totalDurationSec = totalDurationSec
+        self.hadAudibleSamples = hadAudibleSamples
+    }
+
+    public var hasAudibleContent: Bool {
+        hadAudibleSamples && lastAudibleSec - firstAudibleSec > 0.1
+    }
 }
 
 public enum SilenceTrimError: Error, CustomStringConvertible {
@@ -42,7 +62,14 @@ public enum SilenceTrim {
         let totalDur = Double(totalFrames) / sampleRate
         let windowFrames = AVAudioFrameCount(max(1, Int(sampleRate * windowSec)))
         guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: windowFrames) else {
-            return AudibleBounds(firstAudibleSec: 0, lastAudibleSec: totalDur, totalDurationSec: totalDur)
+            // Buffer alloc failed — we can't scan, so we cannot claim
+            // there was audible content. Conservative fail-closed.
+            return AudibleBounds(
+                firstAudibleSec: 0,
+                lastAudibleSec: totalDur,
+                totalDurationSec: totalDur,
+                hadAudibleSamples: false
+            )
         }
 
         var firstAudible: Double? = nil
@@ -81,7 +108,8 @@ public enum SilenceTrim {
         return AudibleBounds(
             firstAudibleSec: firstAudible ?? 0,
             lastAudibleSec: lastAudible ?? totalDur,
-            totalDurationSec: totalDur
+            totalDurationSec: totalDur,
+            hadAudibleSamples: firstAudible != nil
         )
     }
 

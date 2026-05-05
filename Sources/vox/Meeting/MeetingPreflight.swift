@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-enum MeetingGateError: Error, Equatable, Sendable {
+public enum MeetingGateError: Error, Equatable, Sendable {
     case modeDisabled
     case consentRequired
     case backendUnavailable(reason: String)
@@ -10,11 +10,11 @@ enum MeetingGateError: Error, Equatable, Sendable {
     case captureFailed(String)
     case chunkingFailed(String)
 
-    enum MeetingPermission: String, Equatable, Sendable {
+    public enum MeetingPermission: String, Equatable, Sendable {
         case screenRecording
     }
 
-    var userMessage: String {
+    public var userMessage: String {
         switch self {
         case .modeDisabled:
             return "Meeting Mode is off. Enable it in Settings → Meeting Transcription (Beta)."
@@ -50,7 +50,7 @@ struct MeetingBackendStatus: Equatable, Sendable {
 /// Reads settings, runs a backend availability check, and returns either a green light or
 /// an actionable gate error. Pure function — no side effects, safe to call from UI threads
 /// before showing menu state, and safe to call again right before starting a session.
-enum MeetingPreflight {
+public enum MeetingPreflight {
     /// Backend availability hook injected for tests; production resolves to the live status check.
     static var backendStatusProvider: @Sendable (MeetingCaptureBackend) -> MeetingBackendStatus = { backend in
         liveStatus(for: backend)
