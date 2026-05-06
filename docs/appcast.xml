@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.7</title>
+            <pubDate>Tue, 05 May 2026 23:55:00 +0000</pubDate>
+            <sparkle:version>17</sparkle:version>
+            <sparkle:shortVersionString>0.6.7</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> meeting mic now self-recovers when its OS-level audio input stalls. macOS sometimes lets the input HAL go silent mid-session (Teams renegotiating sample rate, USB power management, exclusive-access contention) — AVAudioRecorder didn't notice and kept encoding zero PCM samples for the rest of the meeting, losing the user's voice. A new watchdog polls peak power every second; after 30 s of consecutive floor-level silence it tears down the recorder and starts a fresh one. At stop the parts are concatenated into a single m4a so the transcription pipeline is unchanged. Reported in 0.6.5/0.6.6 when a 35-min meeting captured only the first 9 min of local mic.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.7/Vox.dmg"
+                sparkle:edSignature="8/L88QzMLdFhrEpqZana+bpOaQqEAdlRV1kD5XjkYIZ8CSUA5/Ff0L2Y7fpXnTR90eB9bHhpOafc3FblrNy+BQ=="
+                length="2489942"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.6</title>
             <pubDate>Tue, 05 May 2026 23:00:00 +0000</pubDate>
             <sparkle:version>16</sparkle:version>
