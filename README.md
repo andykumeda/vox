@@ -131,6 +131,8 @@ Vox transcribes meetings end-to-end by capturing **system audio** (Zoom/Meet/etc
 
 Permissions: **Screen Recording** (system audio + window-title polling for auto-detect), **Microphone** (local stream).
 
+The mic recorder runs a per-second peak-power watchdog so a stalled OS-level audio input (Teams renegotiating, USB power management, exclusive-access contention) self-recovers. After 30 s of consecutive floor-level silence the watchdog tears down the recorder, archives the part-file, and starts a fresh one writing to the original output URL. At stop, parts are concatenated via AVMutableComposition into a single m4a so the chunking pipeline is unchanged.
+
 ### Auto-show panel when a call starts (opt-in)
 
 Settings → Meeting → **Auto-show meeting panel when a call starts**. Vox polls window titles every ~3 seconds and pops the floating Meeting panel as soon as it sees a known meeting in progress:

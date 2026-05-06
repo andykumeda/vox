@@ -1,4 +1,79 @@
-# Handoff — Vox state as of 2026-04-30 (Evening)
+# Handoff — Vox state as of 2026-05-05 (Evening)
+
+## Session 2026-05-05 — paste-last + verbatim shipping, meeting auto-detect + summary, code-review hardening, mic HAL-stall watchdog (releases 0.6.2 → 0.6.7)
+
+**Status:** Six releases shipped over the day. App runs end-to-end on this Mac and the second one; both updated via Sparkle. Repo is now public at `andykumeda/vox`; GitHub Pages serves `docs/appcast.xml`. Next phase candidates listed at the bottom.
+
+**Releases shipped (all on `origin/main`):**
+- `v0.6.2` — Paste Last Transcription menu item + opt-in hotkey (Settings → Hotkeys). Outbound paste shortcut hardcoded to ⌘V (the previous user-configurable "Paste keystroke" was a footgun). Clipboard restore no longer skipped when prior clipboard was empty / non-string.
+- `v0.6.3` — Clipboard restore delay bumped 0.4s → 1.5s and guarded with `NSPasteboard.changeCount` so slow apps (Slack, Electron, browser inputs) read the transcript before restore overwrites the clipboard.
+- `v0.6.4` — Verbatim/literal prefix word now actually skips trigger expansion + LLM cleaner (the help.md docs claimed this worked since 0.6.0, but the implementation in `CleanupProcessor.stripVerbatimPrefix` was sitting uncommitted).
+- `v0.6.5` — Meeting **auto-detect** + post-transcription **summary**. New `MeetingDetector` polls window titles every 3 s via `CGWindowListCopyWindowInfo` (Teams desktop incl. compact-view + 1:1 + channel meetings, Zoom, Webex, Slack huddle, Discord voice/video, Skype, browser-based Meet/Zoom/Webex). Pops the floating panel — never auto-records. New `MeetingSummarizer` calls gpt-4o-mini with a structured prompt (Summary / Key decisions / Action items) and renders the markdown as a disclosure at the top of the transcript browser. Both opt-in via Settings → Meeting; auto-detect default OFF, summary default ON. ~$0.0005/meeting for the summary.
+- `v0.6.6` — Six code-review fixes (P1+P2):
+  - **P1.1**: Meeting HUD's Record button bypassed `MeetingPreflight.gate()` (preflight lived in unused MenuBarController path). Gate now runs inside `MeetingTranscriptionSession.start()` itself with an injectable provider; tests pass `{ .success(()) }` to bypass.
+  - **P1.2**: Silent files were reported as audible. `SilenceTrim` returned `(firstAudibleSec: 0, lastAudibleSec: totalDur)` when no sample exceeded the RMS threshold; `hasAudibleContent` was true for any silent file >100 ms. Added `hadAudibleSamples: Bool` field; gate requires it.
+  - **P1.3 / P1.4**: Failed recorder start/stop pinned the session at `.recording` / `.chunking` permanently. Both paths now wrap the recorder call in do/catch, persist `.failed`, clear in-memory state, and rethrow.
+  - **P2.1**: Tap-to-toggle on `.fn` / `.modifier` keys was ignored. `handleTapToggle` accepted only `keyDown`, but the dispatcher routes `flagsChanged` for those keys. Now accepts both with rising-edge detection (`tapModifierLastMatch`).
+  - **P2.2**: `abs(int16Channel[f])` in AudioRecorder peak probe traps on `Int16.min`. Widened to Int before negating.
+- `v0.6.7` — **Meeting mic watchdog.** A 35-min Teams meeting captured only the first 9:18 of the user's voice; the rest of `mic.m4a` was RMS=0 even with normal speech. macOS HAL went silent mid-session (Teams renegotiation / USB power management / exclusive-access contention) and `AVAudioRecorder` kept encoding zero PCM with no signal. Added a per-second peak-power watchdog (`isMeteringEnabled = true`, ≤ −50 dB floor); after 30 s of consecutive silence the watchdog tears down the recorder, archives its file as `<base>-partN.m4a`, and starts a fresh recorder writing to the original output URL. At stop(), parts + final file are concatenated via `AVMutableComposition` + `AVAssetExportSession` into a single m4a so the chunking pipeline is unchanged.
+
+**Key code landmarks added/changed today:**
+- `Sources/vox/Meeting/MeetingDetector.swift` — new. Window-title pollster + hysteresis state machine.
+- `Sources/vox/Meeting/MeetingSummarizer.swift` — new. gpt-4o-mini chat-completions client with injectable HTTPSend; 60k char input cap.
+- `Sources/vox/Meeting/MeetingMicCapture.swift` — gained watchdog, multi-part recovery, and AVMutableComposition concat at stop.
+- `Sources/vox/Meeting/SilenceTrim.swift` — `AudibleBounds.hadAudibleSamples` Bool.
+- `Sources/vox/Meeting/MeetingPreflight.swift` — `MeetingGateError` + `MeetingPreflight` + `MeetingBackendStatus` exposed `public` so `MeetingTranscriptionSession` can throw `.preflight(...)`.
+- `Sources/vox/STT/MeetingTranscriptionSession.swift` — preflight gate inside start(); injectable `summarize`, `summarizeEnabled`, `preflight` providers; do/catch around recorder start/stop with state recovery; new `SessionError.preflight` and `.recorderStartFailed`.
+- `Sources/vox/Hotkey/HotkeyMonitor.swift` — `tapModifierLastMatch` rising-edge state for `.fn`/`.modifier` tap-toggle.
+- `Sources/vox/Audio/AudioRecorder.swift` — peak probe widens through Int.
+- `Sources/vox/App/MeetingHUDPanel.swift` — onStart surfaces preflight errors as NSAlert; onStop logs (no longer swallows) on stop failures.
+- `Sources/vox/App/MeetingTranscriptsWindow.swift` — Summary disclosure section.
+- `Sources/vox/App/MenuBarController.swift` — wires `MeetingDetector` start/stop based on `AppSettings.autoShowMeetingPanel`; `dictationHistoryDidChange` listener refreshes the menu so "Paste Last Transcription" enables after first dictation; new `pasteLastHotkey` listener.
+- `Sources/vox/App/SettingsWindow.swift` — auto-show toggle + summary toggle + paste-last-hotkey field; "Paste keystroke (sent to focused app)" field removed.
+- `Sources/vox/Hotkey/Hotkey.swift` — `defaultPasteLast` (disabled by default).
+- `Sources/vox/Util/AppSettings.swift` — `pasteLastHotkey`, `autoShowMeetingPanel`, `meetingSummaryEnabled`.
+- `Sources/vox/Util/MeetingTranscriptStore.swift` — `TranscriptSession.summary: String?` (Codable backward-compat via `decodeIfPresent`).
+- `Sources/vox/Util/DictationHistoryStore.swift` — `last()` accessor.
+- `Sources/vox/Text/TextInjector.swift` — outbound paste hardcoded to ⌘V; `changeCount`-guarded restore at +1.5 s.
+- `Sources/vox/Text/CleanupProcessor.swift` — `stripVerbatimPrefix` (regex anchored at start; case-insensitive; mid-sentence "verbatim" left intact).
+- `scripts/dump-windows.swift` — debug helper. Prints owner+title for every on-screen window. Note: a terminal-launched script needs Terminal to have Screen Recording permission for titles to populate (Vox.app has it).
+- `Tests/voxTests/MeetingDetectorTests.swift` — pattern coverage incl. real-world Teams compact-view title.
+- `Tests/voxTests/MeetingSummarizerTests.swift` — chat-completions client incl. legacy JSON decode for `TranscriptSession.summary`.
+- `Tests/voxTests/SilenceTrimTests.swift` — silent / short-blip / valid cases for the new `hasAudibleContent` semantics.
+- Test count: 281 (was 249 at session start).
+
+**Infra changes:**
+- Repo flipped public during the session so Sparkle could anonymously download release DMGs (private repo blocks unauth asset fetches with a 302 to a 404).
+- GitHub Pages re-enabled twice (`gh api -X POST repos/andykumeda/vox/pages -f 'source[branch]=main' -f 'source[path]=/docs'`); something in the GH UI flow had toggled it off.
+- `Pages build and deployment` workflow occasionally reports failure when a push cancels the previous build mid-flight; a `gh run rerun --failed` redeploys cleanly. Not a real regression.
+- `tools/` (local STT bench dir with `.env` holding provider keys) is in `.gitignore` so accidental `git add .` won't leak keys.
+- Repo description updated: "Push-to-talk voice dictation for macOS … OpenAI gpt-4o-mini-transcribe." (was "Groq whisper-large-v3" — stale.)
+- Legacy `groq-api-key` Keychain entry deleted on this Mac. Vox only reads `com.andykumeda.vox / openai-api-key`.
+- README rewritten for the post-0.5 surface (Meeting / Dictionary / Smart Cleanup / Hotkeys table / Releasing section / Sparkle requirements). UPDATING.md leads with Sparkle, manual DMG drag is fallback. help.md covers paste-last, verbatim/literal, auto-detect, summary.
+
+**Architectural decisions made today:**
+- Auto-detect uses **window-title polling**, not CoreAudio per-process input monitoring (which is macOS 14.4+). Keeps minSystemVersion at 13.0. Polling cost is small (~3 s interval, CGWindowListCopyWindowInfo) and matches the user's mental model ("when a meeting window opens, pop the panel"). Browser tab detection is conservative — bare "Microsoft Teams" was dropped because every Teams chat tab matches it; web-meeting patterns now require URL fragments like `meet.google.com`, `Zoom Meeting`, or Teams join-URL paths.
+- Recording is **never auto-started.** The HUD's Record button still requires a deliberate click. Consent + dictation-mutex stay on the panel.
+- Summary is **persisted on the TranscriptSession**, not regenerated on view. One-shot $0.0005 cost; subsequent opens are free. Failures are logged + swallowed — a missing summary is non-fatal.
+- Mic watchdog **does not auto-stop** the meeting on persistent stalls. It logs `Mic stalled and could not be restarted` and sets `lastFailureReason`. Stopping mid-meeting would lose all subsequent system-audio capture too. Better to keep the meeting going and warn at the end.
+- Outbound paste shortcut is **hardcoded to ⌘V**. The previous user-configurable `pasteHotkey` was a real-world footgun: rebinding it to anything else silently broke paste in apps that only honor ⌘V. The keychain entry is preserved for backward-compat reads but no UI exposes it.
+
+**Open issues / next-session candidates:**
+1. **Mic-stall recovery beyond restart.** If the HAL stays stuck after recorder restart (Teams holds exclusive access permanently), watchdog logs `Mic stalled and could not be restarted` and `lastFailureReason` is set, but the user voice is still lost. Next step: force CoreAudio to re-resolve the default input device (`kAudioHardwarePropertyDefaultInputDevice`), or fall back to AVAudioEngine + tap → AVAssetWriter pipeline (more controllable than AVAudioRecorder). Worth a code spike before promising "always recovers."
+2. **Auto-show false positives** are bounded but not zero. Pattern matching is substring-based and case-sensitive. Edge: someone dictates the literal text "Zoom Meeting" into a long-running browser tab and the panel pops. Heuristic — accept the cost; the user dismisses it. If complaints arrive, tighten patterns or require a process-name allowlist alongside.
+3. **Meeting summary quality on long meetings.** Input is capped at 60k chars (~~10k words). Real-world meetings can run longer; truncation marker is appended, but the summary loses the tail. Options: chunk + summarize hierarchically, or switch to gpt-4o (full) with its larger context window for long meetings.
+4. **`AGENTS.md`** keeps appearing as untracked in `git status`. Probably a tool that auto-creates it. Either commit it or add to `.gitignore`. Not investigated.
+5. **Dictation regression** still emits `failure_rate=0.0 quality_score=1.0` consistently; baseline is healthy. Worth re-checking after the next round of CleanupProcessor changes.
+6. **Notarization.** TCC re-prompts on every ad-hoc-signed update remain the worst part of the upgrade UX. Apple Developer Program ($99/yr) + notarization would fix it. Still deferred.
+
+**Process notes (for future sessions):**
+- Sparkle EdDSA private key is on this Mac (kumedaa Dev workstation). Releases must be cut from here.
+- Standing rule: don't `git commit` until manual smoke confirms working. Tests + clean build are necessary, not sufficient.
+- Use `--no-gpg-sign` on every commit (pinentry fails in non-tty shells; durable permission granted).
+- After every Swift commit during manual testing, run `scripts/build-app.sh` and tell the user to relaunch Vox. They won't pick up the change otherwise.
+- For diagnostic dumps that need on-screen window titles populated, run inside the Vox.app context (or grant Terminal Screen Recording).
+
+---
 
 ## Session 2026-04-30 — M2 multi-source capture, main window UI, new icon, releases 0.4.0 / 0.5.0 / 0.5.1
 

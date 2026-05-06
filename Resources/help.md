@@ -84,6 +84,12 @@ meeting. Summary is skipped silently if no API key.
   call.
 - Whisper invents filler phrases ("you", "thanks for watching", "subscribe")
   on silent leading audio. Vox drops these automatically.
+- macOS sometimes lets the mic input go silent mid-meeting (Teams renegotiates
+  format, USB power management suspends the device, another app grabs
+  exclusive access). Vox runs a watchdog every second and after 30 s of
+  consecutive silence it tears down the recorder and starts a fresh one. Look
+  for `MeetingMicCapture: 30s of silence → restarting recorder` in
+  `~/Library/Logs/vox.log` if you suspect the mic dropped during a call.
 
 ## Hotkeys
 Settings → Hotkeys lets you rebind:
