@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.6.8</title>
+            <pubDate>Wed, 06 May 2026 17:15:00 +0000</pubDate>
+            <sparkle:version>18</sparkle:version>
+            <sparkle:shortVersionString>0.6.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> dictation no longer fails with "Transport error: The request timed out" on stale-keepalive timeouts. Symptom: an occasional single-sentence dictation would hang ~60s and surface a timeout error even on a healthy network. Cause: <code>URLSession.shared</code> reuses a TCP keepalive socket; if the socket dies idle, the next send hangs the full timeout, and the existing 2-attempt retry reused the same dead pool. Vox now uses a 15s per-attempt timeout (down from 30s), retries 3 times instead of 2, and retries on a fresh ephemeral <code>URLSession</code> so a dead keepalive can't time us out twice in a row.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.6.8/Vox.dmg"
+                sparkle:edSignature="Lf4IWk88XbW7r9fqOU9uo5a81PssDekUQQZZ4lib6FfCsI46mYgYM05BKIs/EAPEItgjNmpGAxB40rPRWmHQCw=="
+                length="2489992"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.7</title>
             <pubDate>Tue, 05 May 2026 23:55:00 +0000</pubDate>
             <sparkle:version>17</sparkle:version>

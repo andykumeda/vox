@@ -43,7 +43,7 @@ public struct OpenAITranscriber {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode, model: model)
-        request.timeoutInterval = 30.0
+        request.timeoutInterval = 15.0
 
         let (data, response): (Data, URLResponse)
         do {
@@ -70,12 +70,16 @@ public struct OpenAITranscriber {
             .notConnectedToInternet, .cannotConnectToHost
         ]
         var lastError: Error?
-        for attempt in 0..<2 {
+        for attempt in 0..<3 {
+            // Retry on a fresh ephemeral session so a stale keepalive socket
+            // in the shared pool can't time us out twice in a row.
+            let activeSession = attempt == 0 ? session : URLSession(configuration: .ephemeral)
             do {
-                return try await session.data(for: request)
+                return try await activeSession.data(for: request)
             } catch let urlError as URLError where retriable.contains(urlError.code) {
                 lastError = urlError
-                if attempt == 0 { try? await Task.sleep(nanoseconds: 500_000_000) }
+                let backoff = UInt64(300_000_000) * UInt64(attempt + 1)
+                try? await Task.sleep(nanoseconds: backoff)
             } catch {
                 throw error
             }
