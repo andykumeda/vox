@@ -6,6 +6,27 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.0</title>
+            <pubDate>Fri, 08 May 2026 21:25:00 +0000</pubDate>
+            <sparkle:version>19</sparkle:version>
+            <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Feature:</strong> meeting transcription gains a Deepgram Nova-3 backend with proper diarization. Mic + system audio are mixed into a single composition and sent in one batch request, so speakers are tagged <code>Speaker 0 / 1 / 2 …</code> across the whole meeting instead of just <code>Local</code> vs <code>Remote</code>. Settings → Meeting picks the provider; default is Deepgram if a key is configured (Settings → Deepgram API key), else OpenAI Whisper as before.</li>
+                    <li><strong>Feature:</strong> per-meeting "Re-transcribe (Deepgram)" button in the transcript browser. Reruns an existing meeting through Deepgram using the retained audio on disk, replacing segments + summary in place. Useful for rescuing meetings you transcribed before this release.</li>
+                    <li><strong>Improvement:</strong> summary prompt rewritten to refuse name-guessing. The summarizer no longer attributes action items to a participant unless that participant self-identifies in the transcript. Speaker IDs (<code>Speaker N</code>) are used as opaque labels.</li>
+                    <li><strong>Improvement:</strong> meeting control panel is now sticky across all virtual desktops and full-screen apps (<code>canJoinAllSpaces + fullScreenAuxiliary</code>), so the Stop button stays reachable when you switch Spaces mid-call.</li>
+                    <li><strong>Improvement:</strong> meeting transcript window now shows speaker labels per segment (color-cycled by speaker ID), exposes a visible scrollbar, and caps the summary disclosure at 180&nbsp;pt so the transcript below stays readable. Plain-text and timestamped exports include the speaker labels.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.0/Vox.dmg"
+                sparkle:edSignature="zWPmYfaBvQb1c+yriaiU482ZWqy3HSjxTAg5uTazN5hMSksmqJ07qstPmjPDr6eaxMe0ahO/B5cz1HK2USLBBA=="
+                length="2525569"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.6.8</title>
             <pubDate>Wed, 06 May 2026 17:15:00 +0000</pubDate>
             <sparkle:version>18</sparkle:version>

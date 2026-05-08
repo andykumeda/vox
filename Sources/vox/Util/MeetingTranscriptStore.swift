@@ -12,16 +12,26 @@ public struct TranscriptSegment: Codable, Equatable, Sendable {
     public let endTime: Double
     public let text: String
     public let source: SegmentSource
+    /// Diarized speaker index (e.g. Deepgram speaker 0/1/…). Nil for OpenAI
+    /// Whisper output, which only carries the binary `source` tag.
+    public let speakerID: Int?
 
-    public init(startTime: Double, endTime: Double, text: String, source: SegmentSource = .remote) {
+    public init(
+        startTime: Double,
+        endTime: Double,
+        text: String,
+        source: SegmentSource = .remote,
+        speakerID: Int? = nil
+    ) {
         self.startTime = startTime
         self.endTime = endTime
         self.text = text
         self.source = source
+        self.speakerID = speakerID
     }
 
     private enum CodingKeys: String, CodingKey {
-        case startTime, endTime, text, source
+        case startTime, endTime, text, source, speakerID
     }
 
     public init(from decoder: Decoder) throws {
@@ -31,6 +41,7 @@ public struct TranscriptSegment: Codable, Equatable, Sendable {
         self.text = try c.decode(String.self, forKey: .text)
         // Pre-multi-source persisted segments have no `source`; treat as remote (system audio).
         self.source = try c.decodeIfPresent(SegmentSource.self, forKey: .source) ?? .remote
+        self.speakerID = try c.decodeIfPresent(Int.self, forKey: .speakerID)
     }
 }
 

@@ -58,9 +58,17 @@ public struct MeetingSummarizer: Sendable {
         }
 
         let systemPrompt = """
-        You are a meeting-summarization function. Given a transcript with \
-        speaker tags (Local = the user; Remote = other participants), \
-        produce a concise summary in this exact markdown structure:
+        You are a meeting-summarization function. The transcript uses speaker \
+        tags. Two tag formats may appear:
+        • "Speaker 0", "Speaker 1", … — diarized anonymous speakers.
+        • "Local" = the user running the recording; "Remote" = other side of the call.
+
+        Treat the tags as opaque identifiers. Refer to a participant by name \
+        ONLY if they self-identify in the transcript (e.g. someone says "Hi, \
+        I'm Andy" or another speaker addresses them as "Andy"). Never guess \
+        which speaker is which based on context, role, or the meeting topic.
+
+        Produce a concise summary in this exact markdown structure:
 
         ## Summary
         2-3 short paragraphs covering the topics discussed.
@@ -69,8 +77,9 @@ public struct MeetingSummarizer: Sendable {
         - Bulleted list. If none, write "None.".
 
         ## Action items
-        - Bulleted list, owner-prefixed when clear (e.g. "Andy: send vendor list"). \
-        If none, write "None.".
+        - Bulleted list, owner-prefixed when clear (e.g. "Andy: send vendor list" \
+        or "Speaker 1: review the contract"). If ownership isn't explicit in \
+        the transcript, omit the prefix. If none, write "None.".
 
         Be terse and factual. Do not invent content not in the transcript. \
         Do not editorialize. Output only the markdown — no preface, no \
@@ -121,9 +130,18 @@ public struct MeetingSummarizer: Sendable {
     }
 
     static func formatTranscript(_ segments: [TranscriptSegment]) -> String {
-        segments.map { seg in
-            let speaker = seg.source == .local ? "Local" : "Remote"
-            return "\(speaker): \(seg.text)"
+        // If any segment carries a diarized speakerID, prefer that labeling
+        // (Speaker 0/1/…) for the entire transcript so the LLM doesn't have
+        // to reconcile two label spaces. Fall back to Local/Remote otherwise.
+        let useSpeakerID = segments.contains(where: { $0.speakerID != nil })
+        return segments.map { seg in
+            let label: String
+            if useSpeakerID, let id = seg.speakerID {
+                label = "Speaker \(id)"
+            } else {
+                label = seg.source == .local ? "Local" : "Remote"
+            }
+            return "\(label): \(seg.text)"
         }.joined(separator: "\n")
     }
 }

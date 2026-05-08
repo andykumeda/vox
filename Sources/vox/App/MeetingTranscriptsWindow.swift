@@ -86,6 +86,23 @@ private final class MeetingTranscriptsModel: ObservableObject {
         }
     }
 
+    /// True when the session is in a terminal state and we still have the
+    /// raw audio on disk to feed back through Deepgram.
+    func canReTranscribe(_ session: TranscriptSession) -> Bool {
+        let terminal: Set<TranscriptSession.Status> = [.completed, .failed, .cancelled]
+        guard terminal.contains(session.status) else { return false }
+        let store = MeetingTranscriptStore()
+        let fm = FileManager.default
+        return fm.fileExists(atPath: store.audioFile(id: session.id).path)
+            || fm.fileExists(atPath: store.micFile(id: session.id).path)
+    }
+
+    func reTranscribeWithDeepgram(_ id: UUID) {
+        Task.detached {
+            await MeetingTranscriptionSession.shared.reTranscribeWithDeepgram(sessionID: id)
+        }
+    }
+
     func export(_ session: TranscriptSession, format: ExportFormat) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(session.title).txt"
@@ -97,21 +114,33 @@ private final class MeetingTranscriptsModel: ObservableObject {
 
     enum ExportFormat {
         case plain, timestamped
+
         func render(session: TranscriptSession) -> String {
+            let useSpeakerID = session.segments.contains { $0.speakerID != nil }
+            func label(_ seg: TranscriptSegment) -> String {
+                if useSpeakerID, let id = seg.speakerID { return "Speaker \(id)" }
+                return seg.source == .local ? "You" : "Other"
+            }
             switch self {
             case .plain:
+                // Group consecutive same-speaker segments into one paragraph
+                // labelled with the speaker. New speaker → blank line + new block.
                 var out = ""
-                var lastEnd: Double = -1
+                var currentLabel: String? = nil
                 for seg in session.segments {
-                    if lastEnd >= 0, seg.startTime - lastEnd > 2.0 { out += "\n\n" }
-                    else if !out.isEmpty { out += " " }
-                    out += seg.text
-                    lastEnd = seg.endTime
+                    let l = label(seg)
+                    if l != currentLabel {
+                        if !out.isEmpty { out += "\n\n" }
+                        out += "\(l): \(seg.text)"
+                        currentLabel = l
+                    } else {
+                        out += " " + seg.text
+                    }
                 }
                 return out
             case .timestamped:
                 return session.segments.map { seg in
-                    "[\(formatTime(seg.startTime))] \(seg.text)"
+                    "[\(formatTime(seg.startTime))] \(label(seg)): \(seg.text)"
                 }.joined(separator: "\n")
             }
         }
@@ -153,6 +182,12 @@ struct MeetingTranscriptsView: View {
                 HStack {
                     Text(s.title).font(.headline)
                     Spacer()
+                    if model.canReTranscribe(s) {
+                        Button("Re-transcribe (Deepgram)") {
+                            model.reTranscribeWithDeepgram(s.id)
+                        }
+                        .help("Re-run this meeting through Deepgram for diarized speaker IDs. Requires the Deepgram key in Settings and the original audio still on disk.")
+                    }
                     Menu("Export") {
                         Button("Plain Text") { model.export(s, format: .plain) }
                         Button("Timestamped Text") { model.export(s, format: .timestamped) }
@@ -172,11 +207,18 @@ struct MeetingTranscriptsView: View {
                 }
                 if let summary = s.summary, !summary.isEmpty {
                     DisclosureGroup {
-                        Text(summary)
-                            .textSelection(.enabled)
-                            .font(.callout)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 4)
+                        // Cap the summary's vertical footprint so the transcript
+                        // below stays readable on long summaries. Scrolls
+                        // internally when the markdown overflows the cap.
+                        ScrollView(.vertical, showsIndicators: true) {
+                            Text(summary)
+                                .textSelection(.enabled)
+                                .font(.callout)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                                .padding(.trailing, 8)
+                        }
+                        .frame(maxHeight: 180)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "sparkles")
@@ -187,7 +229,7 @@ struct MeetingTranscriptsView: View {
                     .padding(.vertical, 8)
                     Divider()
                 }
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(s.segments.enumerated()), id: \.offset) { _, seg in
                             HStack(alignment: .top) {
@@ -195,11 +237,17 @@ struct MeetingTranscriptsView: View {
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                     .frame(width: 56, alignment: .leading)
+                                Text(speakerLabel(seg))
+                                    .font(.system(.caption, design: .monospaced).bold())
+                                    .foregroundStyle(speakerColor(seg))
+                                    .frame(width: 76, alignment: .leading)
                                 Text(seg.text).textSelection(.enabled)
                             }.padding(.horizontal)
                         }
                     }.padding(.vertical, 6)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .scrollIndicators(.visible)
             }
         } else if model.sessions.isEmpty {
             VStack(spacing: 8) {
@@ -225,6 +273,20 @@ struct MeetingTranscriptsView: View {
     private func formatTime(_ t: Double) -> String {
         let total = Int(t)
         return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private func speakerLabel(_ seg: TranscriptSegment) -> String {
+        if let id = seg.speakerID { return "Speaker \(id)" }
+        return seg.source == .local ? "You" : "Other"
+    }
+
+    private func speakerColor(_ seg: TranscriptSegment) -> Color {
+        if let id = seg.speakerID {
+            // Cycle a small palette by speakerID so the eye can track who's talking.
+            let palette: [Color] = [.blue, .purple, .orange, .pink, .teal, .indigo, .brown, .red]
+            return palette[(id % palette.count + palette.count) % palette.count]
+        }
+        return seg.source == .local ? .blue : .purple
     }
 }
 

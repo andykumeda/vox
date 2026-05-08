@@ -24,6 +24,18 @@ enum TranscriptionModel: String, CaseIterable, Sendable {
     }
 }
 
+public enum MeetingProvider: String, CaseIterable, Sendable {
+    case deepgram
+    case openai
+
+    public var displayName: String {
+        switch self {
+        case .deepgram: return "Deepgram Nova-3 (diarized speakers)"
+        case .openai:   return "OpenAI Whisper (You/Other only)"
+        }
+    }
+}
+
 enum MeetingCaptureBackend: String, CaseIterable, Sendable {
     /// macOS 13+ ScreenCaptureKit system-audio tap. Implementation deferred to M2.
     case systemAudio = "systemAudio"
@@ -116,6 +128,7 @@ enum AppSettings {
     private static let meetingRetainAudioKey = "meetingRetainAudio"
     private static let autoShowMeetingPanelKey = "autoShowMeetingPanel"
     private static let meetingSummaryEnabledKey = "meetingSummaryEnabled"
+    private static let meetingProviderKey = "meetingProvider"
 
     static var keepTranscriptionOnClipboard: Bool {
         get { UserDefaults.standard.bool(forKey: keepKey) }
@@ -194,6 +207,22 @@ enum AppSettings {
 
     /// Generate an LLM summary of every completed meeting transcript.
     /// Default ON. Cost is ~$0.0005 per meeting on gpt-4o-mini.
+    /// Selects the STT provider for meeting transcription.
+    /// Smart default: Deepgram if a key is configured, else OpenAI. Once the
+    /// user picks explicitly, the choice is honored on subsequent reads.
+    static var meetingProvider: MeetingProvider {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: meetingProviderKey),
+               let p = MeetingProvider(rawValue: raw) {
+                return p
+            }
+            let hasDeepgram = (KeychainStore(account: "deepgram-api-key").read()?
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            return hasDeepgram ? .deepgram : .openai
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: meetingProviderKey) }
+    }
+
     static var meetingSummaryEnabled: Bool {
         get {
             // Default to true on first read so users get summaries by default.

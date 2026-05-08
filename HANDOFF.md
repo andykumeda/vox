@@ -1,4 +1,56 @@
-# Handoff — Vox state as of 2026-05-05 (Evening)
+# Handoff — Vox state as of 2026-05-08 (Afternoon)
+
+## Session 2026-05-08 — Deepgram diarized meeting transcription, sticky meeting panel, transcript UX cleanup (release 0.7.0)
+
+**Status:** One feature release shipped today on top of the 0.6.8 timeout fix from earlier in the week. App runs end-to-end on this Mac; second Mac picks up via Sparkle on next check (or "Check for Updates…" in Settings). User must re-grant Mic / Input Monitoring / Accessibility after install — TCC re-prompts on every ad-hoc-signed release.
+
+**Release shipped:**
+- `v0.7.0` — Deepgram Nova-3 meeting transcription with per-speaker diarization, plus the surrounding UX fixes (sticky panel across Spaces, visible scrollbar, capped summary, exports include speaker labels).
+
+**Why this changed:** prior meeting transcripts only carried a binary `local` (mic) vs `remote` (system audio) tag. The summarizer prompt then asked gpt-4o-mini to attribute names from context, which routinely mislabelled who said what — e.g. user kept being misidentified as the person they were addressing. Real diarization closes that gap.
+
+**Architectural decisions made today:**
+- **Single-stream mix into Deepgram, not dual-stream.** Each chunk through Deepgram would reset speaker numbering (diarization is per-request); chunking would also lose cross-speaker continuity. Instead, mic + system audio are mixed via `AVMutableComposition` (each track inserted at its wall-clock offset relative to the earliest audible content), the result is exported to a single m4a, and Deepgram is called once with `diarize=true&utterances=true`. Hard limit: 2 GB / file (Deepgram prerecorded API). A 43-min meeting at AAC 64 kbps is ~21 MB — comfortably below the cap. Long-meeting fallback deferred until someone actually hits it.
+- **Deepgram replaces OpenAI on the meeting path; dictation untouched.** OpenAI Whisper stays the dictation backend. Meeting provider is `AppSettings.meetingProvider` with smart default: `.deepgram` if a Deepgram key is in Keychain (`account=deepgram-api-key`), else `.openai`. Existing OpenAI per-source pipeline is kept intact as the fallback path inside `runChunkAndUpload`.
+- **Speaker IDs are opaque.** The summarizer prompt now forbids name-guessing — owners on action items are only attributed when a participant self-identifies in the transcript. The transcript view color-cycles a small palette by `speakerID % palette.count` so the eye can track who's talking without us pretending to know names.
+- **Re-transcribe is a manual per-meeting button**, not an auto-migration. Existing meetings keep their original Whisper transcript until the user clicks "Re-transcribe (Deepgram)" in the transcript browser. The button reruns the pipeline against retained `audio.m4a` + `mic.m4a` (or whichever still exists), replaces `segments` + `summary` in place, and persists. No-op if both audio files have been purged (configurable retention sweep deletes them after 1 month by default).
+- **Summary footprint capped, not collapsed by default.** First implementation showed `Text(summary)` with no height limit, which on long meetings pushed the segment list off screen. Settled on `ScrollView(...).frame(maxHeight: 180)` so the summary stays expanded by default but can't dominate the window. DisclosureGroup still allows full collapse.
+
+**Key code landmarks added/changed today:**
+- `Sources/vox/STT/DeepgramTranscriber.swift` — **new.** Single-shot batch call to `https://api.deepgram.com/v1/listen?model=nova-3&diarize=true&utterances=true&punctuate=true&smart_format=true&language=en`. Sends raw audio bytes with `Content-Type: audio/m4a` and `Authorization: Token <key>`. Parses `results.utterances[]` (each has `start`, `end`, `transcript`, `speaker`) into `[TranscriptSegment]` with `speakerID` populated. Skips empty utterances. Hard-fails with `fileTooLarge` over 2 GB.
+- `Sources/vox/Meeting/MeetingAudioMixer.swift` — **new.** `AVMutableComposition` with one mutable audio track per source. Each track inserted at its `startTime` (seconds) on the composition timeline. Exports via `AVAssetExportSession(presetName: AVAssetExportPresetAppleM4A)` to m4a. Used both at end-of-recording (with the live wall-clock shifts) and in `reTranscribeWithDeepgram` (with `shift=0` since the original timeline data wasn't persisted).
+- `Sources/vox/STT/MeetingTranscriptionSession.swift` — provider switch at the top of `runChunkAndUpload`: when `providerProvider() == .deepgram` and a `deepgramTranscribe` closure is wired, branches to `runDeepgramPipeline` (silence-trim each stream → mix → single Deepgram call → save segments + summary). New public method `reTranscribeWithDeepgram(sessionID:)` for the per-meeting button. Existing OpenAI per-source loop kept verbatim for the `.openai` path. New typealias `DeepgramTranscribe = (URL) async throws -> [TranscriptSegment]`. The shared singleton wires both transcribe closures + `provider: { AppSettings.meetingProvider }`.
+- `Sources/vox/Util/MeetingTranscriptStore.swift` — `TranscriptSegment.speakerID: Int?` (Codable backward-compat via `decodeIfPresent`; pre-0.7 segments decode with `speakerID = nil`).
+- `Sources/vox/Util/AppSettings.swift` — `MeetingProvider` enum + `meetingProvider` setting. Smart default reads `KeychainStore(account: "deepgram-api-key")` once: present → `.deepgram`, absent → `.openai`. Once user picks explicitly, the chosen value is honored regardless of key presence.
+- `Sources/vox/Meeting/MeetingSummarizer.swift` — prompt rewritten to handle both label spaces (`Speaker N` and `Local`/`Remote`) and forbid name-guessing without self-identification. `formatTranscript` switches to `Speaker N:` prefix when any segment carries a `speakerID`, falling back to `Local:`/`Remote:` otherwise — preserves the existing summarizer test (`testFormatTranscriptTagsLocalAndRemote`).
+- `Sources/vox/App/MeetingTranscriptsWindow.swift` — speaker labels per segment using `speakerID` first; color-cycled palette (`[.blue, .purple, .orange, .pink, .teal, .indigo, .brown, .red]`). New "Re-transcribe (Deepgram)" button visible when the session is in a terminal state and either audio file still exists. Summary disclosure wrapped in `ScrollView(.vertical).frame(maxHeight: 180)` to cap its vertical footprint; transcript ScrollView gained `.scrollIndicators(.visible)` + bounded frame so the bar always renders. Plain-text and timestamped exports now group consecutive same-speaker turns and prefix `Speaker N:` (or `You`/`Other` fallback).
+- `Sources/vox/App/MeetingHUDPanel.swift` — `panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]` so the floating Meeting panel follows the user across virtual desktops and into full-screen apps. Verified manually.
+- `Sources/vox/App/SettingsWindow.swift` — Deepgram API key field (Keychain `account=deepgram-api-key`) below the OpenAI key block. Provider picker added to the Meeting section.
+- Test count: 281 (unchanged — segment Codable migration covered by existing decode tests; new `DeepgramTranscriber` and `MeetingAudioMixer` are I/O-bound and tested only via manual smoke).
+
+**Manual verification done:**
+- Built `dist/Vox.app` and `dist/Vox.dmg` (2.4 MB, length 2525569). EdDSA signature: `zWPmYfaBvQb1c+yriaiU482ZWqy3HSjxTAg5uTazN5hMSksmqJ07qstPmjPDr6eaxMe0ahO/B5cz1HK2USLBBA==`.
+- User re-transcribed an existing 43-minute meeting (`649BC478-62CD-4EB9-ABA5-8845495249C2`) end-to-end. Speaker IDs assigned per voice; summary regenerated with the new prompt; user confirmed accuracy improved and ownership attribution is no longer wrong.
+- Sticky meeting panel confirmed working across Spaces.
+- Visible scrollbar in transcript browser confirmed.
+- Summary cap at 180 pt confirmed not crowding the transcript list.
+- Exports include `Speaker N` labels.
+
+**Open issues / next-session candidates:**
+1. **Long-meeting Deepgram fallback.** Single-request mix is bounded by Deepgram's 2 GB cap and a ~10-minute synchronous wait. For multi-hour meetings, switch to the WebSocket streaming endpoint or chunk + stitch with `keyterm` cross-chunk speaker matching. Not yet needed in practice.
+2. **Summarizer truncation cuts the meeting tail.** `MeetingSummarizer.maxTranscriptChars = 60_000` truncates from the front-truncated end of the string with a marker. Action items often surface late in a meeting, so they get clipped. Either chunk + summarize hierarchically, or move to gpt-4o (larger context). Track real impact before changing.
+3. **Re-transcribe wall-clock offset is `0`.** Live recordings know `systemStartedAt` / `micStartedAt` (recorded by the recorder objects); re-transcribes don't, since those weren't persisted. Streams overlap correctly enough for diarization, but the absolute timeline drifts by however long mic-vs-system stagger was at recording time. Would need a `TranscriptSession.streamShifts: [String: Double]?` field to fix. Low priority — diarization quality is unaffected.
+4. **No cost telemetry for Deepgram.** `UsageTracker` only counts OpenAI calls. Deepgram pricing differs (Nova-3: $0.0043/min batch). User won't see a meeting's Deepgram cost in Settings → Usage. Add when needed.
+5. **AGENTS.md** still untracked. Carries over from previous handoff.
+
+**Process notes that carried over from earlier sessions (still true):**
+- Sparkle EdDSA private key on this Mac (kumedaa Dev workstation). Cut releases from here.
+- Don't `git commit` until manual smoke confirms working.
+- `--no-gpg-sign` on every commit.
+- After every Swift commit during manual testing, run `scripts/build-app.sh` and tell user to relaunch.
+- TCC re-prompts on every ad-hoc-signed release. Notarization still deferred.
+
+---
 
 ## Session 2026-05-05 — paste-last + verbatim shipping, meeting auto-detect + summary, code-review hardening, mic HAL-stall watchdog (releases 0.6.2 → 0.6.7)
 

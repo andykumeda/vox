@@ -126,8 +126,12 @@ Vox transcribes meetings end-to-end by capturing **system audio** (Zoom/Meet/etc
 - Press the meeting hotkey (default `⌃⌥⇧M`) or pick **Meeting** from the menu bar to open the floating panel.
 - Click the green **Record** disc to start. Click the red **Stop** square to end.
 - Closing the panel with `X` only hides the UI — recording continues. Re-open the panel via hotkey or menu to see the running timer or stop.
-- On Stop, Vox chunks both audio streams, transcribes them via OpenAI, interleaves segments by wall-clock time, and opens the transcript browser.
+- On Stop, Vox transcribes via the configured provider:
+  - **Deepgram Nova-3 (default if a Deepgram key is set)** — mic + system audio are mixed into a single composition aligned by wall-clock and submitted in one batch request with `diarize=true`. Returns segments tagged with `Speaker 0 / 1 / 2 …` so individual participants are distinguished within the system-audio stream instead of being collapsed under a single "Remote" label.
+  - **OpenAI Whisper (fallback)** — mic and system streams are chunked, transcribed independently, and tagged `You` (mic) vs `Other` (system). No within-stream speaker separation.
+  Provider is selectable in Settings → Meeting. Add a Deepgram API key in Settings → Deepgram API key (Keychain account `deepgram-api-key`).
 - Meeting audio + transcripts persist at `~/Library/Application Support/Vox/MeetingTranscripts/<id>/`. Audio is auto-purged per Settings → Recordings storage; transcripts kept forever.
+- Each meeting in the transcript browser has a **Re-transcribe (Deepgram)** button that reruns an existing meeting through Deepgram using the retained audio on disk, replacing the segments + summary in place. Useful for rescuing meetings transcribed before 0.7.0.
 
 Permissions: **Screen Recording** (system audio + window-title polling for auto-detect), **Microphone** (local stream).
 

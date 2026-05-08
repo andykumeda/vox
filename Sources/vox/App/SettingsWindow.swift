@@ -7,6 +7,10 @@ struct SettingsView: View {
     @State private var apiKey: String = ""
     @State private var showKey = false
     @State private var savedMessage: String?
+    @State private var deepgramKey: String = ""
+    @State private var showDeepgramKey = false
+    @State private var deepgramSavedMessage: String?
+    @State private var meetingProvider: MeetingProvider = AppSettings.meetingProvider
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
@@ -21,6 +25,7 @@ struct SettingsView: View {
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
     let keychain: KeychainStore
+    private let deepgramKeychain = KeychainStore(account: "deepgram-api-key")
 
     var body: some View {
         ScrollView {
@@ -57,6 +62,37 @@ struct SettingsView: View {
                 }
                 if let msg = savedMessage {
                     Text(msg).foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Deepgram API key")
+                    .font(.headline)
+                HStack {
+                    if showDeepgramKey {
+                        TextField("Token …", text: $deepgramKey)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        SecureField("Token …", text: $deepgramKey)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    Button(showDeepgramKey ? "Hide" : "Show") { showDeepgramKey.toggle() }
+                }
+                Text("Stored in macOS Keychain. Used for diarized meeting transcription. Get a key at console.deepgram.com.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button("Save Deepgram key") { saveDeepgram() }
+                    Button("Clear") {
+                        try? deepgramKeychain.delete()
+                        deepgramKey = ""
+                        deepgramSavedMessage = "Cleared."
+                    }
+                    if let msg = deepgramSavedMessage {
+                        Text(msg).foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -161,6 +197,26 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
 
                 if meetingMode {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Transcription provider")
+                            .font(.subheadline)
+                        Picker("", selection: Binding(
+                            get: { meetingProvider },
+                            set: { newValue in
+                                meetingProvider = newValue
+                                AppSettings.meetingProvider = newValue
+                            }
+                        )) {
+                            ForEach(MeetingProvider.allCases, id: \.self) { p in
+                                Text(p.displayName).tag(p)
+                            }
+                        }
+                        .labelsHidden()
+                        Text("Deepgram diarizes individual speakers (Speaker 0/1/…). OpenAI Whisper only distinguishes your mic (You) vs the system audio loopback (Other). Deepgram needs its own API key above.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Toggle("I acknowledge meeting audio will be captured and sent to OpenAI", isOn: Binding(
                         get: { meetingConsent },
                         set: { newValue in
@@ -372,12 +428,14 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             apiKey = keychain.read() ?? ""
+            deepgramKey = deepgramKeychain.read() ?? ""
             totals = UsageTracker.totals()
             model = AppSettings.transcriptionModel
             modeOverride = AppSettings.modeOverride
             smartCleanup = AppSettings.smartCleanupEnabled
             meetingMode = AppSettings.meetingModeEnabled
             meetingConsent = AppSettings.meetingConsentAcknowledged
+            meetingProvider = AppSettings.meetingProvider
             meetingBackendStatus = MeetingPreflight.backendStatusProvider(AppSettings.meetingCaptureBackend)
             audioRetention = AppSettings.audioRetention
         }
@@ -391,6 +449,17 @@ struct SettingsView: View {
             savedMessage = "Saved."
         } catch {
             savedMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveDeepgram() {
+        let trimmed = deepgramKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        deepgramKey = trimmed
+        do {
+            try deepgramKeychain.save(trimmed)
+            deepgramSavedMessage = "Saved."
+        } catch {
+            deepgramSavedMessage = "Save failed: \(error.localizedDescription)"
         }
     }
 

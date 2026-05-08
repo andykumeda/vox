@@ -71,6 +71,9 @@ public final class MeetingHUDPanel {
         p.isFloatingPanel = true
         p.hidesOnDeactivate = false
         p.isMovableByWindowBackground = true
+        // Follow the user across Spaces and into full-screen apps so the
+        // recording controls stay reachable no matter which desktop is active.
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
