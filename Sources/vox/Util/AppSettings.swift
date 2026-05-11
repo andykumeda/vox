@@ -34,6 +34,17 @@ public enum MeetingProvider: String, CaseIterable, Sendable {
         case .openai:   return "OpenAI Whisper (You/Other only)"
         }
     }
+
+    // USD per hour of audio. Deepgram Nova-3 pay-as-you-go = $0.0043/min
+    // (~$0.258/hr) with diarization included. OpenAI whisper-1 = $0.006/min
+    // (~$0.36/hr). Meetings transcribe both mic + system audio streams,
+    // so real billed time is ~2× the wall-clock meeting length.
+    public var usdPerHour: Double {
+        switch self {
+        case .deepgram: return 0.258
+        case .openai:   return 0.36
+        }
+    }
 }
 
 enum MeetingCaptureBackend: String, CaseIterable, Sendable {

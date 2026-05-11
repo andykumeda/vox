@@ -43,6 +43,9 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         win.isReleasedWhenClosed = false
         win.minSize = NSSize(width: 900, height: 520)
         win.tabbingMode = .disallowed
+        // Follow the user across Spaces / full-screen apps so Settings and
+        // other tabs stay reachable like the floating meeting HUD.
+        win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         win.delegate = self
 
         let host = NSHostingController(rootView: MainWindowRootView(selection: selection))

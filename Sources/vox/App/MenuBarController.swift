@@ -147,9 +147,13 @@ final class MenuBarController: NSObject {
         meetingDetector.onMeetingStarted = { [weak self] in
             // Don't pop the panel mid-recording; HUD is already up. Don't
             // pop if user disabled auto-show after we started.
+            // We DO allow popping while a previous session is just
+            // chunking/transcribing in the background — the panel shows
+            // status and the next meeting's controls are ready when the
+            // previous one finishes.
             guard self != nil else { return }
             guard AppSettings.autoShowMeetingPanel else { return }
-            guard !MeetingTranscriptionSession.shared.isActive else { return }
+            guard !MeetingTranscriptionSession.shared.isRecording else { return }
             dlog("MeetingDetector: meeting started — showing HUD")
             Task { @MainActor in MeetingHUDPanel.shared.show() }
         }

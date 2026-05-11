@@ -215,6 +215,9 @@ struct SettingsView: View {
                         Text("Deepgram diarizes individual speakers (Speaker 0/1/…). OpenAI Whisper only distinguishes your mic (You) vs the system audio loopback (Other). Deepgram needs its own API key above.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        Text(String(format: "≈ $%.2f / hour of audio (mic + system audio billed separately, so ~2× meeting length)", meetingProvider.usdPerHour))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Toggle("I acknowledge meeting audio will be captured and sent to OpenAI", isOn: Binding(
@@ -682,6 +685,7 @@ final class SettingsWindowController: NSWindowController {
         window.title = "Vox"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.init(window: window)
     }
 

@@ -19,6 +19,9 @@ public final class MeetingTranscriptsWindow {
         win.title = "Meeting Transcripts"
         win.setContentSize(NSSize(width: 720, height: 480))
         win.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+        // Follow the user across Spaces / full-screen apps so the transcript
+        // browser stays reachable like the floating meeting HUD.
+        win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         win.center()
         win.isReleasedWhenClosed = false
         self.window = win

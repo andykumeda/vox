@@ -208,14 +208,15 @@ struct MeetingHUDView: View {
     }
 
     private func elapsed(now: Date, start: Date?, isActive: Bool) -> String {
-        // While active, count up live. After the session ends, freeze on
-        // the final duration so the user keeps a record on screen.
+        // Count up live only while still recording. Once stop() sets
+        // endedAt (status flips to .chunking), freeze the timer — the user
+        // wants the final recorded duration, not chunk+transcribe time.
         let session: TranscriptSession? = {
             guard let id = MeetingTranscriptionSession.shared.activeSessionID else { return nil }
             return MeetingTranscriptionSession.shared.store.load(id: id)
         }()
         let referenceStart = start ?? session?.startedAt
-        let referenceEnd: Date? = isActive ? now : session?.endedAt
+        let referenceEnd: Date? = session?.endedAt ?? (isActive ? now : nil)
         guard let s = referenceStart, let e = referenceEnd else { return "--:--" }
         let secs = max(0, Int(e.timeIntervalSince(s)))
         let m = secs / 60, ss = secs % 60

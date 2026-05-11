@@ -1,3 +1,38 @@
+# Handoff — Vox state as of 2026-05-11 (Afternoon)
+
+## Session 2026-05-11 — Post-0.7.0 polish: HUD timer freeze, auto-show during background transcribe, Deepgram cost surface, sticky transcripts + Settings windows
+
+**Status:** Code-only patch on top of 0.7.0. No version bump, no release; dev workstation `dist/Vox.app` rebuilt. Push lands on `main`.
+
+**User-reported issues fixed:**
+1. **Meeting control panel did not pop when Teams meeting started while a previous meeting was still transcribing in the background.** Log confirmed `MeetingDetector: started — owner="Microsoft Teams"` fired correctly, but the auto-show callback bailed because `MeetingTranscriptionSession.shared.isActive` was still `true` during `.chunking` / `.transcribing`.
+2. **HUD elapsed timer kept counting up after the user clicked Stop.** Root: `elapsed()` used `isActive ? now : session.endedAt`, and `isActive` covers `.chunking` / `.transcribing` — even though `stop()` had already set `endedAt`, the formula picked `now` and kept ticking through the transcribe phase.
+3. **No surfaced rate for Deepgram on the meeting provider picker** (parallel to the per-minute rate shown for the dictation `TranscriptionModel` picker).
+4. **Meeting transcripts window + Settings window did not follow the user across Spaces / full-screen apps**, unlike the floating meeting HUD which already had `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]`.
+
+**Code changes:**
+- `Sources/vox/App/MeetingHUDPanel.swift` (`elapsed`): `referenceEnd = session?.endedAt ?? (isActive ? now : nil)`. Freezes the timer as soon as `stop()` sets `endedAt`; status badge still progresses through `Chunking…` / `Transcribing N/M` so the user can see what's happening.
+- `Sources/vox/App/MenuBarController.swift` (detector `onMeetingStarted`): gate switched from `!isActive` to `!isRecording`. Panel auto-shows for a new meeting even while the previous one is still chunking/transcribing in the background. Record button stays disabled (the session's own `start()` would throw `.alreadyActive`) — panel is informational until the previous run lands.
+- `Sources/vox/Util/AppSettings.swift`: `MeetingProvider.usdPerHour` — `.deepgram` = `0.258` (Nova-3 PAYG `$0.0043/min` with diarization included), `.openai` = `0.36` (`whisper-1` `$0.006/min`).
+- `Sources/vox/App/SettingsWindow.swift` (provider section, inside the `if meetingMode` block): caption under the provider picker — `≈ $X.XX / hour of audio (mic + system audio billed separately, so ~2× meeting length)`. The 2× note is real: meetings record both streams independently, so a 1-hour meeting bills ~2 hours of audio against the provider.
+- `Sources/vox/App/MeetingTranscriptsWindow.swift`, `Sources/vox/App/MainWindow.swift`, `Sources/vox/App/SettingsWindow.swift` (legacy `SettingsWindowController`): all three NSWindows now set `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. `.stationary` is omitted on purpose — these are regular windows, not the floating HUD, so they should move with Spaces like normal app windows but still appear on every desktop.
+
+**Why no `.stationary` here:** the meeting HUD is a borderless `NSPanel` floating at `.statusBar` level — `.stationary` keeps it pinned to screen coordinates as the user moves between Spaces. The transcripts + Settings + main windows are conventional titled windows. We want them visible across Spaces but not glued to a fixed screen position.
+
+**Defaults left untouched:** `AppSettings.autoShowMeetingPanel` is still default OFF. User has it ON on this Mac (confirmed by detector log entries). Smart default for meeting provider still reads the Deepgram Keychain entry to pick `.deepgram` vs `.openai`.
+
+**Smoke notes after rebuild:**
+- Start a Teams meeting → panel pops (autoShow ON path).
+- Click Stop → timer freezes on the recorded duration, status label transitions Chunking… → Transcribing N/M → Done while the timer stays put.
+- Open Settings → Meeting section: provider picker shows `≈ $0.26 / hour…` for Deepgram, `≈ $0.36 / hour…` for OpenAI.
+- Move Settings / Transcripts windows to another Space → both appear on the new Space.
+
+**No version bump rationale:** these are local-only polish fixes. 0.7.0 just shipped; rolling a 0.7.1 right after for four small fixes feels premature. Batch with whatever lands next.
+
+**Open follow-ups carried forward** (unchanged from 0.7.0 session): long-meeting (>2 GB) Deepgram fallback, persisting `MeetingAudioMixer` shifts so re-transcribe uses the real wall-clock offsets instead of `shift=0`, second-Mac TCC re-prompt UX after every ad-hoc install.
+
+---
+
 # Handoff — Vox state as of 2026-05-08 (Afternoon)
 
 ## Session 2026-05-08 — Deepgram diarized meeting transcription, sticky meeting panel, transcript UX cleanup (release 0.7.0)
