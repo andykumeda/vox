@@ -157,6 +157,13 @@ public final class MeetingTranscriptStore {
         sessionDirectory(id: id).appendingPathComponent("mic.m4a")
     }
 
+    /// CoreAudio process-tap output for VoIP apps (Phone/FaceTime) whose
+    /// audio path SCStream cannot see. Optional — only present when a target
+    /// app was running at meeting start on macOS 14.4+.
+    public func phoneFile(id: UUID) -> URL {
+        sessionDirectory(id: id).appendingPathComponent("phone.m4a")
+    }
+
     public func chunksDirectory(id: UUID) -> URL {
         sessionDirectory(id: id).appendingPathComponent("chunks", isDirectory: true)
     }
@@ -201,7 +208,7 @@ public final class MeetingTranscriptStore {
     }
 
     public func purgeAudio(for id: UUID) throws {
-        for url in [audioFile(id: id), micFile(id: id)] {
+        for url in [audioFile(id: id), micFile(id: id), phoneFile(id: id)] {
             if FileManager.default.fileExists(atPath: url.path) {
                 try FileManager.default.removeItem(at: url)
             }
@@ -240,11 +247,11 @@ public final class MeetingTranscriptStore {
         return purged
     }
 
-    /// Total bytes of audio.m4a + mic.m4a across all sessions.
+    /// Total bytes of audio.m4a + mic.m4a + phone.m4a across all sessions.
     public func audioDiskBytes() -> UInt64 {
         var total: UInt64 = 0
         for session in list() {
-            for url in [audioFile(id: session.id), micFile(id: session.id)] {
+            for url in [audioFile(id: session.id), micFile(id: session.id), phoneFile(id: session.id)] {
                 let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
                 total += UInt64(size)
             }

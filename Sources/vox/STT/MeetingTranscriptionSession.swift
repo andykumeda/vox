@@ -20,7 +20,9 @@ public final class MeetingTranscriptionSession {
         store: MeetingTranscriptStore(),
         recorder: nil,
         micRecorder: nil,
+        phoneRecorder: nil,
         captureMic: true,
+        captureVoIPProcesses: true,
         chunker: { input, dir in
             try await MeetingChunker().split(input: input, outputDirectory: dir)
         },
@@ -50,6 +52,7 @@ public final class MeetingTranscriptionSession {
     public let store: MeetingTranscriptStore
     private let systemRecorderFactory: () -> MeetingAudioRecording
     private let micRecorderFactory: () -> MeetingAudioRecording?
+    private let phoneRecorderFactory: () -> MeetingAudioRecording?
     private let chunker: Chunker
     private let transcribe: Transcribe
     private let deepgramTranscribe: DeepgramTranscribe?
@@ -66,6 +69,7 @@ public final class MeetingTranscriptionSession {
 
     private var systemRecorder: MeetingAudioRecording?
     private var micRecorder: MeetingAudioRecording?
+    private var phoneRecorder: MeetingAudioRecording?
     private var uploadTask: Task<Void, Never>?
     private let lock = NSLock()
     private var session: TranscriptSession?
@@ -95,7 +99,9 @@ public final class MeetingTranscriptionSession {
         store: MeetingTranscriptStore,
         recorder: MeetingAudioRecording?,
         micRecorder: MeetingAudioRecording? = nil,
+        phoneRecorder: MeetingAudioRecording? = nil,
         captureMic: Bool = false,
+        captureVoIPProcesses: Bool = false,
         chunker: @escaping Chunker,
         transcribe: @escaping Transcribe,
         deepgramTranscribe: DeepgramTranscribe? = nil,
@@ -122,6 +128,16 @@ public final class MeetingTranscriptionSession {
             self.micRecorderFactory = { MeetingMicCapture() }
         } else {
             self.micRecorderFactory = { nil }
+        }
+        if let phoneRecorder = phoneRecorder {
+            self.phoneRecorderFactory = { phoneRecorder }
+        } else if captureVoIPProcesses {
+            self.phoneRecorderFactory = {
+                if #available(macOS 14.4, *) { return MeetingProcessTap() }
+                return nil
+            }
+        } else {
+            self.phoneRecorderFactory = { nil }
         }
         self.chunker = chunker
         self.transcribe = transcribe
@@ -223,6 +239,20 @@ public final class MeetingTranscriptionSession {
                 self.micRecorder = nil
             }
         }
+
+        // VoIP process tap is best-effort: only succeeds on macOS 14.4+ when
+        // Phone/FaceTime is already running. Common failure modes (no target
+        // app, unsupported OS) are silently skipped — SCStream still covers
+        // Teams/Zoom and the rest.
+        if let phone = phoneRecorderFactory() {
+            do {
+                try await phone.start(outputURL: store.phoneFile(id: id))
+                self.phoneRecorder = phone
+            } catch {
+                dlog("MeetingProcessTap start skipped: \(error)")
+                self.phoneRecorder = nil
+            }
+        }
     }
 
     public func stop() async throws {
@@ -249,6 +279,10 @@ public final class MeetingTranscriptionSession {
             if let mic = self.micRecorder {
                 _ = try? await mic.stop()
                 self.micRecorder = nil
+            }
+            if let phone = self.phoneRecorder {
+                _ = try? await phone.stop()
+                self.phoneRecorder = nil
             }
             updateSession { s in
                 s.status = .failed
@@ -278,9 +312,27 @@ public final class MeetingTranscriptionSession {
             self.micRecorder = nil
         }
 
+        var phoneURL: URL? = nil
+        var phoneStartedAt: Date? = nil
+        if let phone = self.phoneRecorder {
+            do {
+                let url = try await phone.stop()
+                phoneStartedAt = phone.audioStartedAt
+                if phone.lastFailureReason == nil {
+                    phoneURL = url
+                } else {
+                    dlog("MeetingProcessTap produced no usable audio: \(phone.lastFailureReason ?? "")")
+                }
+            } catch {
+                dlog("MeetingProcessTap stop failed (continuing without VoIP capture): \(error)")
+            }
+            self.phoneRecorder = nil
+        }
+
         let sid = current.id
         // Hard-fail only if BOTH streams are unusable. If system captured nothing but mic
-        // worked, proceed with mic-only transcript. Vice versa.
+        // worked, proceed with mic-only transcript. Vice versa. Phone-tap is purely
+        // additive so it doesn't participate in the hard-fail gate.
         if let sysReason = systemFailureReason, micURL == nil {
             updateSession { s in
                 s.status = .failed
@@ -297,25 +349,24 @@ public final class MeetingTranscriptionSession {
 
         // Compute per-stream wall-clock offset relative to a shared reference (the earliest
         // stream that produced its first audible content). Apply it to each segment's
-        // startTime/endTime so segments from both streams share one timeline.
+        // startTime/endTime so segments from all streams share one timeline.
         let referenceTime: Date = {
-            switch (systemStartedAt, micStartedAt) {
-            case let (s?, m?): return min(s, m)
-            case let (s?, nil): return s
-            case let (nil, m?): return m
-            default: return current.startedAt
-            }
+            let candidates: [Date] = [systemStartedAt, micStartedAt, phoneStartedAt].compactMap { $0 }
+            return candidates.min() ?? current.startedAt
         }()
         let systemShift = systemStartedAt.map { $0.timeIntervalSince(referenceTime) } ?? 0
         let micShift = micStartedAt.map { $0.timeIntervalSince(referenceTime) } ?? 0
-        dlog("Meeting timeline shifts: system=\(systemShift)s mic=\(micShift)s")
+        let phoneShift = phoneStartedAt.map { $0.timeIntervalSince(referenceTime) } ?? 0
+        dlog("Meeting timeline shifts: system=\(systemShift)s mic=\(micShift)s phone=\(phoneShift)s")
 
         uploadTask = Task { [weak self] in
             await self?.runChunkAndUpload(
                 systemURL: usableSystemURL,
                 micURL: micURL,
+                phoneURL: phoneURL,
                 systemShift: systemShift,
                 micShift: micShift,
+                phoneShift: phoneShift,
                 sessionID: sid
             )
         }
@@ -331,17 +382,17 @@ public final class MeetingTranscriptionSession {
     }
 
     private func runChunkAndUpload(
-        systemURL: URL?, micURL: URL?,
-        systemShift: Double, micShift: Double,
+        systemURL: URL?, micURL: URL?, phoneURL: URL? = nil,
+        systemShift: Double, micShift: Double, phoneShift: Double = 0,
         sessionID: UUID
     ) async {
-        // Deepgram path: mix mic+system into one m4a, single batch request,
-        // diarized speaker IDs across the whole meeting. Falls through to
-        // the OpenAI per-source pipeline if Deepgram isn't wired or fails preflight.
+        // Deepgram path: mix mic+system (+ phone-tap) into one m4a, single batch
+        // request, diarized speaker IDs across the whole meeting. Falls through
+        // to the OpenAI per-source pipeline if Deepgram isn't wired or fails preflight.
         if providerProvider() == .deepgram, let dg = deepgramTranscribe {
             await runDeepgramPipeline(
-                systemURL: systemURL, micURL: micURL,
-                systemShift: systemShift, micShift: micShift,
+                systemURL: systemURL, micURL: micURL, phoneURL: phoneURL,
+                systemShift: systemShift, micShift: micShift, phoneShift: phoneShift,
                 sessionID: sessionID, deepgram: dg
             )
             return
@@ -649,25 +700,45 @@ public final class MeetingTranscriptionSession {
     /// per-stream wall-clock alignment, send the mixed m4a to Deepgram in a
     /// single request so speaker IDs are stable across the whole meeting.
     private func runDeepgramPipeline(
-        systemURL: URL?, micURL: URL?,
-        systemShift: Double, micShift: Double,
+        systemURL: URL?, micURL: URL?, phoneURL: URL? = nil,
+        systemShift: Double, micShift: Double, phoneShift: Double = 0,
         sessionID: UUID,
         deepgram: @escaping DeepgramTranscribe
     ) async {
-        var sources: [MeetingAudioMixer.Source] = []
+        // Per-source Deepgram requests. Each input file is one speaker class
+        // (your mic vs caller-side audio) so we tag segments from the file
+        // boundary instead of relying on Deepgram's mix-based diarization,
+        // which collapses distinct speakers to a single ID when their voices
+        // share similar characteristics in the downmixed file. Within-source
+        // diarization (multiple callers on phone tap) is still preserved.
+        struct Job {
+            let url: URL
+            let source: SegmentSource
+            let shift: Double
+            let speakerOffset: Int
+        }
+        var jobs: [Job] = []
         if let url = systemURL {
             let prepped = await prepareForChunking(streamURL: url, baseShift: systemShift)
             if prepped.audibleDuration > 0 || systemShift == 0 {
-                sources.append(MeetingAudioMixer.Source(url: prepped.url, startTime: prepped.shift))
+                jobs.append(Job(url: prepped.url, source: .remote, shift: prepped.shift, speakerOffset: 0))
+            }
+        }
+        if let url = phoneURL {
+            let prepped = await prepareForChunking(streamURL: url, baseShift: phoneShift)
+            if prepped.audibleDuration > 0 || phoneShift == 0 {
+                jobs.append(Job(url: prepped.url, source: .remote, shift: prepped.shift, speakerOffset: 100))
             }
         }
         if let url = micURL {
             let prepped = await prepareForChunking(streamURL: url, baseShift: micShift)
             if prepped.audibleDuration > 0 || micShift == 0 {
-                sources.append(MeetingAudioMixer.Source(url: prepped.url, startTime: prepped.shift))
+                // Mic = you; collapse Deepgram's within-mic speakers to nil so
+                // the renderer shows "You" rather than "Speaker N".
+                jobs.append(Job(url: prepped.url, source: .local, shift: prepped.shift, speakerOffset: -1))
             }
         }
-        guard !sources.isEmpty else {
+        guard !jobs.isEmpty else {
             updateSession { s in
                 s.status = .failed
                 s.failureReason = "No audio captured. Check that audio was actually playing through the system during the recording, that the microphone is not muted, and that Screen Recording + Microphone permissions are granted to Vox."
@@ -677,41 +748,46 @@ public final class MeetingTranscriptionSession {
 
         updateSession { s in
             s.status = .transcribing
-            s.chunksTotal = 1
+            s.chunksTotal = jobs.count
             s.chunksCompleted = 0
         }
 
-        let mixedURL = store.sessionDirectory(id: sessionID)
-            .appendingPathComponent("mixed.m4a")
-        do {
-            _ = try await MeetingAudioMixer.mix(sources: sources, output: mixedURL)
-        } catch {
-            updateSession { s in
-                s.status = .failed
-                s.failureReason = "Mixer failed: \(error)"
+        var allSegments: [TranscriptSegment] = []
+        for job in jobs {
+            if Task.isCancelled {
+                updateSession { $0.status = .cancelled }
+                return
             }
-            return
-        }
-
-        if Task.isCancelled {
-            updateSession { $0.status = .cancelled }
-            return
-        }
-
-        let segments: [TranscriptSegment]
-        do {
-            segments = try await deepgram(mixedURL)
-        } catch {
-            updateSession { s in
-                s.status = .failed
-                s.failureReason = "Deepgram transcription failed: \(error)"
+            let raw: [TranscriptSegment]
+            do {
+                raw = try await deepgram(job.url)
+            } catch {
+                updateSession { s in
+                    s.status = .failed
+                    s.failureReason = "Deepgram transcription failed (\(job.source.rawValue)): \(error)"
+                }
+                return
             }
-            return
+            let tagged = raw.map { seg -> TranscriptSegment in
+                let speakerID: Int? = {
+                    if job.speakerOffset < 0 { return nil }
+                    guard let sid = seg.speakerID else { return job.speakerOffset }
+                    return job.speakerOffset + sid
+                }()
+                return TranscriptSegment(
+                    startTime: seg.startTime + job.shift,
+                    endTime: seg.endTime + job.shift,
+                    text: seg.text,
+                    source: job.source,
+                    speakerID: speakerID
+                )
+            }
+            allSegments.append(contentsOf: tagged)
+            updateSession { s in s.chunksCompleted += 1 }
         }
 
         updateSession { s in
-            s.segments = segments.sorted(by: TranscriptSegment.byStartTime)
-            s.chunksCompleted = 1
+            s.segments = allSegments.sorted(by: TranscriptSegment.byStartTime)
             s.status = .completed
         }
 
@@ -736,10 +812,12 @@ public final class MeetingTranscriptionSession {
         }
         let systemURL = store.audioFile(id: sessionID)
         let micURL = store.micFile(id: sessionID)
+        let phoneURL = store.phoneFile(id: sessionID)
         let fm = FileManager.default
         let systemExists = fm.fileExists(atPath: systemURL.path)
         let micExists = fm.fileExists(atPath: micURL.path)
-        guard systemExists || micExists else {
+        let phoneExists = fm.fileExists(atPath: phoneURL.path)
+        guard systemExists || micExists || phoneExists else {
             dlog("reTranscribeWithDeepgram: no audio retained for \(sessionID)")
             return
         }
@@ -766,7 +844,8 @@ public final class MeetingTranscriptionSession {
         await runDeepgramPipeline(
             systemURL: systemExists ? systemURL : nil,
             micURL: micExists ? micURL : nil,
-            systemShift: 0, micShift: 0,
+            phoneURL: phoneExists ? phoneURL : nil,
+            systemShift: 0, micShift: 0, phoneShift: 0,
             sessionID: sessionID, deepgram: dg
         )
     }

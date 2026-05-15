@@ -98,6 +98,7 @@ private final class MeetingTranscriptsModel: ObservableObject {
         let fm = FileManager.default
         return fm.fileExists(atPath: store.audioFile(id: session.id).path)
             || fm.fileExists(atPath: store.micFile(id: session.id).path)
+            || fm.fileExists(atPath: store.phoneFile(id: session.id).path)
     }
 
     func reTranscribeWithDeepgram(_ id: UUID) {
@@ -284,12 +285,14 @@ struct MeetingTranscriptsView: View {
     }
 
     private func speakerColor(_ seg: TranscriptSegment) -> Color {
+        // Local mic always = you; reserve green so it never collides with a
+        // remote speaker color from the palette below.
+        if seg.source == .local { return .green }
         if let id = seg.speakerID {
-            // Cycle a small palette by speakerID so the eye can track who's talking.
             let palette: [Color] = [.blue, .purple, .orange, .pink, .teal, .indigo, .brown, .red]
             return palette[(id % palette.count + palette.count) % palette.count]
         }
-        return seg.source == .local ? .blue : .purple
+        return .purple
     }
 }
 
