@@ -141,8 +141,19 @@ enum AppSettings {
     private static let meetingSummaryEnabledKey = "meetingSummaryEnabled"
     private static let meetingProviderKey = "meetingProvider"
 
+    // Defaults to true. Restoring the prior clipboard ~1.5s after ⌘V races
+    // web text inputs (Comet/Perplexity sidebar, Slack web, etc.) that read
+    // the pasteboard asynchronously after the paste event — the restore lands
+    // first and the app reads the prior clipboard contents instead of the
+    // transcript. Keeping the transcript on the clipboard sidesteps the race;
+    // users who want auto-restore can opt out in Settings.
     static var keepTranscriptionOnClipboard: Bool {
-        get { UserDefaults.standard.bool(forKey: keepKey) }
+        get {
+            if let stored = UserDefaults.standard.object(forKey: keepKey) as? Bool {
+                return stored
+            }
+            return true
+        }
         set { UserDefaults.standard.set(newValue, forKey: keepKey) }
     }
 
