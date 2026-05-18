@@ -1,4 +1,29 @@
-# Handoff — Vox state as of 2026-05-11 (Afternoon)
+# Handoff — Vox state as of 2026-05-18 (Afternoon)
+
+## Session 2026-05-18 — Release 0.7.1: VoIP-app audio capture + per-source diarization, dictation clipboard default, plus the May 11 + May 16 polish batch
+
+**Status:** Release 0.7.1 cut from `main`. `Resources/Info.plist` bumped to `0.7.1` / build `20`. `dist/Vox.app` + `dist/Vox.dmg` (2,560,836 bytes) rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature `C66vl3pbsB2scriTVD+8i4BdUyoei1UVA+Jxr14y5W47TsAPj3HPhtFrlO7UjntDEZKeLNDvORRu8bPASVOGAQ==` generated for the DMG. `docs/appcast.xml` prepended with the 0.7.1 item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.1/Vox.dmg`. Second Mac picks up via Sparkle on next check (or "Check for Updates…" in Settings) — TCC re-prompts for Mic / Input Monitoring / Accessibility per the usual ad-hoc-signed cadence.
+
+**Why 0.7.1 now:** second Mac is still on a pre-0.7 build with no audio retention, so the May 13 diagnostic showed `canReTranscribe` returning false silently because the gate requires both a terminal status AND `MeetingTranscriptStore().audioFile(id:)` existing on disk. Updating second Mac was the requested fix; rather than ship a stale 0.7.0 there while this Mac sits on three unreleased commits past the tag, we bundled the May 11 polish, the May 14 dictation clipboard flip, and the May 16 VoIP capture feature into a single 0.7.1.
+
+**Commits rolled up into 0.7.1** (vs `v0.7.0` tag at `6317a91`):
+- `adc21a5` `feat(meeting): capture VoIP-app audio + per-source diarization`
+- `0edca38` `fix(dictation): keep transcript on clipboard by default`
+- `ea565f1` `fix(meeting): HUD timer freezes on stop; auto-show pops during background transcribe`
+
+**`adc21a5` — VoIP capture + per-source diarization:** SCStream cannot see audio from Phone.app / FaceTime — Continuity calls route through privileged CoreAudio paths that bypass the display tap. Added `MeetingProcessTap` (macOS 14.4+) that resolves PIDs for the UI apps plus the system daemons that actually render call audio (`callservicesd`, `avconferenced`, `imagent`, `identityservicesd`), builds a `CATapDescription` mixdown of those processes, wraps it in a private aggregate device, and writes AAC m4a alongside the existing mic + system streams. Deepgram pipeline switched from one-mixed-file to per-source: each input file (mic / phone / system) is its own request and segments are tagged by file boundary. Cross-stream diarization on a single mixed file had been collapsing distinct voices to one Speaker ID — per-source tags guarantee You-vs-other distinction while preserving within-source diarization for multi-caller scenarios. Speaker IDs are offset per source (0 system / +100 phone / nil for mic) to avoid collisions. Green reserved for "You" so the local label never matches any color from the remote speaker palette.
+
+**`0edca38` — dictation clipboard default flipped to keep transcript:** restoring the prior clipboard ~1.5s after ⌘V races web text inputs (Comet, Perplexity sidebar, Slack web) that read the pasteboard asynchronously after the paste event — the restore landed first and the app pulled the previous clipboard contents instead of the transcript. Default flipped to `true` (keep transcript on clipboard); opt out in Settings if the prior behavior is preferred.
+
+**`ea565f1` — HUD timer freeze, auto-show during background transcribe, Deepgram cost surface, sticky transcripts + Settings windows:** see the May 11 session block below for the full rationale and per-file diff — that work landed locally on May 11 and ships now as part of 0.7.1.
+
+**Release artifacts to push:**
+- `git commit` covers `Resources/Info.plist`, `docs/appcast.xml`, `HANDOFF.md`.
+- `git tag v0.7.1` (`--no-gpg-sign`, per durable repo preference).
+- `git push origin main && git push origin v0.7.1`.
+- `gh release create v0.7.1 --title 'Vox 0.7.1' --notes-file -` (notes mirror the appcast bullets) and attach `dist/Vox.dmg`.
+
+**Open follow-ups carried forward** (unchanged): long-meeting (>2 GB) Deepgram fallback; persisting `MeetingAudioMixer` shifts so re-transcribe uses real wall-clock offsets instead of `shift=0`; second-Mac TCC re-prompt UX after every ad-hoc install (still the same friction — Mic / Input Monitoring / Accessibility re-grant after the 0.7.1 update lands).
 
 ## Session 2026-05-11 — Post-0.7.0 polish: HUD timer freeze, auto-show during background transcribe, Deepgram cost surface, sticky transcripts + Settings windows
 

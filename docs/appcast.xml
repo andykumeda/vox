@@ -6,6 +6,29 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.1</title>
+            <pubDate>Mon, 18 May 2026 23:35:00 +0000</pubDate>
+            <sparkle:version>20</sparkle:version>
+            <sparkle:shortVersionString>0.7.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Feature:</strong> meeting capture now records VoIP-app audio (Phone.app, FaceTime, Continuity calls). These route through privileged CoreAudio paths that the existing display tap couldn't see; a new process tap on macOS 14.4+ mixes <code>callservicesd</code> / <code>avconferenced</code> / <code>imagent</code> / <code>identityservicesd</code> into an AAC m4a alongside mic + system streams.</li>
+                    <li><strong>Feature:</strong> Deepgram diarization is now per-source instead of one mixed file. Mic / phone / system each get their own request and speaker IDs are namespaced per source (0 system / +100 phone / nil for mic). Fixes cases where distinct voices on a mixed file collapsed to one Speaker ID. "You" reserves green so it never matches a remote speaker color.</li>
+                    <li><strong>Fix:</strong> dictation transcript now stays on the clipboard by default. The prior ~1.5s restore was racing web text inputs (Comet, Perplexity sidebar, Slack web) that read the pasteboard asynchronously after ⌘V, so they pulled the pre-paste contents instead of the transcript. Opt out in Settings if you preferred the old behavior.</li>
+                    <li><strong>Fix:</strong> meeting HUD timer freezes the moment you click Stop (prefers <code>session.endedAt</code> over <code>now</code>) instead of running through the full transcribe phase.</li>
+                    <li><strong>Fix:</strong> the meeting panel now auto-shows for a new Teams/Zoom meeting even while a previous session is still chunking / transcribing in the background. Gate flipped from <code>!isActive</code> to <code>!isRecording</code>.</li>
+                    <li><strong>Improvement:</strong> Settings provider picker shows "≈ $X.XX / hour of audio" for both meeting providers (Deepgram $0.258, OpenAI $0.36), parallel to the dictation model rate caption.</li>
+                    <li><strong>Improvement:</strong> Transcripts, Main, and Settings windows now follow you across Spaces and full-screen apps (<code>collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]</code>) like the meeting HUD already did.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.1/Vox.dmg"
+                sparkle:edSignature="C66vl3pbsB2scriTVD+8i4BdUyoei1UVA+Jxr14y5W47TsAPj3HPhtFrlO7UjntDEZKeLNDvORRu8bPASVOGAQ=="
+                length="2560836"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.0</title>
             <pubDate>Fri, 08 May 2026 21:25:00 +0000</pubDate>
             <sparkle:version>19</sparkle:version>
