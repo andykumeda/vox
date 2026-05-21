@@ -2,7 +2,7 @@
 
 ## Session 2026-05-21 — Release 0.7.2: remote desktop paste fallbacks for Screen Sharing/VNC and RustDesk
 
-**Status:** Release prep for 0.7.2 is complete on the dev Mac. `Resources/Info.plist` bumped to `0.7.2` / build `21`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `7DzQQsAC7ePwRC5HQe0im6XA4fJlb1y8n0UPDgMsRUMN4hDyxAusf8DQ5dbT4HX+TlJiTVpJhV0xVTHwf4r5Bw==`; length `2572621`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.2/Vox.dmg`. Once `main`, tag `v0.7.2`, and the GitHub release are pushed, the other Mac can pick this up via Sparkle (`Check for Updates…`).
+**Status:** Release 0.7.2 shipped. Release commit `8e80e06` is tagged `v0.7.2` and pushed to GitHub; GitHub release URL is `https://github.com/andykumeda/vox/releases/tag/v0.7.2`. `Resources/Info.plist` bumped to `0.7.2` / build `21`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `7DzQQsAC7ePwRC5HQe0im6XA4fJlb1y8n0UPDgMsRUMN4hDyxAusf8DQ5dbT4HX+TlJiTVpJhV0xVTHwf4r5Bw==`; length `2572621`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.2/Vox.dmg`. The other Mac can pick this up via Sparkle (`Check for Updates…`) once GitHub Pages serves the updated appcast.
 
 **Why 0.7.2 now:** dictation into a remote Mac through VNC/RustDesk was not receiving the transcript. The original paste path put text on the local pasteboard and synthesized `Cmd+V`; remote access apps were forwarding the `V` key but dropping the synthetic Command modifier, causing only a lowercase `v`, or no visible input. User confirmed the Screen Sharing/VNC fallback works. RustDesk needed a separate path because both System Events `Cmd+V` and `Edit > Paste` failed there.
 
@@ -22,12 +22,13 @@
 - `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
 - Local app log during RustDesk test showed `paste remote fallback: RustDesk physical typing 26 chars`. Hands-on opposite-direction UI testing is still pending; user asked not to take over the screen-sharing UI while they were working.
 
-**Release checklist after context reset:**
-1. Commit selected files only: `Sources/vox/Text/TextInjector.swift`, `Resources/Info.plist`, `README.md`, `Resources/help.md`, `docs/appcast.xml`, `HANDOFF.md`. Leave `.claude/` and untracked `AGENTS.md` alone unless explicitly requested.
-2. Tag `v0.7.2` with `--no-gpg-sign`.
-3. Push `main` and `v0.7.2`.
-4. Create GitHub release `v0.7.2` titled `Vox 0.7.2` and attach `dist/Vox.dmg`.
-5. On the other Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update.
+**Release actions completed:**
+- Commit `8e80e06` (`release: 0.7.2 remote paste fallbacks`) includes `Sources/vox/Text/TextInjector.swift`, `Resources/Info.plist`, `README.md`, `Resources/help.md`, `docs/appcast.xml`, and this handoff section as originally written.
+- Tag `v0.7.2` pushed to GitHub.
+- GitHub release `v0.7.2` created with `dist/Vox.dmg` attached.
+- `.claude/` and untracked `AGENTS.md` were intentionally left untouched.
+
+**Other-Mac update path:** on the other Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. If Sparkle does not see 0.7.2 immediately, wait for GitHub Pages to finish publishing `docs/appcast.xml` from `main` and try again.
 
 **Open follow-ups carried forward:** confirm RustDesk in the opposite direction after the other Mac updates; if uppercase/punctuation fidelity matters, the next likely path is a RustDesk-specific text-injection mechanism outside synthetic keyboard modifiers. Existing meeting follow-ups still stand: long-meeting (>2 GB) Deepgram fallback and persisted stream shifts for re-transcribe.
 
