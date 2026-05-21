@@ -1,3 +1,38 @@
+# Handoff — Vox state as of 2026-05-21 (Afternoon)
+
+## Session 2026-05-21 — Release 0.7.2: remote desktop paste fallbacks for Screen Sharing/VNC and RustDesk
+
+**Status:** Release prep for 0.7.2 is complete on the dev Mac. `Resources/Info.plist` bumped to `0.7.2` / build `21`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `7DzQQsAC7ePwRC5HQe0im6XA4fJlb1y8n0UPDgMsRUMN4hDyxAusf8DQ5dbT4HX+TlJiTVpJhV0xVTHwf4r5Bw==`; length `2572621`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.2/Vox.dmg`. Once `main`, tag `v0.7.2`, and the GitHub release are pushed, the other Mac can pick this up via Sparkle (`Check for Updates…`).
+
+**Why 0.7.2 now:** dictation into a remote Mac through VNC/RustDesk was not receiving the transcript. The original paste path put text on the local pasteboard and synthesized `Cmd+V`; remote access apps were forwarding the `V` key but dropping the synthetic Command modifier, causing only a lowercase `v`, or no visible input. User confirmed the Screen Sharing/VNC fallback works. RustDesk needed a separate path because both System Events `Cmd+V` and `Edit > Paste` failed there.
+
+**Code changes:**
+- `Sources/vox/Text/TextInjector.swift`: frontmost app detection now selects a paste target: standard apps still use the existing synthesized `Cmd+V`; `com.apple.ScreenSharing` uses System Events `key code 9 using command down`; `com.carriez.rustdesk` bypasses paste entirely and types the transcript as unmodified physical keycodes through the HID event tap.
+- RustDesk fallback intentionally trades fidelity for delivery. Because RustDesk drops synthetic Shift/Command modifiers, the fallback can lowercase letters and approximate shifted punctuation (`?`/`!` -> `.`, `:` -> `;`, quotes -> apostrophe, etc.). This is only used when RustDesk is the frontmost app.
+- Paste Last Transcription uses the same `TextInjector.paste` path, so it benefits from the same remote fallbacks.
+
+**Docs updated:**
+- `README.md`: documents the Screen Sharing/VNC and RustDesk behavior, fixes the stale clipboard-default text (0.7.1 made "keep transcript on clipboard" the default), and updates the test count to 281.
+- `Resources/help.md`: adds remote desktop paste troubleshooting and updates the meeting-provider wording so it no longer says meetings always transcribe through OpenAI.
+- `docs/appcast.xml`: prepended 0.7.2 release notes.
+
+**Verification:**
+- `swift test` passed: 281 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+- Local app log during RustDesk test showed `paste remote fallback: RustDesk physical typing 26 chars`. Hands-on opposite-direction UI testing is still pending; user asked not to take over the screen-sharing UI while they were working.
+
+**Release checklist after context reset:**
+1. Commit selected files only: `Sources/vox/Text/TextInjector.swift`, `Resources/Info.plist`, `README.md`, `Resources/help.md`, `docs/appcast.xml`, `HANDOFF.md`. Leave `.claude/` and untracked `AGENTS.md` alone unless explicitly requested.
+2. Tag `v0.7.2` with `--no-gpg-sign`.
+3. Push `main` and `v0.7.2`.
+4. Create GitHub release `v0.7.2` titled `Vox 0.7.2` and attach `dist/Vox.dmg`.
+5. On the other Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update.
+
+**Open follow-ups carried forward:** confirm RustDesk in the opposite direction after the other Mac updates; if uppercase/punctuation fidelity matters, the next likely path is a RustDesk-specific text-injection mechanism outside synthetic keyboard modifiers. Existing meeting follow-ups still stand: long-meeting (>2 GB) Deepgram fallback and persisted stream shifts for re-transcribe.
+
+---
+
 # Handoff — Vox state as of 2026-05-18 (Afternoon)
 
 ## Session 2026-05-18 — Release 0.7.1: VoIP-app audio capture + per-source diarization, dictation clipboard default, plus the May 11 + May 16 polish batch

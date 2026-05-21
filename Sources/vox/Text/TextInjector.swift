@@ -38,6 +38,12 @@ private let letterKeyCodes: [Character: CGKeyCode] = [
 public struct TextInjector {
     public init() {}
 
+    private enum PasteTarget {
+        case standard
+        case screenSharing
+        case rustDesk
+    }
+
     public func sendKey(_ key: SuffixKey) {
         let source = CGEventSource(stateID: .combinedSessionState)
         let code: CGKeyCode
@@ -143,10 +149,169 @@ public struct TextInjector {
         pb.setString(text, forType: .string)
         let expectedChangeCount = pb.changeCount
 
-        sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
+        switch pasteTargetForFrontmostApp() {
+        case .standard:
+            sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
+        case .screenSharing:
+            dlog("paste remote fallback: Screen Sharing via System Events Cmd+V")
+            if !pasteWithSystemEventsKeyCode() {
+                dlog("Screen Sharing paste fallback failed")
+            }
+        case .rustDesk:
+            dlog("paste remote fallback: RustDesk physical typing \(text.count) chars")
+            typePhysicalTextForRustDesk(text)
+        }
         if !keepOnClipboard {
             schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
         }
+    }
+
+    private func pasteTargetForFrontmostApp() -> PasteTarget {
+        switch NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
+        case "com.apple.ScreenSharing":
+            return .screenSharing
+        case "com.carriez.rustdesk":
+            return .rustDesk
+        default:
+            return .standard
+        }
+    }
+
+    private func pasteWithSystemEventsKeyCode() -> Bool {
+        runAppleScript("""
+        tell application "System Events"
+            key code 9 using command down
+        end tell
+        """)
+    }
+
+    private func typePhysicalTextForRustDesk(_ text: String) {
+        let source = CGEventSource(stateID: .hidSystemState)
+        for code in physicalKeyCodes(for: text) {
+            postKeycode(code, source: source)
+            usleep(4_000)
+        }
+    }
+
+    private func runAppleScript(_ source: String) -> Bool {
+        guard let script = NSAppleScript(source: source) else { return false }
+        var error: NSDictionary?
+        script.executeAndReturnError(&error)
+        if let error {
+            dlog("AppleScript failed: \(error)")
+            return false
+        }
+        return true
+    }
+
+    private func physicalKeyCodes(for text: String) -> [CGKeyCode] {
+        var codes: [CGKeyCode] = []
+        for character in text {
+            appendPhysicalKeyCodes(for: character, to: &codes)
+        }
+        return codes
+    }
+
+    private func appendPhysicalKeyCodes(for character: Character, to codes: inout [CGKeyCode]) {
+        if let code = unmodifiedPhysicalKeyCode(for: character) {
+            codes.append(code)
+            return
+        }
+        let expansion: String
+        switch character {
+        case "?": expansion = "."
+        case "!": expansion = "."
+        case ":": expansion = ";"
+        case "\"": expansion = "'"
+        case "“", "”": expansion = "'"
+        case "‘", "’": expansion = "'"
+        case "(": expansion = " "
+        case ")": expansion = " "
+        case "@": expansion = " at "
+        case "#": expansion = " number "
+        case "$": expansion = " dollars "
+        case "%": expansion = " percent "
+        case "&": expansion = " and "
+        case "*": expansion = " "
+        case "_": expansion = "-"
+        case "+": expansion = " plus "
+        case "{": expansion = "["
+        case "}": expansion = "]"
+        case "|": expansion = "/"
+        case "<": expansion = ","
+        case ">": expansion = "."
+        case "~": expansion = "-"
+        case "—", "–": expansion = "-"
+        case "…": expansion = "..."
+        default: expansion = String(character).lowercased()
+        }
+        guard expansion != String(character) else { return }
+        for expanded in expansion {
+            appendPhysicalKeyCodes(for: expanded, to: &codes)
+        }
+    }
+
+    private func unmodifiedPhysicalKeyCode(for character: Character) -> CGKeyCode? {
+        switch character {
+        case "a", "A": return CGKeyCode(kVK_ANSI_A)
+        case "b", "B": return CGKeyCode(kVK_ANSI_B)
+        case "c", "C": return CGKeyCode(kVK_ANSI_C)
+        case "d", "D": return CGKeyCode(kVK_ANSI_D)
+        case "e", "E": return CGKeyCode(kVK_ANSI_E)
+        case "f", "F": return CGKeyCode(kVK_ANSI_F)
+        case "g", "G": return CGKeyCode(kVK_ANSI_G)
+        case "h", "H": return CGKeyCode(kVK_ANSI_H)
+        case "i", "I": return CGKeyCode(kVK_ANSI_I)
+        case "j", "J": return CGKeyCode(kVK_ANSI_J)
+        case "k", "K": return CGKeyCode(kVK_ANSI_K)
+        case "l", "L": return CGKeyCode(kVK_ANSI_L)
+        case "m", "M": return CGKeyCode(kVK_ANSI_M)
+        case "n", "N": return CGKeyCode(kVK_ANSI_N)
+        case "o", "O": return CGKeyCode(kVK_ANSI_O)
+        case "p", "P": return CGKeyCode(kVK_ANSI_P)
+        case "q", "Q": return CGKeyCode(kVK_ANSI_Q)
+        case "r", "R": return CGKeyCode(kVK_ANSI_R)
+        case "s", "S": return CGKeyCode(kVK_ANSI_S)
+        case "t", "T": return CGKeyCode(kVK_ANSI_T)
+        case "u", "U": return CGKeyCode(kVK_ANSI_U)
+        case "v", "V": return CGKeyCode(kVK_ANSI_V)
+        case "w", "W": return CGKeyCode(kVK_ANSI_W)
+        case "x", "X": return CGKeyCode(kVK_ANSI_X)
+        case "y", "Y": return CGKeyCode(kVK_ANSI_Y)
+        case "z", "Z": return CGKeyCode(kVK_ANSI_Z)
+        case "0": return CGKeyCode(kVK_ANSI_0)
+        case "1": return CGKeyCode(kVK_ANSI_1)
+        case "2": return CGKeyCode(kVK_ANSI_2)
+        case "3": return CGKeyCode(kVK_ANSI_3)
+        case "4": return CGKeyCode(kVK_ANSI_4)
+        case "5": return CGKeyCode(kVK_ANSI_5)
+        case "6": return CGKeyCode(kVK_ANSI_6)
+        case "7": return CGKeyCode(kVK_ANSI_7)
+        case "8": return CGKeyCode(kVK_ANSI_8)
+        case "9": return CGKeyCode(kVK_ANSI_9)
+        case " ": return CGKeyCode(kVK_Space)
+        case "\n": return CGKeyCode(kVK_Return)
+        case "\t": return CGKeyCode(kVK_Tab)
+        case "-": return CGKeyCode(kVK_ANSI_Minus)
+        case "=": return CGKeyCode(kVK_ANSI_Equal)
+        case "[": return CGKeyCode(kVK_ANSI_LeftBracket)
+        case "]": return CGKeyCode(kVK_ANSI_RightBracket)
+        case "\\": return CGKeyCode(kVK_ANSI_Backslash)
+        case ";": return CGKeyCode(kVK_ANSI_Semicolon)
+        case "'": return CGKeyCode(kVK_ANSI_Quote)
+        case ",": return CGKeyCode(kVK_ANSI_Comma)
+        case ".": return CGKeyCode(kVK_ANSI_Period)
+        case "/": return CGKeyCode(kVK_ANSI_Slash)
+        case "`": return CGKeyCode(kVK_ANSI_Grave)
+        default: return nil
+        }
+    }
+
+    private func postKeycode(_ code: CGKeyCode, source: CGEventSource?) {
+        let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
+        let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
     }
 
     private func sendKeyCombo(keycode: UInt16, modifiers: CGEventFlags) {

@@ -40,8 +40,8 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   square** to end it.
 - Closing the panel with the `X` only hides the UI — recording continues.
   Re-open the panel via hotkey or menu to see the running timer or stop.
-- When you click Stop, Vox chunks both audio streams, transcribes them via
-  OpenAI, interleaves segments by time, and opens the transcript browser.
+- When you click Stop, Vox transcribes via the configured meeting provider,
+  interleaves segments by time, and opens the transcript browser.
 - Meeting audio is kept in `~/Library/Application Support/Vox/MeetingTranscripts/<id>/`
   so you can replay or re-transcribe later. See **Settings → Recordings storage**
   to set a retention cutoff (default: delete audio after 1 month, transcripts
@@ -111,6 +111,10 @@ Settings → Hotkeys lets you rebind:
 - **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`,
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
+- **Remote desktop paste fails** — Screen Sharing/VNC uses a System Events
+  paste fallback. RustDesk drops synthetic modifier keys, so Vox types
+  transcripts as plain physical keypresses there; text may be lowercased and
+  shifted punctuation may be approximated.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
   must be **Do Nothing**.
 - **Wrong transcription on short phrases** — add a Dictionary entry to fix

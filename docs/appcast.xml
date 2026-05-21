@@ -6,6 +6,25 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.2</title>
+            <pubDate>Thu, 21 May 2026 21:37:07 +0000</pubDate>
+            <sparkle:version>21</sparkle:version>
+            <sparkle:shortVersionString>0.7.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> dictation into remote desktop sessions now has app-specific paste handling. Screen Sharing/VNC uses a System Events paste fallback because the standard synthesized &#8984;V path can lose modifiers inside the remote session.</li>
+                    <li><strong>Fix:</strong> RustDesk now avoids paste shortcuts entirely and types the transcript as plain physical keypresses. RustDesk drops synthetic modifier keys, which caused earlier attempts to insert only a lowercase <code>v</code> or no text. This fallback may lowercase letters and approximate shifted punctuation, but it should deliver text to the remote cursor.</li>
+                    <li><strong>Docs:</strong> README and in-app help now document remote desktop behavior and the current default to keep the transcript on the clipboard after paste.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.2/Vox.dmg"
+                sparkle:edSignature="7DzQQsAC7ePwRC5HQe0im6XA4fJlb1y8n0UPDgMsRUMN4hDyxAusf8DQ5dbT4HX+TlJiTVpJhV0xVTHwf4r5Bw=="
+                length="2572621"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.1</title>
             <pubDate>Mon, 18 May 2026 23:35:00 +0000</pubDate>
             <sparkle:version>20</sparkle:version>

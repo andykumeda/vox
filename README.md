@@ -98,7 +98,7 @@ Click the menu-bar Vox icon → **Settings**:
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
 - **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
-- **Paste behavior** → **Keep transcription on clipboard after paste** — when on, transcribed text remains on your clipboard. When off (default), prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime.
+- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
 ## Dictionary
@@ -169,6 +169,8 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
+Remote desktop apps need special paste handling. macOS Screen Sharing/VNC uses a System Events paste fallback when Vox is frontmost over the remote session. RustDesk drops synthetic modifier keys, so Vox falls back to typing the transcript as plain physical keypresses; letters may be lowercased and shifted punctuation may be approximated, but the text should still reach the remote cursor. Paste Last Transcription uses the same path.
+
 ## Files
 
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
@@ -212,7 +214,7 @@ docs/
   UPDATING.md            Update procedure (auto + manual fallback)
   dictation-regression.md  Regression-suite policy + thresholds
   index.html             Pages landing
-Tests/voxTests/          258 unit tests covering text pipeline, hotkey, meeting, retention, history
+Tests/voxTests/          281 unit tests covering text pipeline, hotkey, meeting, retention, history
 ```
 
 ## Testing
