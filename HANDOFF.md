@@ -1,3 +1,33 @@
+# Handoff — Vox state as of 2026-05-22 (Release 0.7.7)
+
+## Session 2026-05-22 — Release 0.7.7: Remote capitalization via Caps Lock physical typing
+
+**Status:** Release 0.7.7 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.7` / build `26`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `WIVYVj6SwHGcjOkom1ZkvfLptsEnL1E2jHYNh1BxbQWDoVA3p5aAbLnl5iurs6UApnVYq4UWjKtFDgm8SBOyCg==`; length `2590184`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.7/Vox.dmg`.
+
+**Why 0.7.7 now:** User reported that 0.7.6 did not fix remote insertion: RustDesk still lowercased sentence starts, and VNC produced repeated lowercase `a`s. That means RustDesk still drops synthetic Shift, while VNC ignores the Unicode payload and treats virtual keycode `0` as `a`.
+
+**Code changes:**
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC and RustDesk now both use a Caps Lock based physical typing fallback. Vox toggles Caps Lock around uppercase letter runs and types unmodified letter keycodes, avoiding synthetic Shift and VNC Unicode key payloads.
+- `Sources/vox/Text/TextInjector.swift`: remote typing reads the initial Caps Lock state and restores it after insertion, including if Caps Lock was already active.
+- `Tests/voxTests/TextInjectorTests.swift`: updated remote fallback coverage and added Caps Lock sequencing tests, including initially-active Caps Lock.
+
+**Docs updated:**
+- `README.md` and `Resources/help.md`: document Caps Lock based remote insertion for Screen Sharing/VNC and RustDesk.
+- `docs/appcast.xml`: prepended 0.7.7 release notes.
+
+**Verification:**
+- `swift test` passed: 307 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Release actions completed:**
+- Pending: commit, tag `v0.7.7`, GitHub release, public appcast verification.
+- `.claude/` and untracked `AGENTS.md` were intentionally left untouched.
+
+**Other-Mac update path:** on the remote Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. This release should fix sentence-start capitalization in RustDesk and avoid the VNC lowercase-`a` failure from the Unicode path.
+
+---
+
 # Handoff — Vox state as of 2026-05-22 (Release 0.7.6)
 
 ## Session 2026-05-22 — Release 0.7.6: VNC Unicode text insertion preserves capitalization

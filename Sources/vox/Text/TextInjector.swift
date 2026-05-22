@@ -159,11 +159,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing unicode typing \(text.count) chars")
-            typeUnicodeText(text)
+            dlog("paste remote fallback: VNC/Screen Sharing caps-lock physical typing \(text.count) chars")
+            typePhysicalText(text, mode: .capsLockForUppercase)
         case .rustDesk:
-            dlog("paste remote fallback: RustDesk physical typing \(text.count) chars")
-            typePhysicalText(text, mode: .unmodifiedOnly)
+            dlog("paste remote fallback: RustDesk caps-lock physical typing \(text.count) chars")
+            typePhysicalText(text, mode: .capsLockForUppercase)
         }
         if Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target) {
             schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
@@ -211,58 +211,28 @@ public struct TextInjector {
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .rustDesk: true
-        case .screenSharing, .standard: false
-        }
-    }
-
-    static func usesUnicodeTypingFallback(for target: PasteTarget) -> Bool {
-        switch target {
-        case .screenSharing: true
+        case .screenSharing, .rustDesk: true
         case .standard: false
-        case .rustDesk: false
         }
     }
 
     enum PhysicalTypingMode {
-        case withShiftModifiers
+        case capsLockForUppercase
         case unmodifiedOnly
     }
 
     private func typePhysicalText(_ text: String, mode: PhysicalTypingMode) {
         let source = CGEventSource(stateID: .hidSystemState)
-        for stroke in Self.physicalKeystrokes(for: text, mode: mode) {
+        let initialCapsLockActive = CGEventSource
+            .flagsState(.hidSystemState)
+            .contains(.maskAlphaShift)
+        for stroke in Self.physicalKeystrokes(
+            for: text,
+            mode: mode,
+            initialCapsLockActive: initialCapsLockActive
+        ) {
             postKeystroke(stroke, source: source)
             usleep(3_000)
-        }
-    }
-
-    private func typeUnicodeText(_ text: String) {
-        let source = CGEventSource(stateID: .hidSystemState)
-        for scalar in text.unicodeScalars {
-            postUnicodeScalar(scalar, source: source)
-            usleep(3_000)
-        }
-    }
-
-    private func postUnicodeScalar(_ scalar: Unicode.Scalar, source: CGEventSource?) {
-        let string = String(scalar)
-        let units = Array(string.utf16)
-        units.withUnsafeBufferPointer { buffer in
-            guard let baseAddress = buffer.baseAddress else { return }
-            let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
-            down?.keyboardSetUnicodeString(
-                stringLength: buffer.count,
-                unicodeString: baseAddress
-            )
-            down?.post(tap: .cghidEventTap)
-
-            let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-            up?.keyboardSetUnicodeString(
-                stringLength: buffer.count,
-                unicodeString: baseAddress
-            )
-            up?.post(tap: .cghidEventTap)
         }
     }
 
@@ -270,11 +240,97 @@ public struct TextInjector {
         for text: String,
         mode: PhysicalTypingMode
     ) -> [PhysicalKeystroke] {
+        physicalKeystrokes(
+            for: text,
+            mode: mode,
+            initialCapsLockActive: false
+        )
+    }
+
+    static func physicalKeystrokes(
+        for text: String,
+        mode: PhysicalTypingMode,
+        initialCapsLockActive: Bool
+    ) -> [PhysicalKeystroke] {
+        if mode == .capsLockForUppercase {
+            return capsLockPhysicalKeystrokes(
+                for: text,
+                initialCapsLockActive: initialCapsLockActive
+            )
+        }
         var strokes: [PhysicalKeystroke] = []
         for character in text {
             appendPhysicalKeystrokes(for: character, mode: mode, to: &strokes)
         }
         return strokes
+    }
+
+    private static func capsLockPhysicalKeystrokes(
+        for text: String,
+        initialCapsLockActive: Bool
+    ) -> [PhysicalKeystroke] {
+        var strokes: [PhysicalKeystroke] = []
+        var capsLockActive = initialCapsLockActive
+        for character in text {
+            appendCapsLockPhysicalKeystrokes(
+                for: character,
+                initialCapsLockActive: initialCapsLockActive,
+                capsLockActive: &capsLockActive,
+                to: &strokes
+            )
+        }
+        if capsLockActive != initialCapsLockActive {
+            strokes.append(capsLockToggleStroke)
+        }
+        return strokes
+    }
+
+    private static let capsLockToggleStroke = PhysicalKeystroke(
+        code: CGKeyCode(kVK_CapsLock),
+        flags: []
+    )
+
+    private static func appendCapsLockPhysicalKeystrokes(
+        for character: Character,
+        initialCapsLockActive: Bool,
+        capsLockActive: inout Bool,
+        to strokes: inout [PhysicalKeystroke]
+    ) {
+        if let letter = letterKeyCodeAndCase(for: character) {
+            if capsLockActive != letter.isUppercase {
+                strokes.append(capsLockToggleStroke)
+                capsLockActive.toggle()
+            }
+            strokes.append(PhysicalKeystroke(code: letter.code, flags: []))
+            return
+        }
+        if let code = unmodifiedPhysicalKeyCode(for: character) {
+            strokes.append(PhysicalKeystroke(code: code, flags: []))
+            return
+        }
+        let expansion = physicalExpansion(for: character)
+        guard expansion != String(character) else { return }
+        for expanded in expansion {
+            appendCapsLockPhysicalKeystrokes(
+                for: expanded,
+                initialCapsLockActive: initialCapsLockActive,
+                capsLockActive: &capsLockActive,
+                to: &strokes
+            )
+        }
+    }
+
+    private static func letterKeyCodeAndCase(for character: Character) -> (
+        code: CGKeyCode,
+        isUppercase: Bool
+    )? {
+        let string = String(character)
+        guard string.lowercased() != string.uppercased(),
+              let lower = string.lowercased().first else {
+            return nil
+        }
+        guard let code = letterKeyCodes[lower] else { return nil }
+        return (code, string == string.uppercased())
     }
 
     private static func appendPhysicalKeystrokes(
@@ -286,37 +342,40 @@ public struct TextInjector {
             strokes.append(stroke)
             return
         }
-        let expansion: String
-        switch character {
-        case "?": expansion = "."
-        case "!": expansion = "."
-        case ":": expansion = ";"
-        case "\"": expansion = "'"
-        case "“", "”": expansion = "'"
-        case "‘", "’": expansion = "'"
-        case "(": expansion = " "
-        case ")": expansion = " "
-        case "@": expansion = " at "
-        case "#": expansion = " number "
-        case "$": expansion = " dollars "
-        case "%": expansion = " percent "
-        case "&": expansion = " and "
-        case "*": expansion = " "
-        case "_": expansion = "-"
-        case "+": expansion = " plus "
-        case "{": expansion = "["
-        case "}": expansion = "]"
-        case "|": expansion = "/"
-        case "<": expansion = ","
-        case ">": expansion = "."
-        case "~": expansion = "-"
-        case "—", "–": expansion = "-"
-        case "…": expansion = "..."
-        default: expansion = String(character).lowercased()
-        }
+        let expansion = physicalExpansion(for: character)
         guard expansion != String(character) else { return }
         for expanded in expansion {
             appendPhysicalKeystrokes(for: expanded, mode: mode, to: &strokes)
+        }
+    }
+
+    private static func physicalExpansion(for character: Character) -> String {
+        switch character {
+        case "?": "."
+        case "!": "."
+        case ":": ";"
+        case "\"": "'"
+        case "“", "”": "'"
+        case "‘", "’": "'"
+        case "(": " "
+        case ")": " "
+        case "@": " at "
+        case "#": " number "
+        case "$": " dollars "
+        case "%": " percent "
+        case "&": " and "
+        case "*": " "
+        case "_": "-"
+        case "+": " plus "
+        case "{": "["
+        case "}": "]"
+        case "|": "/"
+        case "<": ","
+        case ">": "."
+        case "~": "-"
+        case "—", "–": "-"
+        case "…": "..."
+        default: String(character).lowercased()
         }
     }
 
@@ -324,67 +383,10 @@ public struct TextInjector {
         for character: Character,
         mode: PhysicalTypingMode
     ) -> PhysicalKeystroke? {
-        if mode == .withShiftModifiers, let stroke = shiftedPhysicalKeystroke(for: character) {
-            return stroke
-        }
         guard let code = unmodifiedPhysicalKeyCode(for: character) else {
             return nil
         }
         return PhysicalKeystroke(code: code, flags: [])
-    }
-
-    private static func shiftedPhysicalKeystroke(for character: Character) -> PhysicalKeystroke? {
-        let shift: CGEventFlags = .maskShift
-        switch character {
-        case "A": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_A), flags: shift)
-        case "B": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_B), flags: shift)
-        case "C": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_C), flags: shift)
-        case "D": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_D), flags: shift)
-        case "E": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_E), flags: shift)
-        case "F": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_F), flags: shift)
-        case "G": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_G), flags: shift)
-        case "H": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_H), flags: shift)
-        case "I": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_I), flags: shift)
-        case "J": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_J), flags: shift)
-        case "K": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_K), flags: shift)
-        case "L": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_L), flags: shift)
-        case "M": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_M), flags: shift)
-        case "N": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_N), flags: shift)
-        case "O": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_O), flags: shift)
-        case "P": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_P), flags: shift)
-        case "Q": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Q), flags: shift)
-        case "R": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_R), flags: shift)
-        case "S": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_S), flags: shift)
-        case "T": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_T), flags: shift)
-        case "U": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_U), flags: shift)
-        case "V": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_V), flags: shift)
-        case "W": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_W), flags: shift)
-        case "X": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_X), flags: shift)
-        case "Y": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Y), flags: shift)
-        case "Z": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Z), flags: shift)
-        case "!": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_1), flags: shift)
-        case "@": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_2), flags: shift)
-        case "#": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_3), flags: shift)
-        case "$": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_4), flags: shift)
-        case "%": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_5), flags: shift)
-        case "^": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_6), flags: shift)
-        case "&": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_7), flags: shift)
-        case "*": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_8), flags: shift)
-        case "(": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_9), flags: shift)
-        case ")": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_0), flags: shift)
-        case "_": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Minus), flags: shift)
-        case "+": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Equal), flags: shift)
-        case "{": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_LeftBracket), flags: shift)
-        case "}": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_RightBracket), flags: shift)
-        case "|": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Backslash), flags: shift)
-        case ":": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Semicolon), flags: shift)
-        case "\"": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Quote), flags: shift)
-        case "<": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Comma), flags: shift)
-        case ">": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Period), flags: shift)
-        case "?": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Slash), flags: shift)
-        case "~": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Grave), flags: shift)
-        default: return nil
-        }
     }
 
     private static func unmodifiedPhysicalKeyCode(for character: Character) -> CGKeyCode? {
@@ -444,6 +446,11 @@ public struct TextInjector {
     }
 
     private func postKeystroke(_ stroke: PhysicalKeystroke, source: CGEventSource?) {
+        if stroke.code == CGKeyCode(kVK_CapsLock) {
+            postKeycode(stroke.code, source: source)
+            usleep(40_000)
+            return
+        }
         if stroke.flags.contains(.maskShift) {
             let shiftDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Shift), keyDown: true)
             shiftDown?.flags = .maskShift

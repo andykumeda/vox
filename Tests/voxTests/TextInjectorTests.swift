@@ -69,28 +69,56 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testRemoteTargetsUsePhysicalTypingFallback() {
-        XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
+        XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
         XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
         XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .standard))
     }
 
-    func testVNCUsesUnicodeTypingFallback() {
-        XCTAssertTrue(TextInjector.usesUnicodeTypingFallback(for: .screenSharing))
-        XCTAssertFalse(TextInjector.usesUnicodeTypingFallback(for: .rustDesk))
-        XCTAssertFalse(TextInjector.usesUnicodeTypingFallback(for: .standard))
-    }
-
-    func testScreenSharingPhysicalTypingPreservesShiftedCharacters() {
+    func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {
         let strokes = TextInjector.physicalKeystrokes(
-            for: "A!",
-            mode: .withShiftModifiers
+            for: "AB c",
+            mode: .capsLockForUppercase
         )
 
-        XCTAssertEqual(strokes.count, 2)
-        XCTAssertEqual(strokes[0].code, CGKeyCode(kVK_ANSI_A))
-        XCTAssertTrue(strokes[0].flags.contains(.maskShift))
-        XCTAssertEqual(strokes[1].code, CGKeyCode(kVK_ANSI_1))
-        XCTAssertTrue(strokes[1].flags.contains(.maskShift))
+        XCTAssertEqual(strokes.map(\.code), [
+            CGKeyCode(kVK_CapsLock),
+            CGKeyCode(kVK_ANSI_A),
+            CGKeyCode(kVK_ANSI_B),
+            CGKeyCode(kVK_Space),
+            CGKeyCode(kVK_CapsLock),
+            CGKeyCode(kVK_ANSI_C)
+        ])
+        XCTAssertTrue(strokes.allSatisfy(\.flags.isEmpty))
+    }
+
+    func testCapsLockPhysicalTypingPreservesInitiallyActiveCapsLock() {
+        let strokes = TextInjector.physicalKeystrokes(
+            for: "aB",
+            mode: .capsLockForUppercase,
+            initialCapsLockActive: true
+        )
+
+        XCTAssertEqual(strokes.map(\.code), [
+            CGKeyCode(kVK_CapsLock),
+            CGKeyCode(kVK_ANSI_A),
+            CGKeyCode(kVK_CapsLock),
+            CGKeyCode(kVK_ANSI_B)
+        ])
+        XCTAssertTrue(strokes.allSatisfy(\.flags.isEmpty))
+    }
+
+    func testCapsLockPhysicalTypingClosesAtEndOfUppercaseRun() {
+        let strokes = TextInjector.physicalKeystrokes(
+            for: "A",
+            mode: .capsLockForUppercase
+        )
+
+        XCTAssertEqual(strokes.map(\.code), [
+            CGKeyCode(kVK_CapsLock),
+            CGKeyCode(kVK_ANSI_A),
+            CGKeyCode(kVK_CapsLock)
+        ])
+        XCTAssertTrue(strokes.allSatisfy(\.flags.isEmpty))
     }
 
     func testRustDeskPhysicalTypingAvoidsShiftModifiers() {
