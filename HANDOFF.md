@@ -1,3 +1,35 @@
+# Handoff — Vox state as of 2026-05-22 (Release 0.7.8)
+
+## Session 2026-05-22 — Release 0.7.8: VNC shared clipboard exact paste, RustDesk best-effort
+
+**Status:** Release 0.7.8 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.8` / build `27`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `exGk/mcmXMlTeqREXY8IzwuAIGOsnvmq+RQwJFAESzem8yYsUTSvL0C+PTy/Y4Y6Rei+wEQe+gFCCbm+0QdQAQ==`; length `2592433`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.8/Vox.dmg`.
+
+**Why 0.7.8 now:** User live-tested the remote insertion paths and chose one high-fidelity target over two partial targets. RustDesk can insert text and now appears to capitalize sentence starts, but it still does not reliably produce shifted punctuation such as a final question mark. VNC/Screen Sharing is the preferred exact path.
+
+**Code changes:**
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC no longer uses physical typing. Vox writes the transcript to the local clipboard, ensures Screen Sharing's `Edit > Use Shared Clipboard` is enabled, waits 1.0 s for synchronization, then sends a remote `Cmd+V` key-code paste.
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC is treated as requiring exact paste; if shared clipboard or remote paste is unavailable, Vox logs the failure instead of degrading into partial physical typing.
+- `Sources/vox/Text/TextInjector.swift`: RustDesk remains on unmodified physical typing because live testing showed RustDesk menu paste inserted nothing and synthetic modifiers are unreliable. RustDesk may still approximate shifted punctuation, including `?` to `.`, but it is left on the path that actually delivers text.
+- `Tests/voxTests/TextInjectorTests.swift`: updated target-selection behavior, exact-paste flags, pre-paste delay, and physical punctuation approximation coverage.
+
+**Docs updated:**
+- `README.md` and `Resources/help.md`: document Screen Sharing/VNC as the high-fidelity shared-clipboard paste path and RustDesk as best-effort physical typing.
+- `docs/appcast.xml`: prepended 0.7.8 release notes.
+
+**Verification:**
+- `swift test` passed: 313 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+- User live test before release: VNC is working the way it should; RustDesk capitalizes the first letter but still misses final question marks.
+
+**Release actions for this exact commit:**
+- Tag `v0.7.8`, push `main` + tag, create GitHub release `v0.7.8` with `dist/Vox.dmg`, then verify the public appcast and DMG URL.
+- `.claude/` and untracked `AGENTS.md` should remain untouched.
+
+**Other-Mac update path:** on the remote Mac, use Vox → `Check for Updates…` after the 0.7.8 GitHub release and appcast are published. Re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. Use Screen Sharing/VNC when exact punctuation matters; keep RustDesk as the best-effort fallback.
+
+---
+
 # Handoff — Vox state as of 2026-05-22 (Release 0.7.7)
 
 ## Session 2026-05-22 — Release 0.7.7: Remote capitalization via Caps Lock physical typing

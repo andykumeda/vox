@@ -159,11 +159,21 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing caps-lock physical typing \(text.count) chars")
-            typePhysicalText(text, mode: .capsLockForUppercase)
+            let delay = Self.prePasteDelay(for: target)
+            dlog("paste remote fallback: VNC/Screen Sharing ensuring shared clipboard")
+            guard enableScreenSharingSharedClipboard() else {
+                dlog("VNC/Screen Sharing exact paste unavailable; shared clipboard control is disabled")
+                break
+            }
+            dlog("paste remote fallback: VNC/Screen Sharing waiting \(delay)s for shared clipboard sync")
+            Thread.sleep(forTimeInterval: delay)
+            dlog("paste remote fallback: VNC/Screen Sharing via remote Cmd+V")
+            if !pasteWithSystemEventsKeyCode() {
+                dlog("VNC/Screen Sharing exact paste failed")
+            }
         case .rustDesk:
-            dlog("paste remote fallback: RustDesk caps-lock physical typing \(text.count) chars")
-            typePhysicalText(text, mode: .capsLockForUppercase)
+            dlog("paste remote fallback: RustDesk unmodified physical typing \(text.count) chars")
+            typePhysicalText(text, mode: .unmodifiedOnly)
         }
         if Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target) {
             schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
@@ -202,18 +212,82 @@ public struct TextInjector {
         target: PasteTarget
     ) -> Bool {
         if keepOnClipboard { return false }
-        // VNC/Screen Sharing paste and clipboard synchronization can lag
+        // Remote-app pasteboard synchronization can lag
         // behind the local paste event. Restoring the prior clipboard causes
         // the remote side to paste that older value instead of the transcript.
-        if target == .screenSharing { return false }
+        if target == .screenSharing || target == .rustDesk { return false }
         return true
     }
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk: true
-        case .standard: false
+        case .rustDesk: true
+        case .screenSharing, .standard: false
         }
+    }
+
+    static func requiresExactPaste(for target: PasteTarget) -> Bool {
+        switch target {
+        case .screenSharing: true
+        case .rustDesk, .standard: false
+        }
+    }
+
+    static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
+        switch target {
+        case .screenSharing: true
+        case .rustDesk, .standard: false
+        }
+    }
+
+    static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
+        switch target {
+        case .screenSharing:
+            return 1.0
+        case .standard, .rustDesk:
+            return 0
+        }
+    }
+
+    private func enableScreenSharingSharedClipboard() -> Bool {
+        runAppleScript("""
+        tell application "Screen Sharing" to activate
+        delay 0.1
+        tell application "System Events"
+            tell process "Screen Sharing"
+                set targetItem to menu item "Use Shared Clipboard" of menu "Edit" of menu bar 1
+                if enabled of targetItem is false then error "Edit > Use Shared Clipboard is disabled"
+                set isChecked to false
+                try
+                    set markChar to value of attribute "AXMenuItemMarkChar" of targetItem
+                    if markChar is not missing value and markChar is not "" then set isChecked to true
+                end try
+                try
+                    if selected of targetItem is true then set isChecked to true
+                end try
+                if isChecked is false then click targetItem
+            end tell
+        end tell
+        """)
+    }
+
+    private func pasteWithSystemEventsKeyCode() -> Bool {
+        runAppleScript("""
+        tell application "System Events"
+            key code 9 using command down
+        end tell
+        """)
+    }
+
+    private func runAppleScript(_ source: String) -> Bool {
+        guard let script = NSAppleScript(source: source) else { return false }
+        var error: NSDictionary?
+        script.executeAndReturnError(&error)
+        if let error {
+            dlog("AppleScript failed: \(error)")
+            return false
+        }
+        return true
     }
 
     enum PhysicalTypingMode {

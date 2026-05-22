@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.8</title>
+            <pubDate>Fri, 22 May 2026 16:11:01 +0000</pubDate>
+            <sparkle:version>27</sparkle:version>
+            <sparkle:shortVersionString>0.7.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC is now the high-fidelity remote insertion path. Vox enables Screen Sharing's shared clipboard, waits briefly for synchronization, then sends a remote paste so capitalization and punctuation survive when the shared clipboard is available.</li>
+                    <li><strong>Fix:</strong> RustDesk remains on the best-effort physical typing path because live testing showed RustDesk menu paste inserts nothing and synthetic modifiers are unreliable. RustDesk should still deliver text, but shifted punctuation such as question marks may be approximated.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.8/Vox.dmg"
+                sparkle:edSignature="exGk/mcmXMlTeqREXY8IzwuAIGOsnvmq+RQwJFAESzem8yYsUTSvL0C+PTy/Y4Y6Rei+wEQe+gFCCbm+0QdQAQ=="
+                length="2592433"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.7</title>
             <pubDate>Fri, 22 May 2026 02:37:57 +0000</pubDate>
             <sparkle:version>26</sparkle:version>

@@ -50,6 +50,13 @@ final class TextInjectorTests: XCTestCase {
         ))
     }
 
+    func testRustDeskDoesNotRestorePreviousClipboardWhenKeepOff() {
+        XCTAssertFalse(TextInjector.shouldRestorePasteboard(
+            keepOnClipboard: false,
+            target: .rustDesk
+        ))
+    }
+
     func testStandardPasteRestoresPreviousClipboardWhenKeepOff() {
         XCTAssertTrue(TextInjector.shouldRestorePasteboard(
             keepOnClipboard: false,
@@ -69,9 +76,27 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testRemoteTargetsUsePhysicalTypingFallback() {
-        XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
+        XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
         XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
         XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .standard))
+    }
+
+    func testScreenSharingRequiresExactPaste() {
+        XCTAssertTrue(TextInjector.requiresExactPaste(for: .screenSharing))
+        XCTAssertFalse(TextInjector.requiresExactPaste(for: .rustDesk))
+        XCTAssertFalse(TextInjector.requiresExactPaste(for: .standard))
+    }
+
+    func testScreenSharingUsesMenuPasteFallback() {
+        XCTAssertTrue(TextInjector.usesMenuPasteFallback(for: .screenSharing))
+        XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .rustDesk))
+        XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .standard))
+    }
+
+    func testScreenSharingPasteWaitsForClipboardSync() {
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.0)
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 0)
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .standard), 0)
     }
 
     func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {
@@ -119,6 +144,31 @@ final class TextInjectorTests: XCTestCase {
             CGKeyCode(kVK_CapsLock)
         ])
         XCTAssertTrue(strokes.allSatisfy(\.flags.isEmpty))
+    }
+
+    func testCapsLockPhysicalTypingApproximatesQuestionMarkWithoutShift() {
+        let strokes = TextInjector.physicalKeystrokes(
+            for: "Is it ready?",
+            mode: .capsLockForUppercase
+        )
+
+        XCTAssertEqual(strokes.last?.code, CGKeyCode(kVK_ANSI_Period))
+        XCTAssertFalse(strokes.last?.flags.contains(.maskShift) == true)
+    }
+
+    func testCapsLockPhysicalTypingApproximatesQuestionMarkAfterUppercaseRun() {
+        let strokes = TextInjector.physicalKeystrokes(
+            for: "A?",
+            mode: .capsLockForUppercase
+        )
+
+        XCTAssertEqual(strokes.map(\.code), [
+            CGKeyCode(kVK_CapsLock),
+            CGKeyCode(kVK_ANSI_A),
+            CGKeyCode(kVK_ANSI_Period),
+            CGKeyCode(kVK_CapsLock)
+        ])
+        XCTAssertFalse(strokes[2].flags.contains(.maskShift))
     }
 
     func testRustDeskPhysicalTypingAvoidsShiftModifiers() {
