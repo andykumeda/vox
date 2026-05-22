@@ -1,3 +1,34 @@
+# Handoff — Vox state as of 2026-05-22 (Release 0.7.6)
+
+## Session 2026-05-22 — Release 0.7.6: VNC Unicode text insertion preserves capitalization
+
+**Status:** Release 0.7.6 is cut from `main`. `Resources/Info.plist` bumped to `0.7.6` / build `25`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `nWIRD4eFc7dJUyoG8ObIBZf/sxOWR6qda+H44bJPEbacu6BIKNCl5zEjnLeSe5i5mUKcbvA1CHDT+4LmrgkpDg==`; length `2589195`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.6/Vox.dmg`.
+
+**Why 0.7.6 now:** User reported that VNC insertion worked after 0.7.5 but sentence starts were lowercased. The prose post-processor still capitalizes sentence starts; this points to the Screen Sharing/VNC physical-key fallback losing synthetic Shift modifiers during remote forwarding.
+
+**Code changes:**
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC now sends Unicode text key events via `CGEvent.keyboardSetUnicodeString`, avoiding Shift-modified physical key events for text insertion.
+- `Sources/vox/Text/TextInjector.swift`: RustDesk stays on the unmodified physical typing path because it is known to drop modifier keys.
+- `Tests/voxTests/TextInjectorTests.swift`: added coverage that VNC/Screen Sharing uses the Unicode fallback while RustDesk uses physical typing.
+
+**Docs updated:**
+- `README.md` and `Resources/help.md`: document that Screen Sharing/VNC uses Unicode text events to preserve capitalization.
+- `docs/appcast.xml`: prepended 0.7.6 release notes.
+
+**Verification:**
+- `swift test` passed: 306 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Release actions completed:**
+- Tag `v0.7.6` pushed to GitHub.
+- GitHub release `v0.7.6` created with `dist/Vox.dmg` attached.
+- `.claude/` and untracked `AGENTS.md` were intentionally left untouched.
+
+**Other-Mac update path:** on the remote Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. If uppercase still fails, then the VNC client is ignoring Unicode key events too, and the next fallback should be a remote-side paste helper or a VNC-specific clipboard-send API rather than local key synthesis.
+
+---
+
 # Handoff — Vox state as of 2026-05-22 (Release 0.7.5)
 
 ## Session 2026-05-22 — Release 0.7.5: VNC bypasses clipboard paste and types directly

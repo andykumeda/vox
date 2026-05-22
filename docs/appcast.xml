@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.6</title>
+            <pubDate>Fri, 22 May 2026 02:24:27 +0000</pubDate>
+            <sparkle:version>25</sparkle:version>
+            <sparkle:shortVersionString>0.7.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC insertion now uses Unicode text key events instead of Shift-modified physical key events. This preserves capitalization when the VNC client drops synthetic Shift modifiers.</li>
+                    <li><strong>Diagnostics:</strong> Vox still leaves the transcript on the local clipboard, so if remote text insertion behaves oddly you can paste locally to confirm the processed transcript text.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.6/Vox.dmg"
+                sparkle:edSignature="nWIRD4eFc7dJUyoG8ObIBZf/sxOWR6qda+H44bJPEbacu6BIKNCl5zEjnLeSe5i5mUKcbvA1CHDT+4LmrgkpDg=="
+                length="2589195"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.5</title>
             <pubDate>Fri, 22 May 2026 01:43:51 +0000</pubDate>
             <sparkle:version>24</sparkle:version>

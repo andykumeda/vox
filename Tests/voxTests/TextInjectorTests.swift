@@ -69,9 +69,15 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testRemoteTargetsUsePhysicalTypingFallback() {
-        XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
+        XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
         XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
         XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .standard))
+    }
+
+    func testVNCUsesUnicodeTypingFallback() {
+        XCTAssertTrue(TextInjector.usesUnicodeTypingFallback(for: .screenSharing))
+        XCTAssertFalse(TextInjector.usesUnicodeTypingFallback(for: .rustDesk))
+        XCTAssertFalse(TextInjector.usesUnicodeTypingFallback(for: .standard))
     }
 
     func testScreenSharingPhysicalTypingPreservesShiftedCharacters() {

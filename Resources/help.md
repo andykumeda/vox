@@ -113,10 +113,10 @@ Settings → Hotkeys lets you rebind:
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
 - **Remote desktop paste fails** — Screen Sharing/VNC bypasses clipboard paste
-  and types the transcript into the remote session as physical key events.
-  RustDesk drops synthetic modifier keys, so Vox types transcripts as
-  unmodified physical keypresses there; text may be lowercased and shifted
-  punctuation may be approximated.
+  and sends Unicode text key events so capitalization does not depend on
+  synthetic Shift modifiers. RustDesk drops synthetic modifier keys, so Vox
+  types transcripts as unmodified physical keypresses there; text may be
+  lowercased and shifted punctuation may be approximated.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
   must be **Do Nothing**.
 - **Wrong transcription on short phrases** — add a Dictionary entry to fix

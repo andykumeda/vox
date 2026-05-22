@@ -159,8 +159,8 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing physical typing \(text.count) chars")
-            typePhysicalText(text, mode: .withShiftModifiers)
+            dlog("paste remote fallback: VNC/Screen Sharing unicode typing \(text.count) chars")
+            typeUnicodeText(text)
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(text.count) chars")
             typePhysicalText(text, mode: .unmodifiedOnly)
@@ -211,8 +211,16 @@ public struct TextInjector {
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk: true
+        case .rustDesk: true
+        case .screenSharing, .standard: false
+        }
+    }
+
+    static func usesUnicodeTypingFallback(for target: PasteTarget) -> Bool {
+        switch target {
+        case .screenSharing: true
         case .standard: false
+        case .rustDesk: false
         }
     }
 
@@ -226,6 +234,35 @@ public struct TextInjector {
         for stroke in Self.physicalKeystrokes(for: text, mode: mode) {
             postKeystroke(stroke, source: source)
             usleep(3_000)
+        }
+    }
+
+    private func typeUnicodeText(_ text: String) {
+        let source = CGEventSource(stateID: .hidSystemState)
+        for scalar in text.unicodeScalars {
+            postUnicodeScalar(scalar, source: source)
+            usleep(3_000)
+        }
+    }
+
+    private func postUnicodeScalar(_ scalar: Unicode.Scalar, source: CGEventSource?) {
+        let string = String(scalar)
+        let units = Array(string.utf16)
+        units.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
+            down?.keyboardSetUnicodeString(
+                stringLength: buffer.count,
+                unicodeString: baseAddress
+            )
+            down?.post(tap: .cghidEventTap)
+
+            let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
+            up?.keyboardSetUnicodeString(
+                stringLength: buffer.count,
+                unicodeString: baseAddress
+            )
+            up?.post(tap: .cghidEventTap)
         }
     }
 
