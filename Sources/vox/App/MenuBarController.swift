@@ -29,7 +29,9 @@ final class MenuBarController: NSObject {
         apiKeyProvider: { [keychain] in keychain.read() }
     )
     private lazy var liveLLMCleaner: CleanupProcessor.LLMCleanFunc = makeLiveLLMCleaner(
-        apiKeyProvider: { [keychain] in keychain.read() }
+        apiKeyProvider: { [keychain] in keychain.read() },
+        profileProvider: { CleanupProfileStore.shared.load() },
+        dictionaryProvider: { DictionaryStore.loadEntriesFromDisk() }
     )
     private lazy var updaterController: SPUStandardUpdaterController = {
         let c = SPUStandardUpdaterController(
@@ -630,27 +632,35 @@ final class MenuBarController: NSObject {
                     llmCleaner: cleanupEnabled ? self.liveLLMCleaner : nil
                 )
                 let cleanedText = await cleaner.process(processed.text)
-                dlog("cleaned=\(cleanedText) verbatim=\(verbatimMode)")
+                let finalText = await MainActor.run {
+                    guard cleanupEnabled else { return cleanedText }
+                    return CleanupDictionaryProtection.apply(
+                        cleanedText,
+                        mode: mode,
+                        entries: DictionaryStore.shared.entries
+                    )
+                }
+                dlog("cleaned=\(finalText) verbatim=\(verbatimMode)")
 
-                let wordCount = cleanedText.split(whereSeparator: { $0.isWhitespace }).count
+                let wordCount = finalText.split(whereSeparator: { $0.isWhitespace }).count
                 let model = AppSettings.transcriptionModel
                 let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
                 UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model)
-                if !cleanedText.isEmpty {
+                if !finalText.isEmpty {
                     DictationHistoryStore.shared.record(DictationEntry(
                         mode: mode == .prose ? "prose" : "command",
                         durationSec: durationSec,
                         wordCount: wordCount,
-                        text: cleanedText
+                        text: finalText
                     ))
                 }
                 dlog("processed=\(processed.text) keys=\(processed.suffixKeys) words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
                 await MainActor.run {
                     let pasteDelay: Double
-                    if cleanedText.isEmpty {
+                    if finalText.isEmpty {
                         pasteDelay = 0
                     } else {
-                        self.injector.paste(cleanedText, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
+                        self.injector.paste(finalText, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
                         pasteDelay = 0.2
                     }
                     for (i, key) in processed.suffixKeys.enumerated() {

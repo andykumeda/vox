@@ -94,11 +94,11 @@ Click the menu-bar Vox icon → **Settings**:
 - **Model** — `gpt-4o-mini-transcribe` (~$0.003/min, default), `gpt-4o-transcribe` (~$0.006/min, best quality), or `whisper-1` (~$0.006/min, no prompt-following).
 - **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`.
 - **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`.
-- **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes false starts, fillers, self-corrections in prose. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
+- **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes obvious false starts, fillers, and self-corrections in prose. The personal cleanup instructions editor is saved at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
 - **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
-- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime.
+- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC targets keep the transcript on the local clipboard to avoid remote pasteboard lag reading stale manual clipboard contents.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
 ## Dictionary
@@ -169,11 +169,12 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. macOS Screen Sharing/VNC uses a System Events paste fallback when Vox is frontmost over the remote session. RustDesk drops synthetic modifier keys, so Vox falls back to typing the transcript as plain physical keypresses; letters may be lowercased and shifted punctuation may be approximated, but the text should still reach the remote cursor. Paste Last Transcription uses the same path.
+Remote desktop apps need special paste handling. macOS Screen Sharing/VNC uses a System Events paste fallback when Vox is frontmost over the remote session and keeps the transcript on the local clipboard so VNC pasteboard sync does not consume the previous manual clipboard value. RustDesk drops synthetic modifier keys, so Vox falls back to typing the transcript as plain physical keypresses; letters may be lowercased and shifted punctuation may be approximated, but the text should still reach the remote cursor. Paste Last Transcription uses the same path.
 
 ## Files
 
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
+- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`
 - Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
 - Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
 - Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`
@@ -207,14 +208,14 @@ Sources/vox/
   Hotkey/                Hotkey, HotkeyMonitor (CGEventTap), HotkeyRecorder (NSEvent capture for Settings UI)
   Meeting/               MeetingTranscriptionSession, MeetingMicCapture, ScreenCaptureKit system-audio tap, SilenceTrim, MeetingChunker, MeetingTranscriptStore, MeetingPreflight
   STT/                   OpenAITranscriber, TranscriptionMode (per-mode prompt), hallucination guards
-  Text/                  PostProcessor, NumberNormalizer, CleanupProcessor (LLM + triggers + verbatim/literal prefix), DictionaryStore + DictionaryMatcher, TextInjector (paste + sendKey)
-  Util/                  KeychainStore, SoundPlayer, AppSettings, UsageTracker, DictationHistoryStore, RecordingArchive, Log
+  Text/                  PostProcessor, NumberNormalizer, CleanupProcessor (LLM + triggers + verbatim/literal prefix), CleanupDictionaryProtection, TextInjector (paste + sendKey)
+  Util/                  KeychainStore, SoundPlayer, AppSettings, UsageTracker, DictationHistoryStore, RecordingArchive, CleanupProfileStore, DictionaryStore + DictionaryMatcher, Log
 docs/
   appcast.xml            Sparkle update feed (served via GitHub Pages)
   UPDATING.md            Update procedure (auto + manual fallback)
   dictation-regression.md  Regression-suite policy + thresholds
   index.html             Pages landing
-Tests/voxTests/          281 unit tests covering text pipeline, hotkey, meeting, retention, history
+Tests/voxTests/          302 unit tests covering text pipeline, hotkey, meeting, retention, history
 ```
 
 ## Testing

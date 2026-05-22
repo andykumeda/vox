@@ -38,7 +38,7 @@ private let letterKeyCodes: [Character: CGKeyCode] = [
 public struct TextInjector {
     public init() {}
 
-    private enum PasteTarget {
+    enum PasteTarget: Equatable {
         case standard
         case screenSharing
         case rustDesk
@@ -149,7 +149,8 @@ public struct TextInjector {
         pb.setString(text, forType: .string)
         let expectedChangeCount = pb.changeCount
 
-        switch pasteTargetForFrontmostApp() {
+        let target = pasteTargetForFrontmostApp()
+        switch target {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
@@ -161,20 +162,46 @@ public struct TextInjector {
             dlog("paste remote fallback: RustDesk physical typing \(text.count) chars")
             typePhysicalTextForRustDesk(text)
         }
-        if !keepOnClipboard {
+        if Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target) {
             schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
         }
     }
 
     private func pasteTargetForFrontmostApp() -> PasteTarget {
-        switch NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
-        case "com.apple.ScreenSharing":
-            return .screenSharing
-        case "com.carriez.rustdesk":
+        let app = NSWorkspace.shared.frontmostApplication
+        return Self.pasteTarget(
+            bundleIdentifier: app?.bundleIdentifier,
+            localizedName: app?.localizedName
+        )
+    }
+
+    static func pasteTarget(
+        bundleIdentifier: String?,
+        localizedName: String?
+    ) -> PasteTarget {
+        let bundleID = bundleIdentifier?.lowercased() ?? ""
+        let name = localizedName?.lowercased() ?? ""
+        if bundleID == "com.carriez.rustdesk" {
             return .rustDesk
-        default:
-            return .standard
         }
+        if bundleID == "com.apple.screensharing"
+            || bundleID.contains("vnc")
+            || name.contains("vnc") {
+            return .screenSharing
+        }
+        return .standard
+    }
+
+    static func shouldRestorePasteboard(
+        keepOnClipboard: Bool,
+        target: PasteTarget
+    ) -> Bool {
+        if keepOnClipboard { return false }
+        // VNC/Screen Sharing paste and clipboard synchronization can lag
+        // behind the local paste event. Restoring the prior clipboard causes
+        // the remote side to paste that older value instead of the transcript.
+        if target == .screenSharing { return false }
+        return true
     }
 
     private func pasteWithSystemEventsKeyCode() -> Bool {

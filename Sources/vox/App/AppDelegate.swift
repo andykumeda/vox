@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menuController.start()
         MeetingTranscriptStore().recoverInFlightSessions()
+        try? CleanupProfileStore.shared.ensureFileExists()
         DictionaryStore.shared.load()
         DictionaryStore.shared.startWatching()
         Task { @MainActor in MainWindowController.shared.showWindow() }

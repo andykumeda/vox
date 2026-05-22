@@ -76,16 +76,38 @@ public enum DictionaryMatcher {
         return String(s[idx..<s.endIndex])
     }
 
+    private static func valuesEqual(_ a: String, _ b: String, caseInsensitive: Bool) -> Bool {
+        if caseInsensitive {
+            return a.compare(b, options: .caseInsensitive) == .orderedSame
+        }
+        return a == b
+    }
+
+    private static func possessiveSuffix(
+        _ token: String,
+        spoken: String,
+        caseInsensitive: Bool
+    ) -> String? {
+        let core = stripEdgePunct(token)
+        for suffix in ["'s", "’s", "'S", "’S"] where core.hasSuffix(suffix) {
+            let base = String(core.dropLast(suffix.count))
+            if valuesEqual(base, spoken, caseInsensitive: caseInsensitive) {
+                return suffix
+            }
+        }
+        return nil
+    }
+
     private static func tokensEqual(_ a: String, _ b: String, caseInsensitive: Bool) -> Bool {
         // Compare against the *core* of the input token so punctuation attached
         // by Whisper (e.g. "Andie," after a sentence-internal comma) doesn't
         // defeat dictionary matching. The dictionary's spoken pattern is
         // assumed to have no edge punctuation.
         let core = stripEdgePunct(a)
-        if caseInsensitive {
-            return core.compare(b, options: .caseInsensitive) == .orderedSame
+        if valuesEqual(core, b, caseInsensitive: caseInsensitive) {
+            return true
         }
-        return core == b
+        return possessiveSuffix(a, spoken: b, caseInsensitive: caseInsensitive) != nil
     }
 
     private static func replace(
@@ -127,6 +149,11 @@ public enum DictionaryMatcher {
                 // be replaced by just "Andy", losing the comma.
                 let leading = Self.leadingPunct(input[i])
                 let trailing = Self.trailingPunct(input[i + k - 1])
+                let possessive = Self.possessiveSuffix(
+                    input[i + k - 1],
+                    spoken: spoken[k - 1],
+                    caseInsensitive: entry.caseInsensitive
+                ) ?? ""
                 if replacement.isEmpty {
                     // Empty replacement = deletion entry (e.g. "um" → "").
                     // Drop the punct too — keeping a stranded comma would be
@@ -135,6 +162,9 @@ public enum DictionaryMatcher {
                     var rep = replacement
                     if !leading.isEmpty {
                         rep[0] = leading + rep[0]
+                    }
+                    if !possessive.isEmpty {
+                        rep[rep.count - 1] = rep[rep.count - 1] + possessive
                     }
                     if !trailing.isEmpty {
                         rep[rep.count - 1] = rep[rep.count - 1] + trailing

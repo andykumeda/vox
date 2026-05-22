@@ -10,7 +10,7 @@ Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-ta
 Press your **Mode toggle** hotkey (default `⌃⌥M`) to force prose regardless of focus. The menu-bar icon shows a lock when prose is forced.
 
 ## Verbatim mode
-Smart Cleanup (Settings → Mode) polishes prose dictations — removes false starts, fillers, self-corrections. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
+Smart Cleanup (Settings → Mode) polishes prose dictations conservatively — removes obvious false starts, fillers, self-corrections. Settings also includes a personal cleanup instructions editor saved at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
 
 - **Hold Option while pressing Fn** — that recording is pasted raw, no cleanup, no trigger expansion.
 - **Say "verbatim" or "literal" as the first word** of the dictation. The prefix is stripped and the rest is pasted as Whisper transcribed it. Example: speaking *"verbatim he literally said um maybe yeah"* pastes `he literally said um maybe yeah`.
@@ -102,6 +102,7 @@ Settings → Hotkeys lets you rebind:
 
 ## Files
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
+- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`
 - Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
 - Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
 - Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`
@@ -112,7 +113,8 @@ Settings → Hotkeys lets you rebind:
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
 - **Remote desktop paste fails** — Screen Sharing/VNC uses a System Events
-  paste fallback. RustDesk drops synthetic modifier keys, so Vox types
+  paste fallback and keeps the transcript on the local clipboard so remote
+  pasteboard sync does not consume a stale manual clipboard value. RustDesk drops synthetic modifier keys, so Vox types
   transcripts as plain physical keypresses there; text may be lowercased and
   shifted punctuation may be approximated.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"

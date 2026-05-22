@@ -1,3 +1,38 @@
+# Handoff — Vox state as of 2026-05-22 (Release 0.7.3)
+
+## Session 2026-05-22 — Release 0.7.3: cleanup profile, dictionary protection, and VNC clipboard fix
+
+**Status:** Release 0.7.3 is cut from `main`. `Resources/Info.plist` bumped to `0.7.3` / build `22`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `/R3ZZ0MNX4iq+dhHrwHpXGmZVprSoNMm5havXviIZnhpWyjY5epeYvJsztUbzlHT9lqXUNH9N8yd600I7G4pCg==`; length `2584157`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.3/Vox.dmg`. The other Mac can pick this up via Sparkle (`Check for Updates…`) once GitHub Pages serves the updated appcast and the GitHub release asset is available.
+
+**Why 0.7.3 now:** Smart cleanup was over-polishing prose and could rewrite dictionary-protected names back to common spellings after the first dictionary pass. User also reported that VNC pasted the previous manual clipboard rather than the new voice transcript, which traced to restoring the local clipboard before the remote pasteboard had consumed it.
+
+**Code changes:**
+- `Sources/vox/Util/CleanupProfileStore.swift`: new store backed by `~/Library/Application Support/Vox/cleanup-profile.md`; empty file means default cleanup behavior.
+- `Sources/vox/App/SettingsWindow.swift`: Smart cleanup settings now include a multiline personal instructions editor with Save, Reset, and Reveal File controls.
+- `Sources/vox/Text/CleanupLLMClient.swift`: cleanup prompt now includes the personal profile when non-empty, active prose/both dictionary mappings, and stronger conservative wording to preserve voice and wording.
+- `Sources/vox/App/MenuBarController.swift`: dictation still runs STT → `PostProcessor` → `CleanupProcessor`, then reapplies prose dictionary corrections after cleanup before history/paste.
+- `Sources/vox/Text/CleanupDictionaryProtection.swift`: deterministic final dictionary pass for Smart cleanup output while leaving newline-bearing command-like output alone.
+- `Sources/vox/Util/DictionaryMatcher.swift`: dictionary replacement now handles possessives such as `Leonard's` → `Lenard's`.
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC paste targets skip the old-clipboard restore even when the user disables "keep transcription on clipboard after paste", avoiding remote pasteboard lag reading stale clipboard contents.
+
+**Docs updated:**
+- `README.md` and `Resources/help.md`: document the Smart cleanup profile file and the VNC clipboard behavior.
+- `docs/appcast.xml`: prepended 0.7.3 release notes.
+
+**Verification:**
+- `swift test` passed: 302 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Release actions completed:**
+- Tag `v0.7.3` pushed to GitHub.
+- GitHub release `v0.7.3` created with `dist/Vox.dmg` attached.
+- `.claude/` and untracked `AGENTS.md` were intentionally left untouched.
+
+**Other-Mac update path:** on the other Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. If Sparkle does not see 0.7.3 immediately, wait for GitHub Pages to finish publishing `docs/appcast.xml` from `main` and try again.
+
+---
+
 # Handoff — Vox state as of 2026-05-21 (Afternoon)
 
 ## Session 2026-05-21 — Release 0.7.2: remote desktop paste fallbacks for Screen Sharing/VNC and RustDesk

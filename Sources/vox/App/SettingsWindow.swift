@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
+    @State private var cleanupProfile: String = CleanupProfileStore.shared.load()
+    @State private var cleanupProfileMessage: String?
     @State private var meetingMode: Bool = AppSettings.meetingModeEnabled
     @State private var meetingConsent: Bool = AppSettings.meetingConsentAcknowledged
     @State private var autoShowMeetingPanel: Bool = AppSettings.autoShowMeetingPanel
@@ -26,6 +28,7 @@ struct SettingsView: View {
     @State private var totals: UsageTotals = UsageTracker.totals()
     let keychain: KeychainStore
     private let deepgramKeychain = KeychainStore(account: "deepgram-api-key")
+    private let cleanupProfileStore = CleanupProfileStore.shared
 
     var body: some View {
         ScrollView {
@@ -168,6 +171,29 @@ struct SettingsView: View {
                 Text("Adds ~$0.0001 and ~1s latency per dictation. Triggers ('scratch that', 'new paragraph', 'new line') also activate when enabled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Personal cleanup instructions")
+                        .font(.subheadline)
+                    TextEditor(text: $cleanupProfile)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 110)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                        )
+                    HStack {
+                        Button("Save") { saveCleanupProfile() }
+                        Button("Reset") { resetCleanupProfile() }
+                        Button("Reveal File") { revealCleanupProfile() }
+                        if let msg = cleanupProfileMessage {
+                            Text(msg).foregroundStyle(.secondary)
+                        }
+                    }
+                    Text("Optional guidance for preserving your voice, wording, and style. Empty uses the default conservative cleanup behavior.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Divider()
@@ -436,6 +462,7 @@ struct SettingsView: View {
             model = AppSettings.transcriptionModel
             modeOverride = AppSettings.modeOverride
             smartCleanup = AppSettings.smartCleanupEnabled
+            cleanupProfile = cleanupProfileStore.load()
             meetingMode = AppSettings.meetingModeEnabled
             meetingConsent = AppSettings.meetingConsentAcknowledged
             meetingProvider = AppSettings.meetingProvider
@@ -463,6 +490,34 @@ struct SettingsView: View {
             deepgramSavedMessage = "Saved."
         } catch {
             deepgramSavedMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveCleanupProfile() {
+        do {
+            try cleanupProfileStore.save(cleanupProfile)
+            cleanupProfileMessage = "Saved."
+        } catch {
+            cleanupProfileMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func resetCleanupProfile() {
+        do {
+            try cleanupProfileStore.reset()
+            cleanupProfile = ""
+            cleanupProfileMessage = "Reset."
+        } catch {
+            cleanupProfileMessage = "Reset failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func revealCleanupProfile() {
+        do {
+            try cleanupProfileStore.ensureFileExists()
+            NSWorkspace.shared.activateFileViewerSelecting([cleanupProfileStore.fileURL])
+        } catch {
+            cleanupProfileMessage = "Reveal failed: \(error.localizedDescription)"
         }
     }
 

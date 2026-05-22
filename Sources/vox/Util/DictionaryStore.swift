@@ -85,6 +85,34 @@ public final class DictionaryStore: ObservableObject {
         return base.appendingPathComponent("dictionary.json")
     }
 
+    nonisolated static func loadEntriesFromDisk(
+        fileURL: URL = DictionaryStore.defaultFileURL(),
+        bundledDefaults: [DictionaryEntry] = DictionaryDefaults.bundledDefaults
+    ) -> [DictionaryEntry] {
+        let onDisk: [DictionaryEntry]
+        if FileManager.default.fileExists(atPath: fileURL.path),
+           let data = try? Data(contentsOf: fileURL),
+           let decoded = try? JSONDecoder().decode(DictionaryFileV1.self, from: data),
+           decoded.schemaVersion == 1 {
+            onDisk = decoded.entries
+        } else {
+            onDisk = []
+        }
+
+        var merged = onDisk
+        let presentBuiltinIds = Set(merged.filter(\.isBuiltIn).map(\.id))
+        for d in bundledDefaults where !presentBuiltinIds.contains(d.id) {
+            merged.append(d)
+        }
+
+        var seen = Set<String>()
+        return merged.filter { e in
+            if seen.contains(e.id) { return false }
+            seen.insert(e.id)
+            return true
+        }
+    }
+
     /// Load from disk, seed-merge defaults, write back if mutated.
     public func load() {
         let onDisk = readFile()

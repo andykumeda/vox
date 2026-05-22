@@ -6,6 +6,25 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.3</title>
+            <pubDate>Fri, 22 May 2026 01:20:57 +0000</pubDate>
+            <sparkle:version>22</sparkle:version>
+            <sparkle:shortVersionString>0.7.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC paste no longer restores the previous clipboard before the remote side has consumed the transcript. VNC targets now keep the dictated text on the local clipboard to avoid pasting stale manual clipboard contents.</li>
+                    <li><strong>Feature:</strong> Settings → Smart cleanup now includes personal cleanup instructions stored at <code>~/Library/Application Support/Vox/cleanup-profile.md</code>, so you can ask the cleanup model to preserve your voice and avoid over-polishing.</li>
+                    <li><strong>Fix:</strong> Smart cleanup now receives active prose dictionary entries and Vox reapplies the dictionary after cleanup, preventing terms like <code>Lenard</code> from drifting back to common spellings. Dictionary matching also handles possessives such as <code>Leonard's</code> → <code>Lenard's</code>.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.3/Vox.dmg"
+                sparkle:edSignature="/R3ZZ0MNX4iq+dhHrwHpXGmZVprSoNMm5havXviIZnhpWyjY5epeYvJsztUbzlHT9lqXUNH9N8yd600I7G4pCg=="
+                length="2584157"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.2</title>
             <pubDate>Thu, 21 May 2026 21:37:07 +0000</pubDate>
             <sparkle:version>21</sparkle:version>

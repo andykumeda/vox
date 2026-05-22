@@ -278,6 +278,24 @@ final class DictionaryMatcherTests: XCTestCase {
         XCTAssertEqual(result, "Is that Andy?")
     }
 
+    func testReplacesPossessiveToken() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("leonard", "Lenard", mode: .prose)],
+            to: "I saw Leonard's email.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "I saw Lenard's email.")
+    }
+
+    func testReplacesPossessiveTokenWithTrailingComma() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("leonard", "Lenard", mode: .prose)],
+            to: "Leonard's, I think, was the latest email.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "Lenard's, I think, was the latest email.")
+    }
+
     func testMultiTokenSpokenWithTrailingPunct() {
         let result = DictionaryMatcher.apply(
             entries: [entry("new york", "NYC", mode: .prose)],
