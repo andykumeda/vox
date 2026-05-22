@@ -2,7 +2,7 @@
 
 ## Session 2026-05-22 — Release 0.7.8: VNC shared clipboard exact paste, RustDesk best-effort
 
-**Status:** Release 0.7.8 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.8` / build `27`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `exGk/mcmXMlTeqREXY8IzwuAIGOsnvmq+RQwJFAESzem8yYsUTSvL0C+PTy/Y4Y6Rei+wEQe+gFCCbm+0QdQAQ==`; length `2592433`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.8/Vox.dmg`.
+**Status:** Release 0.7.8 is cut from `main`. Release commit `f56cb63` is tagged `v0.7.8` and pushed. `Resources/Info.plist` bumped to `0.7.8` / build `27`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `exGk/mcmXMlTeqREXY8IzwuAIGOsnvmq+RQwJFAESzem8yYsUTSvL0C+PTy/Y4Y6Rei+wEQe+gFCCbm+0QdQAQ==`; length `2592433`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.8/Vox.dmg`.
 
 **Why 0.7.8 now:** User live-tested the remote insertion paths and chose one high-fidelity target over two partial targets. RustDesk can insert text and now appears to capitalize sentence starts, but it still does not reliably produce shifted punctuation such as a final question mark. VNC/Screen Sharing is the preferred exact path.
 
@@ -22,11 +22,15 @@
 - `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
 - User live test before release: VNC is working the way it should; RustDesk capitalizes the first letter but still misses final question marks.
 
-**Release actions for this exact commit:**
-- Tag `v0.7.8`, push `main` + tag, create GitHub release `v0.7.8` with `dist/Vox.dmg`, then verify the public appcast and DMG URL.
+**Release actions completed:**
+- Pushed release commit `f56cb63` to `main`.
+- Pushed tag `v0.7.8`.
+- Created GitHub release `v0.7.8` with `dist/Vox.dmg` attached.
+- Verified the public appcast advertises `Vox 0.7.8`, Sparkle version `27`, and the matching EdDSA signature.
+- Verified the GitHub DMG URL returns a download redirect and the release asset reports size `2592433`.
 - `.claude/` and untracked `AGENTS.md` should remain untouched.
 
-**Other-Mac update path:** on the remote Mac, use Vox → `Check for Updates…` after the 0.7.8 GitHub release and appcast are published. Re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. Use Screen Sharing/VNC when exact punctuation matters; keep RustDesk as the best-effort fallback.
+**Other-Mac update path:** on the remote Mac, use Vox → `Check for Updates…`. Re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. Use Screen Sharing/VNC when exact punctuation matters; keep RustDesk as the best-effort fallback.
 
 ---
 
