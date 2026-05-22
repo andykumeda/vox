@@ -154,9 +154,15 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: Screen Sharing via System Events Cmd+V")
-            if !pasteWithSystemEventsKeyCode() {
-                dlog("Screen Sharing paste fallback failed")
+            let delay = Self.prePasteDelay(for: target)
+            dlog("paste remote fallback: VNC/Screen Sharing waiting \(delay)s for clipboard sync")
+            Thread.sleep(forTimeInterval: delay)
+            dlog("paste remote fallback: VNC/Screen Sharing via Edit > Paste menu")
+            if !pasteWithFrontmostEditMenu() {
+                dlog("VNC/Screen Sharing Edit > Paste failed; falling back to System Events Cmd+V")
+                if !pasteWithSystemEventsKeyCode() {
+                    dlog("VNC/Screen Sharing paste fallback failed")
+                }
             }
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(text.count) chars")
@@ -169,10 +175,12 @@ public struct TextInjector {
 
     private func pasteTargetForFrontmostApp() -> PasteTarget {
         let app = NSWorkspace.shared.frontmostApplication
-        return Self.pasteTarget(
+        let target = Self.pasteTarget(
             bundleIdentifier: app?.bundleIdentifier,
             localizedName: app?.localizedName
         )
+        dlog("paste target: \(target) bundle=\(app?.bundleIdentifier ?? "nil") name=\(app?.localizedName ?? "nil")")
+        return target
     }
 
     static func pasteTarget(
@@ -202,6 +210,29 @@ public struct TextInjector {
         // the remote side to paste that older value instead of the transcript.
         if target == .screenSharing { return false }
         return true
+    }
+
+    static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
+        switch target {
+        case .screenSharing:
+            // VNC clients sync the local pasteboard to the remote host out of
+            // band. If we send Paste immediately, the remote host can paste its
+            // previous clipboard before it has received Vox's transcript.
+            return 1.5
+        case .standard, .rustDesk:
+            return 0
+        }
+    }
+
+    private func pasteWithFrontmostEditMenu() -> Bool {
+        runAppleScript("""
+        tell application "System Events"
+            set frontApp to first application process whose frontmost is true
+            tell frontApp
+                click menu item "Paste" of menu "Edit" of menu bar 1
+            end tell
+        end tell
+        """)
     }
 
     private func pasteWithSystemEventsKeyCode() -> Bool {

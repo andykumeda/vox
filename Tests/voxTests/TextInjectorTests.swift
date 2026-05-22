@@ -66,4 +66,16 @@ final class TextInjectorTests: XCTestCase {
             target: .screenSharing
         ))
     }
+
+    func testVNCWaitsForClipboardPropagationBeforePaste() {
+        XCTAssertGreaterThanOrEqual(
+            TextInjector.prePasteDelay(for: .screenSharing),
+            1.5
+        )
+    }
+
+    func testStandardAndRustDeskDoNotWaitBeforePaste() {
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .standard), 0)
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 0)
+    }
 }

@@ -112,9 +112,10 @@ Settings → Hotkeys lets you rebind:
 - **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`,
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
-- **Remote desktop paste fails** — Screen Sharing/VNC uses a System Events
-  paste fallback and keeps the transcript on the local clipboard so remote
-  pasteboard sync does not consume a stale manual clipboard value. RustDesk drops synthetic modifier keys, so Vox types
+- **Remote desktop paste fails** — Screen Sharing/VNC waits briefly for remote
+  clipboard sync, uses the local Edit → Paste menu, and keeps the transcript
+  on the local clipboard so remote pasteboard sync does not consume a stale
+  manual clipboard value. RustDesk drops synthetic modifier keys, so Vox types
   transcripts as plain physical keypresses there; text may be lowercased and
   shifted punctuation may be approximated.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"

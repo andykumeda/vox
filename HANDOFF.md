@@ -1,3 +1,34 @@
+# Handoff — Vox state as of 2026-05-22 (Release 0.7.4)
+
+## Session 2026-05-22 — Release 0.7.4: VNC paste waits for clipboard sync and uses local Edit Paste
+
+**Status:** Release 0.7.4 is cut from `main`. `Resources/Info.plist` bumped to `0.7.4` / build `23`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `JHiCtEAVAMq0ZcFZW9/oivmIbye9pUh/zIdIZnyqjZek/cMBfQCLkupIpRZW7bpV8uOk8OQcBmBeiSMz/sElAQ==`; length `2586930`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.4/Vox.dmg`.
+
+**Why 0.7.4 now:** User confirmed 0.7.3 still pasted the previous clipboard in VNC. Skipping clipboard restore prevented one race, but Vox still sent Paste immediately after setting the local pasteboard; the remote host could receive the paste command before the VNC client had synchronized the new transcript to the remote clipboard.
+
+**Code changes:**
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC now waits 1.5 s after writing the local pasteboard, then invokes the frontmost app's local Edit → Paste menu. If that AppleScript path fails, it falls back to the existing System Events `Cmd+V` path.
+- `Sources/vox/Text/TextInjector.swift`: paste now logs detected frontmost bundle/name and selected paste target for future VNC/RustDesk diagnostics.
+- `Tests/voxTests/TextInjectorTests.swift`: added coverage that Screen Sharing/VNC has a propagation delay while standard apps and RustDesk do not.
+
+**Docs updated:**
+- `README.md` and `Resources/help.md`: document the VNC clipboard-sync wait and local Edit → Paste path.
+- `docs/appcast.xml`: prepended 0.7.4 release notes.
+
+**Verification:**
+- `swift test` passed: 304 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Release actions completed:**
+- Tag `v0.7.4` pushed to GitHub.
+- GitHub release `v0.7.4` created with `dist/Vox.dmg` attached.
+- `.claude/` and untracked `AGENTS.md` were intentionally left untouched.
+
+**Other-Mac update path:** on the other Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. If VNC still pastes stale text, check `~/Library/Logs/vox.log` for the `paste target:` and `paste remote fallback:` lines to confirm whether the VNC client is being classified as `.screenSharing`.
+
+---
+
 # Handoff — Vox state as of 2026-05-22 (Release 0.7.3)
 
 ## Session 2026-05-22 — Release 0.7.3: cleanup profile, dictionary protection, and VNC clipboard fix
