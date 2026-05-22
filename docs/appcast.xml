@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.5</title>
+            <pubDate>Fri, 22 May 2026 01:43:51 +0000</pubDate>
+            <sparkle:version>24</sparkle:version>
+            <sparkle:shortVersionString>0.7.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC no longer depends on remote clipboard paste. Vox now types dictation and Paste Last Transcription directly into the VNC session as physical key events, preserving shifted characters where VNC accepts them.</li>
+                    <li><strong>Fix:</strong> RustDesk keeps its unmodified physical-typing path because that client drops synthetic modifier keys; Screen Sharing/VNC gets a separate shifted-key path for better fidelity.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.5/Vox.dmg"
+                sparkle:edSignature="LF0KejFOKJdQc5TXbVDrqmaJFglG6ViMZz2bpnA5sL88g+97p+OMZB1rBmkR7LGcvRTD22jq7zRlMfbmeGsaDg=="
+                length="2588241"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.4</title>
             <pubDate>Fri, 22 May 2026 01:32:38 +0000</pubDate>
             <sparkle:version>23</sparkle:version>

@@ -1,3 +1,34 @@
+# Handoff — Vox state as of 2026-05-22 (Release 0.7.5)
+
+## Session 2026-05-22 — Release 0.7.5: VNC bypasses clipboard paste and types directly
+
+**Status:** Release 0.7.5 is cut from `main`. `Resources/Info.plist` bumped to `0.7.5` / build `24`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt and signed with the persistent `vox-dev` self-signed identity. Sparkle EdDSA signature for the DMG: `LF0KejFOKJdQc5TXbVDrqmaJFglG6ViMZz2bpnA5sL88g+97p+OMZB1rBmkR7LGcvRTD22jq7zRlMfbmeGsaDg==`; length `2588241`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.5/Vox.dmg`.
+
+**Why 0.7.5 now:** User is operating from the remote Mac and needs the fix through Sparkle. 0.7.4 still did not insert into VNC: local clipboard held the transcript correctly, but the VNC client did not forward the paste action into the remote session. The fix now bypasses VNC clipboard paste entirely for Screen Sharing/VNC.
+
+**Code changes:**
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC now types the transcript directly with HID physical key events instead of using clipboard paste. It supports shifted characters for uppercase and common punctuation where VNC accepts modifier events.
+- `Sources/vox/Text/TextInjector.swift`: RustDesk remains on the unmodified physical typing path because that client drops synthetic modifier keys.
+- `Tests/voxTests/TextInjectorTests.swift`: added coverage for remote physical typing target selection, shifted Screen Sharing/VNC keystrokes, and RustDesk's unmodified fallback behavior.
+
+**Docs updated:**
+- `README.md` and `Resources/help.md`: document that Screen Sharing/VNC bypasses clipboard paste and types directly.
+- `docs/appcast.xml`: prepended 0.7.5 release notes.
+
+**Verification:**
+- `swift test` passed: 305 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Release actions completed:**
+- Tag `v0.7.5` pushed to GitHub.
+- GitHub release `v0.7.5` created with `dist/Vox.dmg` attached.
+- `.claude/` and untracked `AGENTS.md` were intentionally left untouched.
+
+**Other-Mac update path:** on the remote Mac, use Vox → `Check for Updates…`; re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update. VNC insertion should now behave like typed keys instead of clipboard paste.
+
+---
+
 # Handoff — Vox state as of 2026-05-22 (Release 0.7.4)
 
 ## Session 2026-05-22 — Release 0.7.4: VNC paste waits for clipboard sync and uses local Edit Paste

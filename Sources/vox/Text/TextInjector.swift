@@ -44,6 +44,11 @@ public struct TextInjector {
         case rustDesk
     }
 
+    struct PhysicalKeystroke: Equatable {
+        let code: CGKeyCode
+        let flags: CGEventFlags
+    }
+
     public func sendKey(_ key: SuffixKey) {
         let source = CGEventSource(stateID: .combinedSessionState)
         let code: CGKeyCode
@@ -154,19 +159,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            let delay = Self.prePasteDelay(for: target)
-            dlog("paste remote fallback: VNC/Screen Sharing waiting \(delay)s for clipboard sync")
-            Thread.sleep(forTimeInterval: delay)
-            dlog("paste remote fallback: VNC/Screen Sharing via Edit > Paste menu")
-            if !pasteWithFrontmostEditMenu() {
-                dlog("VNC/Screen Sharing Edit > Paste failed; falling back to System Events Cmd+V")
-                if !pasteWithSystemEventsKeyCode() {
-                    dlog("VNC/Screen Sharing paste fallback failed")
-                }
-            }
+            dlog("paste remote fallback: VNC/Screen Sharing physical typing \(text.count) chars")
+            typePhysicalText(text, mode: .withShiftModifiers)
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(text.count) chars")
-            typePhysicalTextForRustDesk(text)
+            typePhysicalText(text, mode: .unmodifiedOnly)
         }
         if Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target) {
             schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
@@ -212,67 +209,44 @@ public struct TextInjector {
         return true
     }
 
-    static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
+    static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing:
-            // VNC clients sync the local pasteboard to the remote host out of
-            // band. If we send Paste immediately, the remote host can paste its
-            // previous clipboard before it has received Vox's transcript.
-            return 1.5
-        case .standard, .rustDesk:
-            return 0
+        case .screenSharing, .rustDesk: true
+        case .standard: false
         }
     }
 
-    private func pasteWithFrontmostEditMenu() -> Bool {
-        runAppleScript("""
-        tell application "System Events"
-            set frontApp to first application process whose frontmost is true
-            tell frontApp
-                click menu item "Paste" of menu "Edit" of menu bar 1
-            end tell
-        end tell
-        """)
+    enum PhysicalTypingMode {
+        case withShiftModifiers
+        case unmodifiedOnly
     }
 
-    private func pasteWithSystemEventsKeyCode() -> Bool {
-        runAppleScript("""
-        tell application "System Events"
-            key code 9 using command down
-        end tell
-        """)
-    }
-
-    private func typePhysicalTextForRustDesk(_ text: String) {
+    private func typePhysicalText(_ text: String, mode: PhysicalTypingMode) {
         let source = CGEventSource(stateID: .hidSystemState)
-        for code in physicalKeyCodes(for: text) {
-            postKeycode(code, source: source)
-            usleep(4_000)
+        for stroke in Self.physicalKeystrokes(for: text, mode: mode) {
+            postKeystroke(stroke, source: source)
+            usleep(3_000)
         }
     }
 
-    private func runAppleScript(_ source: String) -> Bool {
-        guard let script = NSAppleScript(source: source) else { return false }
-        var error: NSDictionary?
-        script.executeAndReturnError(&error)
-        if let error {
-            dlog("AppleScript failed: \(error)")
-            return false
-        }
-        return true
-    }
-
-    private func physicalKeyCodes(for text: String) -> [CGKeyCode] {
-        var codes: [CGKeyCode] = []
+    static func physicalKeystrokes(
+        for text: String,
+        mode: PhysicalTypingMode
+    ) -> [PhysicalKeystroke] {
+        var strokes: [PhysicalKeystroke] = []
         for character in text {
-            appendPhysicalKeyCodes(for: character, to: &codes)
+            appendPhysicalKeystrokes(for: character, mode: mode, to: &strokes)
         }
-        return codes
+        return strokes
     }
 
-    private func appendPhysicalKeyCodes(for character: Character, to codes: inout [CGKeyCode]) {
-        if let code = unmodifiedPhysicalKeyCode(for: character) {
-            codes.append(code)
+    private static func appendPhysicalKeystrokes(
+        for character: Character,
+        mode: PhysicalTypingMode,
+        to strokes: inout [PhysicalKeystroke]
+    ) {
+        if let stroke = physicalKeystroke(for: character, mode: mode) {
+            strokes.append(stroke)
             return
         }
         let expansion: String
@@ -305,38 +279,105 @@ public struct TextInjector {
         }
         guard expansion != String(character) else { return }
         for expanded in expansion {
-            appendPhysicalKeyCodes(for: expanded, to: &codes)
+            appendPhysicalKeystrokes(for: expanded, mode: mode, to: &strokes)
         }
     }
 
-    private func unmodifiedPhysicalKeyCode(for character: Character) -> CGKeyCode? {
+    private static func physicalKeystroke(
+        for character: Character,
+        mode: PhysicalTypingMode
+    ) -> PhysicalKeystroke? {
+        if mode == .withShiftModifiers, let stroke = shiftedPhysicalKeystroke(for: character) {
+            return stroke
+        }
+        guard let code = unmodifiedPhysicalKeyCode(for: character) else {
+            return nil
+        }
+        return PhysicalKeystroke(code: code, flags: [])
+    }
+
+    private static func shiftedPhysicalKeystroke(for character: Character) -> PhysicalKeystroke? {
+        let shift: CGEventFlags = .maskShift
         switch character {
-        case "a", "A": return CGKeyCode(kVK_ANSI_A)
-        case "b", "B": return CGKeyCode(kVK_ANSI_B)
-        case "c", "C": return CGKeyCode(kVK_ANSI_C)
-        case "d", "D": return CGKeyCode(kVK_ANSI_D)
-        case "e", "E": return CGKeyCode(kVK_ANSI_E)
-        case "f", "F": return CGKeyCode(kVK_ANSI_F)
-        case "g", "G": return CGKeyCode(kVK_ANSI_G)
-        case "h", "H": return CGKeyCode(kVK_ANSI_H)
-        case "i", "I": return CGKeyCode(kVK_ANSI_I)
-        case "j", "J": return CGKeyCode(kVK_ANSI_J)
-        case "k", "K": return CGKeyCode(kVK_ANSI_K)
-        case "l", "L": return CGKeyCode(kVK_ANSI_L)
-        case "m", "M": return CGKeyCode(kVK_ANSI_M)
-        case "n", "N": return CGKeyCode(kVK_ANSI_N)
-        case "o", "O": return CGKeyCode(kVK_ANSI_O)
-        case "p", "P": return CGKeyCode(kVK_ANSI_P)
-        case "q", "Q": return CGKeyCode(kVK_ANSI_Q)
-        case "r", "R": return CGKeyCode(kVK_ANSI_R)
-        case "s", "S": return CGKeyCode(kVK_ANSI_S)
-        case "t", "T": return CGKeyCode(kVK_ANSI_T)
-        case "u", "U": return CGKeyCode(kVK_ANSI_U)
-        case "v", "V": return CGKeyCode(kVK_ANSI_V)
-        case "w", "W": return CGKeyCode(kVK_ANSI_W)
-        case "x", "X": return CGKeyCode(kVK_ANSI_X)
-        case "y", "Y": return CGKeyCode(kVK_ANSI_Y)
-        case "z", "Z": return CGKeyCode(kVK_ANSI_Z)
+        case "A": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_A), flags: shift)
+        case "B": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_B), flags: shift)
+        case "C": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_C), flags: shift)
+        case "D": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_D), flags: shift)
+        case "E": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_E), flags: shift)
+        case "F": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_F), flags: shift)
+        case "G": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_G), flags: shift)
+        case "H": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_H), flags: shift)
+        case "I": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_I), flags: shift)
+        case "J": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_J), flags: shift)
+        case "K": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_K), flags: shift)
+        case "L": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_L), flags: shift)
+        case "M": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_M), flags: shift)
+        case "N": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_N), flags: shift)
+        case "O": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_O), flags: shift)
+        case "P": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_P), flags: shift)
+        case "Q": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Q), flags: shift)
+        case "R": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_R), flags: shift)
+        case "S": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_S), flags: shift)
+        case "T": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_T), flags: shift)
+        case "U": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_U), flags: shift)
+        case "V": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_V), flags: shift)
+        case "W": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_W), flags: shift)
+        case "X": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_X), flags: shift)
+        case "Y": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Y), flags: shift)
+        case "Z": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Z), flags: shift)
+        case "!": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_1), flags: shift)
+        case "@": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_2), flags: shift)
+        case "#": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_3), flags: shift)
+        case "$": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_4), flags: shift)
+        case "%": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_5), flags: shift)
+        case "^": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_6), flags: shift)
+        case "&": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_7), flags: shift)
+        case "*": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_8), flags: shift)
+        case "(": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_9), flags: shift)
+        case ")": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_0), flags: shift)
+        case "_": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Minus), flags: shift)
+        case "+": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Equal), flags: shift)
+        case "{": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_LeftBracket), flags: shift)
+        case "}": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_RightBracket), flags: shift)
+        case "|": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Backslash), flags: shift)
+        case ":": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Semicolon), flags: shift)
+        case "\"": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Quote), flags: shift)
+        case "<": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Comma), flags: shift)
+        case ">": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Period), flags: shift)
+        case "?": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Slash), flags: shift)
+        case "~": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Grave), flags: shift)
+        default: return nil
+        }
+    }
+
+    private static func unmodifiedPhysicalKeyCode(for character: Character) -> CGKeyCode? {
+        switch character {
+        case "a": return CGKeyCode(kVK_ANSI_A)
+        case "b": return CGKeyCode(kVK_ANSI_B)
+        case "c": return CGKeyCode(kVK_ANSI_C)
+        case "d": return CGKeyCode(kVK_ANSI_D)
+        case "e": return CGKeyCode(kVK_ANSI_E)
+        case "f": return CGKeyCode(kVK_ANSI_F)
+        case "g": return CGKeyCode(kVK_ANSI_G)
+        case "h": return CGKeyCode(kVK_ANSI_H)
+        case "i": return CGKeyCode(kVK_ANSI_I)
+        case "j": return CGKeyCode(kVK_ANSI_J)
+        case "k": return CGKeyCode(kVK_ANSI_K)
+        case "l": return CGKeyCode(kVK_ANSI_L)
+        case "m": return CGKeyCode(kVK_ANSI_M)
+        case "n": return CGKeyCode(kVK_ANSI_N)
+        case "o": return CGKeyCode(kVK_ANSI_O)
+        case "p": return CGKeyCode(kVK_ANSI_P)
+        case "q": return CGKeyCode(kVK_ANSI_Q)
+        case "r": return CGKeyCode(kVK_ANSI_R)
+        case "s": return CGKeyCode(kVK_ANSI_S)
+        case "t": return CGKeyCode(kVK_ANSI_T)
+        case "u": return CGKeyCode(kVK_ANSI_U)
+        case "v": return CGKeyCode(kVK_ANSI_V)
+        case "w": return CGKeyCode(kVK_ANSI_W)
+        case "x": return CGKeyCode(kVK_ANSI_X)
+        case "y": return CGKeyCode(kVK_ANSI_Y)
+        case "z": return CGKeyCode(kVK_ANSI_Z)
         case "0": return CGKeyCode(kVK_ANSI_0)
         case "1": return CGKeyCode(kVK_ANSI_1)
         case "2": return CGKeyCode(kVK_ANSI_2)
@@ -365,9 +406,27 @@ public struct TextInjector {
         }
     }
 
-    private func postKeycode(_ code: CGKeyCode, source: CGEventSource?) {
+    private func postKeystroke(_ stroke: PhysicalKeystroke, source: CGEventSource?) {
+        if stroke.flags.contains(.maskShift) {
+            let shiftDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Shift), keyDown: true)
+            shiftDown?.flags = .maskShift
+            shiftDown?.post(tap: .cghidEventTap)
+            usleep(1_000)
+        }
+        postKeycode(stroke.code, flags: stroke.flags, source: source)
+        if stroke.flags.contains(.maskShift) {
+            usleep(1_000)
+            let shiftUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Shift), keyDown: false)
+            shiftUp?.flags = []
+            shiftUp?.post(tap: .cghidEventTap)
+        }
+    }
+
+    private func postKeycode(_ code: CGKeyCode, flags: CGEventFlags = [], source: CGEventSource?) {
         let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
+        down?.flags = flags
+        up?.flags = flags
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
     }

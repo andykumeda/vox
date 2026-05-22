@@ -98,7 +98,7 @@ Click the menu-bar Vox icon → **Settings**:
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
 - **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
-- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC targets keep the transcript on the local clipboard, wait briefly for remote clipboard sync, and use the local Edit → Paste menu to avoid pasting stale manual clipboard contents.
+- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC keeps the transcript on the local clipboard but inserts into the remote session by typing physical key events instead of relying on VNC clipboard paste.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
 ## Dictionary
@@ -169,7 +169,7 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. macOS Screen Sharing/VNC waits for clipboard sync, invokes the local Edit → Paste menu, and keeps the transcript on the local clipboard so VNC pasteboard sync does not consume the previous manual clipboard value. RustDesk drops synthetic modifier keys, so Vox falls back to typing the transcript as plain physical keypresses; letters may be lowercased and shifted punctuation may be approximated, but the text should still reach the remote cursor. Paste Last Transcription uses the same path.
+Remote desktop apps need special paste handling. macOS Screen Sharing/VNC bypasses clipboard paste and types the transcript into the remote session as physical key events, preserving shifted characters where VNC accepts them. RustDesk drops synthetic modifier keys, so Vox falls back to unmodified physical keypresses there; letters may be lowercased and shifted punctuation may be approximated, but the text should still reach the remote cursor. Paste Last Transcription uses the same path.
 
 ## Files
 
@@ -215,7 +215,7 @@ docs/
   UPDATING.md            Update procedure (auto + manual fallback)
   dictation-regression.md  Regression-suite policy + thresholds
   index.html             Pages landing
-Tests/voxTests/          304 unit tests covering text pipeline, hotkey, meeting, retention, history
+Tests/voxTests/          305 unit tests covering text pipeline, hotkey, meeting, retention, history
 ```
 
 ## Testing
