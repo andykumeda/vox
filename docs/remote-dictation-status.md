@@ -1,13 +1,16 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-23 while preparing `v0.7.20`.
+Last updated: 2026-05-23 after live RustDesk validation.
 
 ## Current Status
 
-Remote dictation is inserting the current recording again, but `v0.7.19` still
-does not format the inserted text correctly in the remote session.
+Remote dictation is inserting the current recording again. `v0.7.19` still did
+not format the inserted text correctly in the remote session; the current
+working-tree fix changes RustDesk to exact clipboard paste after live validation
+and changes Screen Sharing/VNC to System Events text keystrokes after clipboard
+sync continued to paste stale text.
 
-The active failures are:
+The failures being addressed are:
 
 - The first letter of a dictated sentence is not capitalized.
 - Questions are not ending with `?`.
@@ -188,17 +191,38 @@ This specifically avoids treating disabled `Send Clipboard` or disabled
 Screen Sharing `Edit -> Paste` menu items as a reason to immediately fall back
 to physical typing.
 
+### RustDesk exact-paste fix
+
+Live RustDesk validation showed a Unicode-backed slash key event still inserted
+`/`, not `?`. Current RustDesk did preserve exact text through local clipboard
+paste plus remote `Cmd+V`, but immediate paste regressed to the old
+one-recording-behind failure because RustDesk's remote clipboard sync can lag
+behind the local pasteboard write. RustDesk now rewrites the local clipboard,
+waits for sync, and then sends remote `Cmd+V`. Caps Lock-aware physical typing
+remains only as the fallback if the AppleScript keystroke fails.
+
+### Screen Sharing/VNC text-keystroke fix
+
+Live VNC validation showed the shared clipboard path could paste the previous
+recording even after waiting 3 seconds, despite `Use Shared Clipboard` being
+checked. `Get Clipboard`, `Send Clipboard`, and Screen Sharing's own `Paste`
+menu items were disabled in that session. System Events text `keystroke` into
+the Screen Sharing window inserted current text with both uppercase letters and
+`?` intact, so VNC now uses that route first. Shared-clipboard paste remains as
+fallback only.
+
 ## Current Code Paths
 
 As of `v0.7.20`:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
-- `.screenSharing` writes the exact processed transcript to the pasteboard,
-  enables shared clipboard if possible, waits for sync, then sends remote
-  `Cmd+V` through System Events. If that AppleScript keystroke fails, it tries
-  Screen Sharing's `Edit -> Paste` menu item, then falls back to Caps Lock-aware
-  physical typing.
-- `.rustDesk` uses Caps Lock-aware physical typing.
+- `.screenSharing` sends exact text through System Events `keystroke` into the
+  Screen Sharing window. If that fails, it falls back to the shared-clipboard
+  `Cmd+V` path, then Caps Lock-aware physical typing.
+- `.rustDesk` writes the exact processed transcript to the local pasteboard,
+  waits for shared clipboard sync, then sends remote `Cmd+V` through System
+  Events. It falls back to Caps Lock-aware physical typing if that keystroke
+  fails.
 - `.remoteControl` uses Shift-modified physical typing for every frontmost app.
 
 Remote targets skip restoring the previous clipboard:

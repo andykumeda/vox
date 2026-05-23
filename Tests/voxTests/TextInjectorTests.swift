@@ -115,14 +115,14 @@ final class TextInjectorTests: XCTestCase {
 
     func testRemoteTargetsUsePhysicalTypingFallback() {
         XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
-        XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
+        XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
         XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .remoteControl))
         XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .standard))
     }
 
-    func testScreenSharingRequiresExactPaste() {
+    func testRemoteViewersRequireExactPaste() {
         XCTAssertTrue(TextInjector.requiresExactPaste(for: .screenSharing))
-        XCTAssertFalse(TextInjector.requiresExactPaste(for: .rustDesk))
+        XCTAssertTrue(TextInjector.requiresExactPaste(for: .rustDesk))
         XCTAssertFalse(TextInjector.requiresExactPaste(for: .remoteControl))
         XCTAssertFalse(TextInjector.requiresExactPaste(for: .standard))
     }
@@ -134,16 +134,16 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .standard))
     }
 
-    func testScreenSharingUsesRemoteCommandVPaste() {
-        XCTAssertTrue(TextInjector.usesRemoteCommandVPaste(for: .screenSharing))
-        XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .rustDesk))
+    func testRemoteViewersUseRemoteCommandVPaste() {
+        XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .screenSharing))
+        XCTAssertTrue(TextInjector.usesRemoteCommandVPaste(for: .rustDesk))
         XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .remoteControl))
         XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .standard))
     }
 
-    func testScreenSharingWaitsForClipboardSync() {
+    func testRemoteClipboardPasteWaitsForClipboardSync() {
         XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.25)
-        XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 0)
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 1.25)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .remoteControl), 0)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .standard), 0)
     }
@@ -160,6 +160,20 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .rustDesk))
         XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .remoteControl))
         XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .standard))
+    }
+
+    func testAppleScriptKeystrokeChunksSplitNewlinesAndTabs() {
+        XCTAssertEqual(
+            TextInjector.appleScriptKeystrokeChunks(for: "A\nB\tC"),
+            ["A", "\n", "B", "\t", "C"]
+        )
+    }
+
+    func testAppleScriptStringLiteralEscapesQuotesAndBackslashes() {
+        XCTAssertEqual(
+            TextInjector.appleScriptStringLiteral(#"say "hi" \ ok"#),
+            #""say \"hi\" \\ ok""#
+        )
     }
 
     func testRemotePasteCapitalizesProseFirstLetter() {

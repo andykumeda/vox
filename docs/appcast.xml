@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.21</title>
+            <pubDate>Sat, 23 May 2026 18:50:40 +0000</pubDate>
+            <sparkle:version>40</sparkle:version>
+            <sparkle:shortVersionString>0.7.21</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> RustDesk now waits for remote clipboard sync before sending remote <code>Cmd+V</code>, preventing one-recording-behind pastes while preserving exact question marks.</li>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC now sends exact text through System Events keystrokes first, avoiding stale shared-clipboard pastes and preserving both question marks and statement periods.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.21/Vox.dmg"
+                sparkle:edSignature="Wh/a+DB+f9TR/P84OFf+VVLuQU3N4sgdkKeM1j2pB5zVwdKGyu1mju1WCBqRVtCy4+k3/oGbkh9oVEYVMQzdBA=="
+                length="2604678"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.20</title>
             <pubDate>Sat, 23 May 2026 03:53:30 +0000</pubDate>
             <sparkle:version>39</sparkle:version>

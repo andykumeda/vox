@@ -170,14 +170,20 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing exact clipboard Cmd+V \(textToInsert.count) chars")
-            if !pasteWithScreenSharingSharedClipboard(textToInsert, pasteboard: pb) {
-                dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
-                typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+            dlog("paste remote fallback: VNC/Screen Sharing System Events keystroke \(textToInsert.count) chars")
+            if !typeWithSystemEventsKeystroke(textToInsert) {
+                dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
+                if !pasteWithScreenSharingSharedClipboard(textToInsert, pasteboard: pb) {
+                    dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
+                    typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+                }
             }
         case .rustDesk:
-            dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
-            typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+            dlog("paste remote fallback: RustDesk exact clipboard Cmd+V \(textToInsert.count) chars")
+            if !pasteWithRustDeskSharedClipboard(textToInsert, pasteboard: pb) {
+                dlog("RustDesk exact clipboard Cmd+V failed; falling back to physical typing")
+                typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+            }
         case .remoteControl:
             dlog("paste remote-control fallback: direct physical typing \(textToInsert.count) chars")
             typePhysicalText(textToInsert, mode: .withShiftModifiers)
@@ -249,15 +255,15 @@ public struct TextInjector {
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .rustDesk, .remoteControl: true
-        case .screenSharing, .standard: false
+        case .remoteControl: true
+        case .screenSharing, .rustDesk, .standard: false
         }
     }
 
     static func requiresExactPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing: true
-        case .rustDesk, .remoteControl, .standard: false
+        case .screenSharing, .rustDesk: true
+        case .remoteControl, .standard: false
         }
     }
 
@@ -270,15 +276,17 @@ public struct TextInjector {
 
     static func usesRemoteCommandVPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing: true
-        case .rustDesk, .remoteControl, .standard: false
+        case .rustDesk: true
+        case .screenSharing, .remoteControl, .standard: false
         }
     }
 
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
-        case .standard, .rustDesk, .remoteControl:
+        case .standard, .remoteControl:
             return 0
+        case .rustDesk:
+            return 1.25
         case .screenSharing:
             return 1.25
         }
@@ -714,6 +722,66 @@ public struct TextInjector {
         }
         dlog("VNC/Screen Sharing remote Cmd+V failed; trying Edit > Paste menu")
         return pasteWithFrontmostScreenSharingMenu()
+    }
+
+    private func pasteWithRustDeskSharedClipboard(
+        _ text: String,
+        pasteboard: NSPasteboard
+    ) -> Bool {
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        dlog("RustDesk waiting \(Self.prePasteDelay(for: .rustDesk))s for shared clipboard sync")
+        Thread.sleep(forTimeInterval: Self.prePasteDelay(for: .rustDesk))
+        return pasteWithSystemEventsKeyCode()
+    }
+
+    private func typeWithSystemEventsKeystroke(_ text: String) -> Bool {
+        let chunks = Self.appleScriptKeystrokeChunks(for: text)
+        guard !chunks.isEmpty else { return true }
+        let commands = chunks.map { chunk -> String in
+            switch chunk {
+            case "\n":
+                return "key code 36"
+            case "\t":
+                return "key code 48"
+            default:
+                return "keystroke \(Self.appleScriptStringLiteral(chunk))"
+            }
+        }.joined(separator: "\n            delay 0.01\n            ")
+        return runAppleScript("""
+        tell application "System Events"
+            \(commands)
+        end tell
+        """)
+    }
+
+    static func appleScriptKeystrokeChunks(for text: String) -> [String] {
+        var chunks: [String] = []
+        var current = ""
+        for character in text {
+            if character == "\n" || character == "\t" {
+                if !current.isEmpty {
+                    chunks.append(current)
+                    current = ""
+                }
+                chunks.append(String(character))
+                continue
+            }
+            current.append(character)
+            if current.count >= 80 {
+                chunks.append(current)
+                current = ""
+            }
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks
+    }
+
+    static func appleScriptStringLiteral(_ text: String) -> String {
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     private func enableFrontmostScreenSharingSharedClipboard() -> Bool {
