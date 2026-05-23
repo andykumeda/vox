@@ -169,8 +169,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing unicode-backed physical typing \(textToInsert.count) chars")
-            typePhysicalText(textToInsert, mode: .unicodeBackedShiftedCharacters)
+            dlog("paste remote fallback: VNC/Screen Sharing exact menu paste \(textToInsert.count) chars")
+            if !pasteWithScreenSharingSharedClipboard(textToInsert, pasteboard: pb) {
+                dlog("VNC/Screen Sharing exact menu paste failed; falling back to physical typing")
+                typePhysicalText(textToInsert, mode: .unicodeBackedShiftedCharacters)
+            }
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
             typePhysicalText(textToInsert, mode: .capsLockForUppercase)
@@ -225,40 +228,48 @@ public struct TextInjector {
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk: true
-        case .standard: false
+        case .rustDesk: true
+        case .screenSharing, .standard: false
         }
     }
 
     static func requiresExactPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .standard: false
+        case .screenSharing: true
+        case .rustDesk, .standard: false
         }
     }
 
     static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .standard: false
+        case .screenSharing: true
+        case .rustDesk, .standard: false
         }
     }
 
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
-        case .screenSharing, .standard, .rustDesk:
+        case .standard, .rustDesk:
             return 0
+        case .screenSharing:
+            return 1.0
         }
     }
 
     static func pushesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .standard, .rustDesk:
+        case .screenSharing:
+            return true
+        case .standard, .rustDesk:
             return false
         }
     }
 
     static func continuesPasteWhenRemoteClipboardPushFails(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .standard, .rustDesk:
+        case .screenSharing:
+            return true
+        case .standard, .rustDesk:
             return false
         }
     }
@@ -650,6 +661,93 @@ public struct TextInjector {
                 unicodeString: baseAddress
             )
         }
+    }
+
+    private func pasteWithScreenSharingSharedClipboard(
+        _ text: String,
+        pasteboard: NSPasteboard
+    ) -> Bool {
+        var pushed = false
+        for attempt in 1...2 {
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            dlog("VNC/Screen Sharing clipboard refresh attempt \(attempt)")
+            if pushFrontmostScreenSharingClipboard() {
+                pushed = true
+            }
+            Thread.sleep(forTimeInterval: 0.35)
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        Thread.sleep(forTimeInterval: Self.prePasteDelay(for: .screenSharing))
+
+        let pasted = pasteWithFrontmostScreenSharingMenu()
+        if !pasted && !pushed {
+            dlog("VNC/Screen Sharing shared clipboard push was unavailable")
+        }
+        return pasted
+    }
+
+    private func pushFrontmostScreenSharingClipboard() -> Bool {
+        runAppleScript("""
+        tell application "System Events"
+            tell first application process whose frontmost is true
+                tell menu "Edit" of menu bar 1
+                    if exists menu item "Use Shared Clipboard" then
+                        set sharedItem to menu item "Use Shared Clipboard"
+                        if enabled of sharedItem is false then error "Edit > Use Shared Clipboard is disabled"
+                        set isChecked to false
+                        try
+                            set markChar to value of attribute "AXMenuItemMarkChar" of sharedItem
+                            if markChar is not missing value and markChar is not "" then set isChecked to true
+                        end try
+                        try
+                            if selected of sharedItem is true then set isChecked to true
+                        end try
+                        if isChecked is false then
+                            click sharedItem
+                            delay 0.2
+                        end if
+                    end if
+                    if exists menu item "Send Clipboard" then
+                        set sendItem to menu item "Send Clipboard"
+                        if enabled of sendItem is false then error "Edit > Send Clipboard is disabled"
+                        click sendItem
+                    end if
+                end tell
+            end tell
+        end tell
+        """)
+    }
+
+    private func pasteWithFrontmostScreenSharingMenu() -> Bool {
+        runAppleScript("""
+        tell application "System Events"
+            tell first application process whose frontmost is true
+                tell menu "Edit" of menu bar 1
+                    if exists menu item "Paste" then
+                        set pasteItem to menu item "Paste"
+                        if enabled of pasteItem is false then error "Edit > Paste is disabled"
+                        click pasteItem
+                    else
+                        error "Edit > Paste is unavailable"
+                    end if
+                end tell
+            end tell
+        end tell
+        """)
+    }
+
+    private func runAppleScript(_ source: String) -> Bool {
+        var error: NSDictionary?
+        guard let script = NSAppleScript(source: source) else { return false }
+        script.executeAndReturnError(&error)
+        if let error {
+            dlog("AppleScript failed: \(error)")
+            return false
+        }
+        return true
     }
 
     private func sendKeyCombo(keycode: UInt16, modifiers: CGEventFlags) {
