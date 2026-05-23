@@ -147,24 +147,31 @@ public struct TextInjector {
         _ text: String,
         keepOnClipboard: Bool = false
     ) {
+        let target = pasteTargetForFrontmostApp()
         let pb = NSPasteboard.general
-        let previous = keepOnClipboard ? nil : pb.string(forType: .string)
+        let previous = Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target)
+            ? pb.string(forType: .string)
+            : nil
 
         pb.clearContents()
         pb.setString(text, forType: .string)
-        let expectedChangeCount = pb.changeCount
+        var expectedChangeCount = pb.changeCount
 
-        let target = pasteTargetForFrontmostApp()
         switch target {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
             let delay = Self.prePasteDelay(for: target)
-            dlog("paste remote fallback: VNC/Screen Sharing ensuring shared clipboard")
-            guard enableScreenSharingSharedClipboard() else {
+            dlog("paste remote fallback: VNC/Screen Sharing refreshing shared clipboard")
+            guard refreshScreenSharingSharedClipboard() else {
                 dlog("VNC/Screen Sharing exact paste unavailable; shared clipboard control is disabled")
-                break
+                return
             }
+            // Re-publish after the shared-clipboard refresh in case Screen Sharing
+            // pulled the remote side's older clipboard while toggling sync.
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+            expectedChangeCount = pb.changeCount
             dlog("paste remote fallback: VNC/Screen Sharing waiting \(delay)s for shared clipboard sync")
             Thread.sleep(forTimeInterval: delay)
             dlog("paste remote fallback: VNC/Screen Sharing via remote Cmd+V")
@@ -200,7 +207,11 @@ public struct TextInjector {
             return .rustDesk
         }
         if bundleID == "com.apple.screensharing"
+            || bundleID.contains("screensharing")
+            || bundleID.contains("screen-sharing")
             || bundleID.contains("vnc")
+            || name.contains("screen sharing")
+            || name.contains("screensharing")
             || name.contains("vnc") {
             return .screenSharing
         }
@@ -243,13 +254,22 @@ public struct TextInjector {
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
         case .screenSharing:
-            return 1.0
+            return 1.5
         case .standard, .rustDesk:
             return 0
         }
     }
 
-    private func enableScreenSharingSharedClipboard() -> Bool {
+    static func refreshesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
+        switch target {
+        case .screenSharing:
+            return true
+        case .standard, .rustDesk:
+            return false
+        }
+    }
+
+    private func refreshScreenSharingSharedClipboard() -> Bool {
         runAppleScript("""
         tell application "Screen Sharing" to activate
         delay 0.1
@@ -265,7 +285,11 @@ public struct TextInjector {
                 try
                     if selected of targetItem is true then set isChecked to true
                 end try
-                if isChecked is false then click targetItem
+                if isChecked is true then
+                    click targetItem
+                    delay 0.2
+                end if
+                click targetItem
             end tell
         end tell
         """)

@@ -13,6 +13,26 @@ final class TextInjectorTests: XCTestCase {
         )
     }
 
+    func testScreenSharingNameUsesRemotePasteTargetWhenBundleDiffers() {
+        XCTAssertEqual(
+            TextInjector.pasteTarget(
+                bundleIdentifier: "com.apple.ScreenSharingClient",
+                localizedName: "Screen Sharing"
+            ),
+            .screenSharing
+        )
+    }
+
+    func testScreenSharingBundleVariantUsesRemotePasteTarget() {
+        XCTAssertEqual(
+            TextInjector.pasteTarget(
+                bundleIdentifier: "com.apple.screensharing.agent",
+                localizedName: "Remote Session"
+            ),
+            .screenSharing
+        )
+    }
+
     func testVNCBundleUsesRemotePasteTarget() {
         XCTAssertEqual(
             TextInjector.pasteTarget(
@@ -94,9 +114,15 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testScreenSharingPasteWaitsForClipboardSync() {
-        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.0)
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.5)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 0)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .standard), 0)
+    }
+
+    func testScreenSharingRefreshesSharedClipboardAfterPasteboardWrite() {
+        XCTAssertTrue(TextInjector.refreshesRemoteClipboardAfterPasteboardWrite(for: .screenSharing))
+        XCTAssertFalse(TextInjector.refreshesRemoteClipboardAfterPasteboardWrite(for: .rustDesk))
+        XCTAssertFalse(TextInjector.refreshesRemoteClipboardAfterPasteboardWrite(for: .standard))
     }
 
     func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {
