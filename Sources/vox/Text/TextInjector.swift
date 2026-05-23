@@ -169,11 +169,8 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing exact menu paste \(textToInsert.count) chars")
-            if !pasteWithScreenSharingSharedClipboard(textToInsert, pasteboard: pb) {
-                dlog("VNC/Screen Sharing exact menu paste failed; falling back to physical typing")
-                typePhysicalText(textToInsert, mode: .unicodeBackedShiftedCharacters)
-            }
+            dlog("paste remote fallback: VNC/Screen Sharing physical typing \(textToInsert.count) chars")
+            typePhysicalText(textToInsert, mode: .capsLockForUppercase)
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
             typePhysicalText(textToInsert, mode: .capsLockForUppercase)
@@ -228,48 +225,40 @@ public struct TextInjector {
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .rustDesk: true
-        case .screenSharing, .standard: false
+        case .screenSharing, .rustDesk: true
+        case .standard: false
         }
     }
 
     static func requiresExactPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing: true
-        case .rustDesk, .standard: false
+        case .screenSharing, .rustDesk, .standard: false
         }
     }
 
     static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing: true
-        case .rustDesk, .standard: false
+        case .screenSharing, .rustDesk, .standard: false
         }
     }
 
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
-        case .standard, .rustDesk:
+        case .screenSharing, .standard, .rustDesk:
             return 0
-        case .screenSharing:
-            return 1.0
         }
     }
 
     static func pushesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing:
-            return true
-        case .standard, .rustDesk:
+        case .screenSharing, .standard, .rustDesk:
             return false
         }
     }
 
     static func continuesPasteWhenRemoteClipboardPushFails(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing:
-            return true
-        case .standard, .rustDesk:
+        case .screenSharing, .standard, .rustDesk:
             return false
         }
     }

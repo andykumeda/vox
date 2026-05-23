@@ -169,7 +169,7 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. Screen Sharing/VNC and RustDesk avoid the standard paste shortcut so remote clipboard lag cannot insert a prior transcription. Screen Sharing/VNC uses a double-refresh shared-clipboard menu paste so uppercase letters and punctuation survive clients that drop Shift modifiers. RustDesk uses the Caps Lock physical typing path because that client drops synthetic paste and modifier events. Paste Last Transcription uses the same target-specific path.
+Remote desktop apps need special paste handling. Screen Sharing/VNC and RustDesk avoid the standard paste shortcut so remote clipboard lag cannot insert a prior transcription. Both targets use the Caps Lock-aware physical typing path from the last known reliable VNC build, prioritizing delivery of the current transcript over perfect shifted punctuation. Paste Last Transcription uses the same target-specific path.
 
 ## Files
 

@@ -114,10 +114,9 @@ Settings → Hotkeys lets you rebind:
   launching process.
 - **Remote desktop paste fails** — Screen Sharing/VNC and RustDesk avoid the
   standard paste shortcut so remote clipboard lag cannot insert a prior
-  transcription. Screen Sharing/VNC uses a double-refresh shared-clipboard
-  menu paste so uppercase letters and punctuation survive clients that drop
-  Shift modifiers. RustDesk uses the Caps Lock physical typing path because
-  that client drops synthetic paste and modifier events.
+  transcription. Both targets use the Caps Lock-aware physical typing path
+  from the last known reliable VNC build, prioritizing delivery of the current
+  transcript over perfect shifted punctuation.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
   must be **Do Nothing**.
 - **Wrong transcription on short phrases** — add a Dictionary entry to fix
