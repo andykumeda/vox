@@ -207,6 +207,13 @@ final class MenuBarController: NSObject {
         )
         pasteLastItem.isEnabled = (DictationHistoryStore.shared.last() != nil)
         menu.addItem(pasteLastItem)
+        let remoteControlItem = makeMenuItem(
+            title: "Remote Control Mode",
+            symbol: "display",
+            action: #selector(toggleRemoteControlMode)
+        )
+        remoteControlItem.state = AppSettings.remoteControlModeEnabled ? .on : .off
+        menu.addItem(remoteControlItem)
         menu.addItem(.separator())
         menu.addItem(makeMenuItem(
             title: "Settings", symbol: "gearshape",
@@ -261,6 +268,12 @@ final class MenuBarController: NSObject {
 
     @objc private func pasteLastTranscriptionMenuAction() {
         pasteLastTranscription()
+    }
+
+    @objc private func toggleRemoteControlMode() {
+        AppSettings.remoteControlModeEnabled.toggle()
+        dlog("remote control mode -> \(AppSettings.remoteControlModeEnabled)")
+        configureMenu()
     }
 
     /// Pastes the most recent dictation entry's text into the focused app.

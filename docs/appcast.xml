@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.18</title>
+            <pubDate>Sat, 23 May 2026 03:04:16 +0000</pubDate>
+            <sparkle:version>37</sparkle:version>
+            <sparkle:shortVersionString>0.7.18</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Adds Remote Control Mode for the case where you are controlling the Mac that runs Vox through VNC, Screen Sharing, or RustDesk. Enable it from the menu bar or Settings → Paste behavior.</li>
+                    <li><strong>Fix:</strong> Remote Control Mode bypasses clipboard paste for every frontmost app and types the transcript directly, avoiding remote clipboard synchronization pasting an older recording.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.18/Vox.dmg"
+                sparkle:edSignature="f2KFcp86zCweezUkO6RMLUNOB20yo/S6XRbF3ZvwqnutM+uVSH4Rqb8JpHrTPav0TVuSpabYLJQ0DzyQdcpLCQ=="
+                length="2597172"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.17</title>
             <pubDate>Sat, 23 May 2026 02:54:11 +0000</pubDate>
             <sparkle:version>36</sparkle:version>

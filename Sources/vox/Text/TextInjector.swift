@@ -42,6 +42,7 @@ public struct TextInjector {
         case standard
         case screenSharing
         case rustDesk
+        case remoteControl
     }
 
     struct PhysicalKeystroke: Equatable {
@@ -174,6 +175,9 @@ public struct TextInjector {
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
             typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+        case .remoteControl:
+            dlog("paste remote-control fallback: direct physical typing \(textToInsert.count) chars")
+            typePhysicalText(textToInsert, mode: .withShiftModifiers)
         }
         if Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target) {
             schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
@@ -182,11 +186,13 @@ public struct TextInjector {
 
     private func pasteTargetForFrontmostApp() -> PasteTarget {
         let app = NSWorkspace.shared.frontmostApplication
+        let remoteControlMode = AppSettings.remoteControlModeEnabled
         let target = Self.pasteTarget(
             bundleIdentifier: app?.bundleIdentifier,
-            localizedName: app?.localizedName
+            localizedName: app?.localizedName,
+            remoteControlModeEnabled: remoteControlMode
         )
-        dlog("paste target: \(target) bundle=\(app?.bundleIdentifier ?? "nil") name=\(app?.localizedName ?? "nil")")
+        dlog("paste target: \(target) remoteControlMode=\(remoteControlMode) bundle=\(app?.bundleIdentifier ?? "nil") name=\(app?.localizedName ?? "nil")")
         return target
     }
 
@@ -194,6 +200,21 @@ public struct TextInjector {
         bundleIdentifier: String?,
         localizedName: String?
     ) -> PasteTarget {
+        pasteTarget(
+            bundleIdentifier: bundleIdentifier,
+            localizedName: localizedName,
+            remoteControlModeEnabled: false
+        )
+    }
+
+    static func pasteTarget(
+        bundleIdentifier: String?,
+        localizedName: String?,
+        remoteControlModeEnabled: Bool
+    ) -> PasteTarget {
+        if remoteControlModeEnabled {
+            return .remoteControl
+        }
         let bundleID = bundleIdentifier?.lowercased() ?? ""
         let name = localizedName?.lowercased() ?? ""
         if bundleID == "com.carriez.rustdesk" {
@@ -219,52 +240,52 @@ public struct TextInjector {
         // Remote-app pasteboard synchronization can lag
         // behind the local paste event. Restoring the prior clipboard causes
         // the remote side to paste that older value instead of the transcript.
-        if target == .screenSharing || target == .rustDesk { return false }
+        if target == .screenSharing || target == .rustDesk || target == .remoteControl { return false }
         return true
     }
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk: true
+        case .screenSharing, .rustDesk, .remoteControl: true
         case .standard: false
         }
     }
 
     static func requiresExactPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .standard: false
+        case .screenSharing, .rustDesk, .remoteControl, .standard: false
         }
     }
 
     static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .standard: false
+        case .screenSharing, .rustDesk, .remoteControl, .standard: false
         }
     }
 
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
-        case .screenSharing, .standard, .rustDesk:
+        case .screenSharing, .standard, .rustDesk, .remoteControl:
             return 0
         }
     }
 
     static func pushesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .standard, .rustDesk:
+        case .screenSharing, .standard, .rustDesk, .remoteControl:
             return false
         }
     }
 
     static func continuesPasteWhenRemoteClipboardPushFails(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .standard, .rustDesk:
+        case .screenSharing, .standard, .rustDesk, .remoteControl:
             return false
         }
     }
 
     static func textForPaste(_ text: String, target: PasteTarget) -> String {
-        guard target == .screenSharing || target == .rustDesk else { return text }
+        guard target == .screenSharing || target == .rustDesk || target == .remoteControl else { return text }
         guard looksLikeProseForRemoteCapitalization(text) else { return text }
         return capitalizeFirstAlphabeticCharacter(text)
     }

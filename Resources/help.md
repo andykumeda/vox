@@ -114,9 +114,11 @@ Settings → Hotkeys lets you rebind:
   launching process.
 - **Remote desktop paste fails** — Screen Sharing/VNC and RustDesk avoid the
   standard paste shortcut so remote clipboard lag cannot insert a prior
-  transcription. Both targets use the Caps Lock-aware physical typing path
-  from the last known reliable VNC build, prioritizing delivery of the current
-  transcript over perfect shifted punctuation.
+  transcription when Vox is running on the Mac with the remote desktop viewer
+  frontmost. If you are remote-controlling the Mac that runs Vox, enable
+  **Remote Control Mode** from the menu bar or Settings → Paste behavior.
+  Vox will type the transcript directly into the focused app instead of using
+  the clipboard sync path that can paste an older recording.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
   must be **Do Nothing**.
 - **Wrong transcription on short phrases** — add a Dictionary entry to fix

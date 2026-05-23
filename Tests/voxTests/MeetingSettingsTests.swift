@@ -5,6 +5,7 @@ final class MeetingSettingsTests: XCTestCase {
     private let modeKey = "meetingModeEnabled"
     private let consentKey = "meetingConsentAcknowledged"
     private let backendKey = "meetingCaptureBackend"
+    private let remoteControlModeKey = "remoteControlModeEnabled"
 
     override func setUp() {
         super.setUp()
@@ -21,6 +22,7 @@ final class MeetingSettingsTests: XCTestCase {
         defaults.removeObject(forKey: modeKey)
         defaults.removeObject(forKey: consentKey)
         defaults.removeObject(forKey: backendKey)
+        defaults.removeObject(forKey: remoteControlModeKey)
     }
 
     func testMeetingModeDefaultsOff() {
@@ -33,6 +35,17 @@ final class MeetingSettingsTests: XCTestCase {
 
     func testMeetingBackendDefaultsToSystemAudio() {
         XCTAssertEqual(AppSettings.meetingCaptureBackend, .systemAudio)
+    }
+
+    func testRemoteControlModeDefaultsOff() {
+        XCTAssertFalse(AppSettings.remoteControlModeEnabled)
+    }
+
+    func testRemoteControlModeRoundTrip() {
+        AppSettings.remoteControlModeEnabled = true
+        XCTAssertTrue(AppSettings.remoteControlModeEnabled)
+        AppSettings.remoteControlModeEnabled = false
+        XCTAssertFalse(AppSettings.remoteControlModeEnabled)
     }
 
     func testMeetingFlagsRoundTrip() {

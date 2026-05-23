@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var deepgramSavedMessage: String?
     @State private var meetingProvider: MeetingProvider = AppSettings.meetingProvider
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
+    @State private var remoteControlMode: Bool = AppSettings.remoteControlModeEnabled
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
     @State private var cleanupProfile: String = CleanupProfileStore.shared.load()
@@ -336,6 +337,16 @@ struct SettingsView: View {
                 Text("When on, the transcribed text stays on your clipboard so you can Cmd+V again if focus moved away. Your prior clipboard contents are overwritten.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("Remote control mode", isOn: Binding(
+                    get: { remoteControlMode },
+                    set: { newValue in
+                        remoteControlMode = newValue
+                        AppSettings.remoteControlModeEnabled = newValue
+                    }
+                ))
+                Text("Use this when controlling this Mac through VNC, Screen Sharing, or RustDesk. Vox types the transcript directly instead of using the clipboard, avoiding remote clipboard sync pasting an older recording.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
@@ -460,6 +471,7 @@ struct SettingsView: View {
             deepgramKey = deepgramKeychain.read() ?? ""
             totals = UsageTracker.totals()
             model = AppSettings.transcriptionModel
+            remoteControlMode = AppSettings.remoteControlModeEnabled
             modeOverride = AppSettings.modeOverride
             smartCleanup = AppSettings.smartCleanupEnabled
             cleanupProfile = cleanupProfileStore.load()
