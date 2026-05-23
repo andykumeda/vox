@@ -114,8 +114,8 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testRemoteTargetsUsePhysicalTypingFallback() {
-        XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
-        XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
+        XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
+        XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
         XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .remoteControl))
         XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .standard))
     }
@@ -135,7 +135,7 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testRemoteViewersUseRemoteCommandVPaste() {
-        XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .screenSharing))
+        XCTAssertTrue(TextInjector.usesRemoteCommandVPaste(for: .screenSharing))
         XCTAssertTrue(TextInjector.usesRemoteCommandVPaste(for: .rustDesk))
         XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .remoteControl))
         XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .standard))
@@ -166,6 +166,13 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertEqual(
             TextInjector.appleScriptKeystrokeChunks(for: "A\nB\tC"),
             ["A", "\n", "B", "\t", "C"]
+        )
+    }
+
+    func testAppleScriptKeystrokeChunksNormalizeCarriageReturns() {
+        XCTAssertEqual(
+            TextInjector.appleScriptKeystrokeChunks(for: "A\rB\r\nC"),
+            ["A", "\n", "B", "\n", "C"]
         )
     }
 

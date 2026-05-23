@@ -98,7 +98,7 @@ Click the menu-bar Vox icon → **Settings**:
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
 - **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
-- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC and RustDesk keep the transcript on the local clipboard and use physical typing so remote clipboard lag cannot paste a prior transcription.
+- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC, RustDesk, and Remote Control Mode skip restoring the prior clipboard because remote clipboard synchronization can lag behind the local paste event.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
 ## Dictionary
@@ -169,7 +169,7 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/RustDesk viewer frontmost, Screen Sharing/VNC writes the exact processed transcript to the local clipboard, waits for shared clipboard sync, then sends remote Cmd+V so capitalization and question marks survive VNC clients that drop Shift/Caps Lock key forwarding. RustDesk remains on physical typing because that client has historically dropped synthetic paste and modifier events. When you are remote-controlling the Mac that runs Vox, enable **Remote Control Mode** from the menu bar or Settings -> Paste behavior. Paste Last Transcription uses the same target-specific path. Current unresolved remote-dictation status is tracked in [docs/remote-dictation-status.md](docs/remote-dictation-status.md).
+Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/RustDesk viewer frontmost, Screen Sharing/VNC first sends exact text through System Events keystrokes so capitalization and question marks survive VNC clients that drop Shift/Caps Lock key forwarding; shared-clipboard Cmd+V and physical typing remain fallbacks. RustDesk writes the exact processed transcript to the local clipboard, waits for remote clipboard sync, then sends remote Cmd+V; Caps Lock-aware physical typing is the fallback. When you are remote-controlling the Mac that runs Vox, enable **Remote Control Mode** from the menu bar or Settings -> Paste behavior. Paste Last Transcription uses the same async target-specific path. Remote-dictation history and caveats are tracked in [docs/remote-dictation-status.md](docs/remote-dictation-status.md).
 
 ## Files
 
@@ -215,7 +215,7 @@ docs/
   UPDATING.md            Update procedure (auto + manual fallback)
   dictation-regression.md  Regression-suite policy + thresholds
   index.html             Pages landing
-Tests/voxTests/          306 unit tests covering text pipeline, hotkey, meeting, retention, history
+Tests/voxTests/          330 unit tests covering text pipeline, hotkey, meeting, retention, history
 ```
 
 ## Testing

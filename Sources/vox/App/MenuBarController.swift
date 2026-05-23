@@ -283,7 +283,12 @@ final class MenuBarController: NSObject {
             sound.play(.error)
             return
         }
-        injector.paste(entry.text, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
+        let injector = self.injector
+        let text = entry.text
+        let keepOnClipboard = AppSettings.keepTranscriptionOnClipboard
+        Task {
+            await injector.pasteAsync(text, keepOnClipboard: keepOnClipboard)
+        }
     }
 
     static var appVersion: String {
@@ -668,14 +673,17 @@ final class MenuBarController: NSObject {
                     ))
                 }
                 dlog("processed=\(processed.text) keys=\(processed.suffixKeys) words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
+                let pasteDelay: Double
+                if finalText.isEmpty {
+                    pasteDelay = 0
+                } else {
+                    await self.injector.pasteAsync(
+                        finalText,
+                        keepOnClipboard: AppSettings.keepTranscriptionOnClipboard
+                    )
+                    pasteDelay = 0.2
+                }
                 await MainActor.run {
-                    let pasteDelay: Double
-                    if finalText.isEmpty {
-                        pasteDelay = 0
-                    } else {
-                        self.injector.paste(finalText, keepOnClipboard: AppSettings.keepTranscriptionOnClipboard)
-                        pasteDelay = 0.2
-                    }
                     for (i, key) in processed.suffixKeys.enumerated() {
                         DispatchQueue.main.asyncAfter(deadline: .now() + pasteDelay + 0.18 * Double(i)) {
                             self.injector.sendKey(key)

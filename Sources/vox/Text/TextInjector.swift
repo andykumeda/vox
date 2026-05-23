@@ -57,6 +57,14 @@ public struct TextInjector {
         }
     }
 
+    private struct PasteOperation {
+        let target: PasteTarget
+        let textToInsert: String
+        let previousPasteboardText: String?
+        let expectedChangeCount: Int
+        let keepOnClipboard: Bool
+    }
+
     public func sendKey(_ key: SuffixKey) {
         let source = CGEventSource(stateID: .combinedSessionState)
         let code: CGKeyCode
@@ -155,41 +163,102 @@ public struct TextInjector {
         _ text: String,
         keepOnClipboard: Bool = false
     ) {
+        let operation = preparePasteOperation(text, keepOnClipboard: keepOnClipboard)
+        performPasteOperation(operation)
+        restorePasteboardIfNeeded(after: operation)
+    }
+
+    public func pasteAsync(
+        _ text: String,
+        keepOnClipboard: Bool = false
+    ) async {
+        let operation = await MainActor.run {
+            preparePasteOperation(text, keepOnClipboard: keepOnClipboard)
+        }
+        await performPasteOperationAsync(operation)
+        await MainActor.run {
+            restorePasteboardIfNeeded(after: operation)
+        }
+    }
+
+    private func preparePasteOperation(
+        _ text: String,
+        keepOnClipboard: Bool
+    ) -> PasteOperation {
         let target = pasteTargetForFrontmostApp()
         let textToInsert = Self.textForPaste(text, target: target)
-        let pb = NSPasteboard.general
+        let pasteboard = NSPasteboard.general
         let previous = Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target)
-            ? pb.string(forType: .string)
+            ? pasteboard.string(forType: .string)
             : nil
 
-        pb.clearContents()
-        pb.setString(textToInsert, forType: .string)
-        let expectedChangeCount = pb.changeCount
+        pasteboard.clearContents()
+        pasteboard.setString(textToInsert, forType: .string)
+        return PasteOperation(
+            target: target,
+            textToInsert: textToInsert,
+            previousPasteboardText: previous,
+            expectedChangeCount: pasteboard.changeCount,
+            keepOnClipboard: keepOnClipboard
+        )
+    }
 
-        switch target {
+    private func performPasteOperation(_ operation: PasteOperation) {
+        switch operation.target {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing System Events keystroke \(textToInsert.count) chars")
-            if !typeWithSystemEventsKeystroke(textToInsert) {
+            dlog("paste remote fallback: VNC/Screen Sharing System Events keystroke \(operation.textToInsert.count) chars")
+            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
                 dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
-                if !pasteWithScreenSharingSharedClipboard(textToInsert, pasteboard: pb) {
+                if !pasteWithScreenSharingSharedClipboard(operation.textToInsert) {
                     dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
-                    typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+                    typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
                 }
             }
         case .rustDesk:
-            dlog("paste remote fallback: RustDesk exact clipboard Cmd+V \(textToInsert.count) chars")
-            if !pasteWithRustDeskSharedClipboard(textToInsert, pasteboard: pb) {
+            dlog("paste remote fallback: RustDesk exact clipboard Cmd+V \(operation.textToInsert.count) chars")
+            if !pasteWithRustDeskSharedClipboard() {
                 dlog("RustDesk exact clipboard Cmd+V failed; falling back to physical typing")
-                typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+                typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
             }
         case .remoteControl:
-            dlog("paste remote-control fallback: direct physical typing \(textToInsert.count) chars")
-            typePhysicalText(textToInsert, mode: .withShiftModifiers)
+            dlog("paste remote-control fallback: direct physical typing \(operation.textToInsert.count) chars")
+            typePhysicalText(operation.textToInsert, mode: .withShiftModifiers)
         }
-        if Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target) {
-            schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
+    }
+
+    private func performPasteOperationAsync(_ operation: PasteOperation) async {
+        switch operation.target {
+        case .standard:
+            sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
+        case .screenSharing:
+            dlog("paste remote fallback: VNC/Screen Sharing System Events keystroke \(operation.textToInsert.count) chars")
+            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
+                dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
+                if !(await pasteWithScreenSharingSharedClipboardAsync(operation.textToInsert)) {
+                    dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
+                    typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
+                }
+            }
+        case .rustDesk:
+            dlog("paste remote fallback: RustDesk exact clipboard Cmd+V \(operation.textToInsert.count) chars")
+            if !(await pasteWithRustDeskSharedClipboardAsync()) {
+                dlog("RustDesk exact clipboard Cmd+V failed; falling back to physical typing")
+                typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
+            }
+        case .remoteControl:
+            dlog("paste remote-control fallback: direct physical typing \(operation.textToInsert.count) chars")
+            typePhysicalText(operation.textToInsert, mode: .withShiftModifiers)
+        }
+    }
+
+    private func restorePasteboardIfNeeded(after operation: PasteOperation) {
+        if Self.shouldRestorePasteboard(keepOnClipboard: operation.keepOnClipboard, target: operation.target) {
+            schedulePasteboardClear(
+                previous: operation.previousPasteboardText,
+                expectedChangeCount: operation.expectedChangeCount
+            )
         }
     }
 
@@ -255,8 +324,8 @@ public struct TextInjector {
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .remoteControl: true
-        case .screenSharing, .rustDesk, .standard: false
+        case .screenSharing, .rustDesk, .remoteControl: true
+        case .standard: false
         }
     }
 
@@ -276,8 +345,8 @@ public struct TextInjector {
 
     static func usesRemoteCommandVPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .rustDesk: true
-        case .screenSharing, .remoteControl, .standard: false
+        case .screenSharing, .rustDesk: true
+        case .remoteControl, .standard: false
         }
     }
 
@@ -699,18 +768,13 @@ public struct TextInjector {
         }
     }
 
-    private func pasteWithScreenSharingSharedClipboard(
-        _ text: String,
-        pasteboard: NSPasteboard
-    ) -> Bool {
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
+    private func pasteWithScreenSharingSharedClipboard(_ text: String) -> Bool {
         let sharedClipboardReady = enableFrontmostScreenSharingSharedClipboard()
         if !sharedClipboardReady {
             dlog("VNC/Screen Sharing shared clipboard control was unavailable")
         }
 
+        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         dlog("VNC/Screen Sharing waiting \(Self.prePasteDelay(for: .screenSharing))s for shared clipboard sync")
@@ -724,15 +788,45 @@ public struct TextInjector {
         return pasteWithFrontmostScreenSharingMenu()
     }
 
-    private func pasteWithRustDeskSharedClipboard(
-        _ text: String,
-        pasteboard: NSPasteboard
-    ) -> Bool {
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+    private func pasteWithScreenSharingSharedClipboardAsync(_ text: String) async -> Bool {
+        let sharedClipboardReady = enableFrontmostScreenSharingSharedClipboard()
+        if !sharedClipboardReady {
+            dlog("VNC/Screen Sharing shared clipboard control was unavailable")
+        }
+
+        await MainActor.run {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+        }
+        dlog("VNC/Screen Sharing waiting \(Self.prePasteDelay(for: .screenSharing))s for shared clipboard sync")
+        await waitForRemoteClipboardSync(target: .screenSharing)
+
+        dlog("VNC/Screen Sharing exact paste via remote Cmd+V")
+        if pasteWithSystemEventsKeyCode() {
+            return true
+        }
+        dlog("VNC/Screen Sharing remote Cmd+V failed; trying Edit > Paste menu")
+        return pasteWithFrontmostScreenSharingMenu()
+    }
+
+    private func pasteWithRustDeskSharedClipboard() -> Bool {
         dlog("RustDesk waiting \(Self.prePasteDelay(for: .rustDesk))s for shared clipboard sync")
         Thread.sleep(forTimeInterval: Self.prePasteDelay(for: .rustDesk))
         return pasteWithSystemEventsKeyCode()
+    }
+
+    private func pasteWithRustDeskSharedClipboardAsync() async -> Bool {
+        dlog("RustDesk waiting \(Self.prePasteDelay(for: .rustDesk))s for shared clipboard sync")
+        await waitForRemoteClipboardSync(target: .rustDesk)
+        return pasteWithSystemEventsKeyCode()
+    }
+
+    private func waitForRemoteClipboardSync(target: PasteTarget) async {
+        let delay = Self.prePasteDelay(for: target)
+        guard delay > 0 else { return }
+        let nanoseconds = UInt64(delay * 1_000_000_000)
+        try? await Task.sleep(nanoseconds: nanoseconds)
     }
 
     private func typeWithSystemEventsKeystroke(_ text: String) -> Bool {
@@ -758,7 +852,10 @@ public struct TextInjector {
     static func appleScriptKeystrokeChunks(for text: String) -> [String] {
         var chunks: [String] = []
         var current = ""
-        for character in text {
+        let normalizedText = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        for character in normalizedText {
             if character == "\n" || character == "\t" {
                 if !current.isEmpty {
                     chunks.append(current)

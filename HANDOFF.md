@@ -1,3 +1,33 @@
+# Handoff — Vox state as of 2026-05-23 (Post-0.7.21 remote paste finalization)
+
+## Session 2026-05-23 — Remote paste async finalization + agent instructions
+
+**Status:** Code-only finalization on top of `v0.7.21` / `main`. No version bump, no Sparkle release, no appcast edit. These recent fixes have **not** been pushed out through Sparkle, so the remote Mac will not have this version until a new release is cut and installed there. User reported testing has been completed.
+
+**Code changes:**
+- `Sources/vox/App/MenuBarController.swift`: fresh dictation and Paste Last Transcription now call `TextInjector.pasteAsync`, so remote sync waits do not block the main actor/menu flow. Suffix keys are scheduled after the awaited paste attempt completes.
+- `Sources/vox/Text/TextInjector.swift`: paste is split into prepare/perform/restore steps with sync and async execution paths. Remote waits use `Task.sleep` in the async path.
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC still tries exact System Events text keystrokes first, then shared-clipboard remote `Cmd+V`, then menu paste / physical typing fallbacks. RustDesk uses delayed exact clipboard paste plus remote `Cmd+V`, with Caps Lock-aware physical typing as fallback.
+- `Sources/vox/Text/TextInjector.swift`: System Events text chunks normalize `\r` and `\r\n` to newline key events.
+- `Tests/voxTests/TextInjectorTests.swift`: updated target capability expectations and added carriage-return normalization coverage.
+- `AGENTS.md`: populated the previously empty auto-created placeholder with repo-specific agent workflow, verification, documentation, remote paste, and release guardrails.
+
+**Docs updated:**
+- `README.md` and `Resources/help.md`: updated remote desktop paste behavior for Screen Sharing/VNC, RustDesk, Remote Control Mode, and Paste Last.
+- `docs/remote-dictation-status.md`: marked the current remote paste state as finalized/tested, documented the async follow-up, and replaced stale "still broken" language with regression watch points.
+- `HANDOFF.md`: this entry.
+
+**Verification:**
+- `git diff --check` passed.
+- `swift test` passed: 330 tests, 0 failures.
+- Manual/live testing was already completed by the user before finalization.
+
+**Remaining caveats / next steps:**
+- No active remote-dictation blocker is recorded in this checkout.
+- The remote Mac does not have these post-0.7.21 fixes yet. To deploy them there, cut a new Sparkle release from this commit and update via Vox -> Check for Updates.
+
+---
+
 # Handoff — Vox state as of 2026-05-22 (Release 0.7.8)
 
 ## Session 2026-05-22 — Release 0.7.8: VNC shared clipboard exact paste, RustDesk best-effort

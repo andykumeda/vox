@@ -1,29 +1,41 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-23 after live RustDesk validation.
+Last updated: 2026-05-23 after remote paste async finalization and testing.
 
 ## Current Status
 
-Remote dictation is inserting the current recording again. `v0.7.19` still did
-not format the inserted text correctly in the remote session; the current
-working-tree fix changes RustDesk to exact clipboard paste after live validation
-and changes Screen Sharing/VNC to System Events text keystrokes after clipboard
-sync continued to paste stale text.
+Remote dictation is inserting the current recording through formatting-preserving
+paths. The post-0.7.21 finalization keeps the selected exact insertion routes
+and makes paste operations asynchronous so remote clipboard synchronization
+waits do not block the main actor or menu flow.
 
-The failures being addressed are:
+These post-0.7.21 fixes have not been shipped through Sparkle yet. The remote
+Mac will not have this version until a new release is cut and installed there.
+
+Current behavior:
+
+- Screen Sharing/VNC uses System Events text keystrokes first. Shared-clipboard
+  Cmd+V and physical typing remain fallbacks.
+- RustDesk writes the exact processed transcript to the local clipboard, waits
+  for remote clipboard sync, then sends remote Cmd+V. Caps Lock-aware physical
+  typing remains the fallback.
+- Paste Last Transcription uses the same async target-specific path as fresh
+  dictation.
+
+The historical failures addressed in this run were:
 
 - The first letter of a dictated sentence is not capitalized.
 - Questions are not ending with `?`.
 - In at least one remote path, `?` was inserted as `/`, which means the remote
   session received the slash key without the Shift modifier.
 
-Do not describe the current bug as "pasting the previous recording." That was an
-earlier failure mode. The user explicitly corrected this after `v0.7.18`: the
-remaining bug is capitalization and question punctuation.
+Do not assume a future regression is "pasting the previous recording." That was
+one earlier failure mode. The user explicitly corrected this after `v0.7.18`:
+the later bug was capitalization and question punctuation.
 
-The user is testing remotely. Local logs in this checkout may not show the
-failing session, and prior debugging based on local process/log state was not
-useful.
+The user has completed the remote testing for this finalization. If a future
+failure is reported from a remote machine, local logs in this checkout may not
+show that failing session.
 
 ## Known User Observations
 
@@ -211,9 +223,21 @@ the Screen Sharing window inserted current text with both uppercase letters and
 `?` intact, so VNC now uses that route first. Shared-clipboard paste remains as
 fallback only.
 
+### Post-0.7.21 finalization
+
+Regular dictation and Paste Last Transcription now call the async paste path.
+The async path still prepares the pasteboard on the main actor, but remote
+clipboard waits use `Task.sleep` instead of blocking the main thread. Suffix key
+events are dispatched only after the awaited paste attempt completes.
+
+The target capability helpers were updated to reflect reality: Screen
+Sharing/VNC and RustDesk both have physical typing fallbacks, and Screen
+Sharing/VNC can use a remote Cmd+V fallback after the System Events text route.
+System Events text chunks now normalize `\r` and `\r\n` to newline key events.
+
 ## Current Code Paths
 
-As of `v0.7.20`:
+As of current main after the post-0.7.21 finalization:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
 - `.screenSharing` sends exact text through System Events `keystroke` into the
@@ -224,6 +248,8 @@ As of `v0.7.20`:
   Events. It falls back to Caps Lock-aware physical typing if that keystroke
   fails.
 - `.remoteControl` uses Shift-modified physical typing for every frontmost app.
+- Regular dictation and Paste Last Transcription use the async paste path so
+  remote sync waits do not block the main actor.
 
 Remote targets skip restoring the previous clipboard:
 
@@ -246,20 +272,17 @@ The implementation files are:
 
 ## What Is Still Broken
 
-- First-letter capitalization is not surviving remote insertion.
-- Question punctuation is not surviving remote insertion.
-- `?` can become `/` when the current path relies on synthetic Shift.
-- Remote Control Mode did not fix those formatting failures.
-- `v0.7.20` attempts to fix Screen Sharing/VNC specifically, but it has not yet
-  been validated by the user.
+No active remote-dictation blocker is recorded for this checkout after the
+completed testing. Watch specifically for regressions in first-letter
+capitalization, `?` insertion, and previous-recording clipboard lag.
 
 ## What Is Not Currently Broken
 
 - The current user report is not that Vox pastes the previous recording.
-- Current-recording delivery appears to be working well enough for the user to
-  show the formatting failures in dictated text.
+- The current user report is not that prose post-processing produces lowercase
+  or missing-question-mark text locally.
 
-## Likely Failure Boundary
+## Historical Failure Boundary
 
 The post-processing layer likely produces the right text locally: existing tests
 cover prose first-letter capitalization and question-mark insertion.
@@ -277,11 +300,12 @@ The failure is more likely in remote insertion:
   items by using shared clipboard sync plus remote `Cmd+V` before any physical
   fallback.
 
-## Next Debugging Session
+## If Remote Insertion Regresses
 
 Do not spend the next session debugging "previous recording paste" unless the
-user reports that it has regressed. The active problem is shifted-character and
-capitalization fidelity.
+user reports that it has regressed. First identify whether the new failure is
+current-text delivery, capitalization, shifted punctuation, or a blocked
+Accessibility/AppleScript path.
 
 Recommended sequence:
 
