@@ -1,3 +1,30 @@
+# Handoff — Vox state as of 2026-05-23 (Release 0.7.22)
+
+## Session 2026-05-23 — Release 0.7.22: async remote paste + recorder stop deadlock fix
+
+**Status:** Release 0.7.22 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.22` / build `41`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `+djJoZJmt/bYjTyfhovwkEXlfB+qVIdcJg4CiYt8D6w9vl1CkPYnBoz3wnDOK9hbnM9fo/XSB0cgFfak117hAA==`; length `2613254`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.22/Vox.dmg`.
+
+**Why 0.7.22 now:** The remote Mac does not have the post-0.7.21 fixes, and local Vox froze on Fn release while stopping an AVAudioEngine tap. This release packages the async remote paste finalization plus the recorder stop deadlock fix for Sparkle delivery.
+
+**Code/docs included:**
+- `Sources/vox/App/MenuBarController.swift`, `Sources/vox/Text/TextInjector.swift`, `Tests/voxTests/TextInjectorTests.swift`: async target-specific paste flow for fresh dictation and Paste Last Transcription, including remote clipboard waits that do not block the main actor.
+- `Sources/vox/Audio/AudioRecorder.swift`: `stop()` releases `AudioRecorder.lock` before `removeTap(onBus:)`, avoiding the main-thread/audio-tap lock inversion observed in the frozen local app.
+- `AGENTS.md`: repo-specific agent workflow, verification, documentation, remote paste, and release guardrails.
+- `README.md`, `Resources/help.md`, `docs/remote-dictation-status.md`, `HANDOFF.md`: current remote paste behavior, deployment state, and release notes.
+- `docs/appcast.xml`, `Resources/Info.plist`: 0.7.22 Sparkle metadata.
+
+**Verification:**
+- `swift test` passed: 330 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Remaining caveats / next steps:**
+- Push `main` and tag `v0.7.22`, create the GitHub release with `dist/Vox.dmg`, then verify the public appcast and release asset.
+- Restart local Vox from the rebuilt `dist/Vox.app`; the old frozen process cannot recover in place.
+- On the remote Mac, use Vox -> Check for Updates after the release asset and GitHub Pages appcast are live.
+
+---
+
 # Handoff — Vox state as of 2026-05-23 (Audio recorder stop deadlock fix)
 
 ## Session 2026-05-23 — Fix frozen app on Fn release

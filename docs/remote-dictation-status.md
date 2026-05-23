@@ -9,8 +9,9 @@ paths. The post-0.7.21 finalization keeps the selected exact insertion routes
 and makes paste operations asynchronous so remote clipboard synchronization
 waits do not block the main actor or menu flow.
 
-These post-0.7.21 fixes have not been shipped through Sparkle yet. The remote
-Mac will not have this version until a new release is cut and installed there.
+These post-0.7.21 fixes ship in `v0.7.22` / Sparkle build `41`. The remote Mac
+can install them with Vox -> Check for Updates once the GitHub release asset
+and GitHub Pages appcast are available.
 
 Current behavior:
 
