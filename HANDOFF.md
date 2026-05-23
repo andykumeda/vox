@@ -2,7 +2,7 @@
 
 ## Session 2026-05-23 — Release 0.7.22: async remote paste + recorder stop deadlock fix
 
-**Status:** Release 0.7.22 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.22` / build `41`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `+djJoZJmt/bYjTyfhovwkEXlfB+qVIdcJg4CiYt8D6w9vl1CkPYnBoz3wnDOK9hbnM9fo/XSB0cgFfak117hAA==`; length `2613254`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.22/Vox.dmg`.
+**Status:** Release 0.7.22 is cut from `main`. Release commit `10a5ff9` is tagged `v0.7.22` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.22`. `Resources/Info.plist` bumped to `0.7.22` / build `41`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `+djJoZJmt/bYjTyfhovwkEXlfB+qVIdcJg4CiYt8D6w9vl1CkPYnBoz3wnDOK9hbnM9fo/XSB0cgFfak117hAA==`; length `2613254`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.22/Vox.dmg`.
 
 **Why 0.7.22 now:** The remote Mac does not have the post-0.7.21 fixes, and local Vox froze on Fn release while stopping an AVAudioEngine tap. This release packages the async remote paste finalization plus the recorder stop deadlock fix for Sparkle delivery.
 
@@ -17,11 +17,12 @@
 - `swift test` passed: 330 tests, 0 failures.
 - `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
 - `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+- GitHub release asset `Vox.dmg` uploaded with size `2613254` and SHA-256 `99da552d98365e57bfcd1bddbaeab6e59e6ec27db1b39eb0a5d977540f988447`.
+- Public appcast at `https://andykumeda.github.io/vox/appcast.xml` advertises `Vox 0.7.22`, Sparkle version `41`, the matching EdDSA signature, and the GitHub DMG URL.
+- Local frozen Vox PID `63812` was terminated. Rebuilt `dist/Vox.app` was launched locally as PID `7445`, reporting version `0.7.22` / build `41`.
 
 **Remaining caveats / next steps:**
-- Push `main` and tag `v0.7.22`, create the GitHub release with `dist/Vox.dmg`, then verify the public appcast and release asset.
-- Restart local Vox from the rebuilt `dist/Vox.app`; the old frozen process cannot recover in place.
-- On the remote Mac, use Vox -> Check for Updates after the release asset and GitHub Pages appcast are live.
+- On the remote Mac, use Vox -> Check for Updates. Re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update.
 
 ---
 
