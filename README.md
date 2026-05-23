@@ -169,7 +169,7 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/RustDesk viewer frontmost, Screen Sharing/VNC and RustDesk avoid the standard paste shortcut so remote clipboard lag cannot insert a prior transcription. When you are remote-controlling the Mac that runs Vox, enable **Remote Control Mode** from the menu bar or Settings -> Paste behavior. That forces direct physical typing for every frontmost app, bypassing the clipboard sync path that can paste an older recording. Paste Last Transcription uses the same target-specific path.
+Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/RustDesk viewer frontmost, Screen Sharing/VNC and RustDesk avoid the standard paste shortcut so remote clipboard lag cannot insert a prior transcription. When you are remote-controlling the Mac that runs Vox, enable **Remote Control Mode** from the menu bar or Settings -> Paste behavior. That forces direct physical typing for every frontmost app, bypassing the clipboard sync path that can paste an older recording. Paste Last Transcription uses the same target-specific path. Current unresolved remote-dictation status is tracked in [docs/remote-dictation-status.md](docs/remote-dictation-status.md).
 
 ## Files
 
