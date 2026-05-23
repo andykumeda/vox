@@ -1,36 +1,37 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-23 after release `v0.7.18`.
+Last updated: 2026-05-23 after user testing `v0.7.18`.
 
 ## Current Status
 
-Remote dictation insertion is still broken for the user.
+Remote dictation is inserting the current recording again, but the inserted text
+is still not formatted correctly in the remote session.
 
-The reported failure is that, when dictating through a remote-control session,
-Vox pastes the previous recording instead of the most recent recording. Recent
-attempts also exposed related fidelity failures: first-letter capitalization was
-lost in some paths, and question marks became `/` when a VNC/Screen Sharing path
-dropped Shift.
+The active failures are:
 
-The user is testing remotely. Do not assume local logs in this checkout show the
-failing session. In prior debugging, relying on visible local logs/processes was
-misleading because the affected Vox instance and remote desktop session may be
-on a different host or user context.
+- The first letter of a dictated sentence is not capitalized.
+- Questions are not ending with `?`.
+- In at least one remote path, `?` was inserted as `/`, which means the remote
+  session received the slash key without the Shift modifier.
+
+Do not describe the current bug as "pasting the previous recording." That was an
+earlier failure mode. The user explicitly corrected this after `v0.7.18`: the
+remaining bug is capitalization and question punctuation.
+
+The user is testing remotely. Local logs in this checkout may not show the
+failing session, and prior debugging based on local process/log state was not
+useful.
 
 ## Known User Observations
 
-- The bug was originally: "not transcribing the most recent recording."
-- The user said this would not appear in the available logs because they are
-  remote.
-- RustDesk had previously been involved accidentally, then the user switched
-  back to macOS Screen Sharing/VNC.
-- VNC/Screen Sharing continued to paste the previous recording.
-- Later builds got current paste working in at least one moment, but first-letter
-  capitalization still failed and question marks were not inserted.
+- Earlier issue: Vox pasted the previous recording instead of the most recent
+  one.
+- Current issue: Vox inserts the current text, but it is lowercasing the first
+  letter and not producing question marks.
+- The user demonstrated the current failure with dictated text such as
+  lower-case sentence starts and question-like sentences ending in `/`.
 - A Shift-based attempt turned `?` into `/`.
-- The user stated that VNC used to work several commits earlier.
-- `v0.7.18` Remote Control Mode was tested by the user and "does nothing";
-  behavior remained the same.
+- Remote Control Mode in `v0.7.18` did not improve the user-observed behavior.
 
 ## Release Timeline
 
@@ -88,8 +89,7 @@ Iterated on Screen Sharing/VNC shared-clipboard behavior:
 - explicitly invoke `Send Clipboard` when available;
 - treat clipboard push as best-effort instead of aborting.
 
-These releases targeted one-recording-behind remote pastes, but the user still
-saw stale insertion behavior.
+These releases targeted one-recording-behind remote pastes.
 
 ### `v0.7.12`
 
@@ -102,9 +102,8 @@ Restored Screen Sharing/VNC to Caps Lock-aware physical typing with no shared
 clipboard dependency. This was intended to prevent remote clipboard lag from
 inserting the previous transcription.
 
-This is the most important historical candidate for "last known working" because
-it explicitly bypassed the shared clipboard. However, the user has not confirmed
-that `v0.7.13` itself works in the current remote setup.
+This is a candidate for the point where "current recording insertion" was fixed,
+but it still approximates shifted punctuation such as `?`.
 
 ### `v0.7.14`
 
@@ -132,20 +131,22 @@ typing path:
 - no menu paste;
 - no clipboard sync wait.
 
-This was based on commit history, but it did not solve the user's remote test.
+This was intended to restore current-recording insertion reliability. It did not
+solve the active capitalization/question-mark issue.
 
 ### `v0.7.18`
 
-Added explicit Remote Control Mode for the different topology where Vox runs on
-the Mac being controlled remotely. In that setup the frontmost app is the target
-app, not the VNC/RustDesk viewer, so automatic VNC/RustDesk frontmost-app
-detection does not select the remote path.
+Added explicit Remote Control Mode for the topology where Vox runs on the Mac
+being controlled remotely. In that setup the frontmost app is the target app,
+not the VNC/RustDesk viewer, so automatic VNC/RustDesk frontmost-app detection
+does not select the remote path.
 
-Remote Control Mode forces direct physical typing for every frontmost app and
-keeps the transcript from being restored off the clipboard.
+Remote Control Mode forces direct physical typing for every frontmost app.
+However, it currently uses Shift-modified physical typing, so if the remote
+session drops synthetic Shift, the expected failure is exactly what the user is
+seeing: first letters remain lowercase and `?` becomes `/`.
 
-The user reported that Remote Control Mode does nothing and the behavior remains
-the same.
+The user reported that Remote Control Mode does not fix the remaining issue.
 
 ## Current Code Paths
 
@@ -177,65 +178,60 @@ The implementation files are:
 
 ## What Is Still Broken
 
-- The user still sees the previous recording pasted in remote use.
-- VNC/Screen Sharing has not been restored to the user-confirmed working state.
-- RustDesk is not confirmed working.
-- Remote Control Mode did not change the user's observed behavior.
-- Capitalization and question-mark fidelity remain secondary unresolved issues;
-  the primary unresolved issue is current-recording delivery.
+- First-letter capitalization is not surviving remote insertion.
+- Question punctuation is not surviving remote insertion.
+- `?` can become `/` when the current path relies on synthetic Shift.
+- Remote Control Mode did not fix those formatting failures.
 
-## What We Do Not Know
+## What Is Not Currently Broken
 
-- The exact last version that worked in the user's real remote setup.
-- Whether the remote Mac is actually running the updated build after Sparkle
-  update and relaunch.
-- Whether the failing insertion happens through `TextInjector.paste`, Paste Last
-  Transcription, a stale history entry, a stale clipboard, or an older Vox
-  process.
-- Whether the transcript text is correct before insertion on the affected
-  machine.
-- Whether the remote-control software is synchronizing clipboard contents after
-  Vox writes the current transcript but before the target app consumes it.
-- Whether physical key events are being posted but ignored by the focused remote
-  target.
+- The current user report is not that Vox pastes the previous recording.
+- Current-recording delivery appears to be working well enough for the user to
+  show the formatting failures in dictated text.
+
+## Likely Failure Boundary
+
+The post-processing layer likely produces the right text locally: existing tests
+cover prose first-letter capitalization and question-mark insertion.
+
+The failure is more likely in remote insertion:
+
+- Shift-modified physical key events are not reliable through the remote path.
+- Unicode-backed key events were also not reliable in prior VNC testing.
+- Caps Lock can help uppercase letters in some paths, but it cannot type `?`
+  without Shift.
+- Exact text insertion may require a pasteboard/menu/Accessibility path, but
+  earlier shared-clipboard approaches caused stale paste problems.
 
 ## Next Debugging Session
 
-Avoid more blind release iterations. First establish the exact working boundary.
+Do not spend the next session debugging "previous recording paste" unless the
+user reports that it has regressed. The active problem is shifted-character and
+capitalization fidelity.
 
 Recommended sequence:
 
-1. Test old release DMGs on the actual remote Mac, starting with `v0.7.13`,
-   then `v0.7.5`, then `v0.7.2`.
-2. For each version, record only these outcomes:
-   - does it insert the current recording?
-   - does it paste the previous recording?
-   - does it insert nothing?
-   - does capitalization/punctuation matter?
-3. Add a user-visible diagnostics surface before another insertion fix:
-   - show the selected paste target in a notification or menu item;
-   - show whether Remote Control Mode is enabled;
-   - show the exact text that Vox is about to insert;
-   - optionally add "Copy Last Processed Text" and "Type Last Processed Text"
-     menu commands to separate transcription from insertion.
-4. Once the actual last-good release is confirmed, diff that version against the
-   first bad version and revert only the insertion path that changed.
-
-## Working Hypotheses
-
-These are unproven and should not be treated as facts:
-
-- The failing remote setup may not be using the newly released build, or it may
-  have an older Vox process still running.
-- The stale text may be coming from dictation history or paste-last state rather
-  than the clipboard.
-- The remote-control client may be overriding the local pasteboard after Vox
-  writes the current transcript.
-- Direct physical typing may be ignored by the target app or by macOS security
-  permissions on the affected remote Mac.
+1. Add a visible diagnostic before insertion that shows:
+   - the exact processed text Vox is about to insert;
+   - selected paste target;
+   - whether Remote Control Mode is enabled;
+   - selected physical typing mode.
+2. Add explicit menu commands to separate concerns:
+   - "Copy Last Processed Text" to confirm post-processing output;
+   - "Type Last Processed Text" to test physical typing only;
+   - "Paste Last Processed Text" to test clipboard paste only.
+3. For Remote Control Mode, test three insertion strategies against the same
+   known string, for example `Why is this not working?`:
+   - Caps Lock-aware physical typing;
+   - Shift-modified physical typing;
+   - exact paste after a delay without restoring the clipboard.
+4. Only after the working insertion strategy is identified should it be made the
+   default for remote use.
 
 ## Practical Priority
 
-The priority is not punctuation or capitalization. The priority is to restore
-one reliable remote path that inserts the current recording. Once that is stable,
-capitalization and question mark fidelity can be revisited.
+The priority is now exact enough remote text insertion for normal prose:
+
+- preserve first-letter capitalization;
+- preserve question marks;
+- avoid reintroducing the older previous-recording clipboard bug.
