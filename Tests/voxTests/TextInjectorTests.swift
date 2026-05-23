@@ -160,16 +160,31 @@ final class TextInjectorTests: XCTestCase {
         )
     }
 
-    func testScreenSharingPhysicalTypingPreservesShiftedCharacters() {
+    func testScreenSharingPhysicalTypingUsesUnicodeBackedShiftedCharacters() {
         let strokes = TextInjector.physicalKeystrokes(
             for: "Hello?",
-            mode: .withShiftModifiers
+            mode: .unicodeBackedShiftedCharacters
         )
 
         XCTAssertEqual(strokes.first?.code, CGKeyCode(kVK_ANSI_H))
-        XCTAssertTrue(strokes.first?.flags.contains(.maskShift) == true)
+        XCTAssertFalse(strokes.first?.flags.contains(.maskShift) == true)
+        XCTAssertEqual(strokes.first?.unicodeOverride, "H")
+        XCTAssertNil(strokes[1].unicodeOverride)
         XCTAssertEqual(strokes.last?.code, CGKeyCode(kVK_ANSI_Slash))
-        XCTAssertTrue(strokes.last?.flags.contains(.maskShift) == true)
+        XCTAssertFalse(strokes.last?.flags.contains(.maskShift) == true)
+        XCTAssertEqual(strokes.last?.unicodeOverride, "?")
+    }
+
+    func testShiftModifierPhysicalTypingStillUsesExplicitShift() {
+        let strokes = TextInjector.physicalKeystrokes(
+            for: "H?",
+            mode: .withShiftModifiers
+        )
+
+        XCTAssertTrue(strokes[0].flags.contains(.maskShift))
+        XCTAssertNil(strokes[0].unicodeOverride)
+        XCTAssertTrue(strokes[1].flags.contains(.maskShift))
+        XCTAssertNil(strokes[1].unicodeOverride)
     }
 
     func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {

@@ -47,6 +47,13 @@ public struct TextInjector {
     struct PhysicalKeystroke: Equatable {
         let code: CGKeyCode
         let flags: CGEventFlags
+        let unicodeOverride: String?
+
+        init(code: CGKeyCode, flags: CGEventFlags, unicodeOverride: String? = nil) {
+            self.code = code
+            self.flags = flags
+            self.unicodeOverride = unicodeOverride
+        }
     }
 
     public func sendKey(_ key: SuffixKey) {
@@ -162,8 +169,8 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing shifted physical typing \(textToInsert.count) chars")
-            typePhysicalText(textToInsert, mode: .withShiftModifiers)
+            dlog("paste remote fallback: VNC/Screen Sharing unicode-backed physical typing \(textToInsert.count) chars")
+            typePhysicalText(textToInsert, mode: .unicodeBackedShiftedCharacters)
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
             typePhysicalText(textToInsert, mode: .capsLockForUppercase)
@@ -290,6 +297,7 @@ public struct TextInjector {
     }
 
     enum PhysicalTypingMode {
+        case unicodeBackedShiftedCharacters
         case withShiftModifiers
         case capsLockForUppercase
         case unmodifiedOnly
@@ -457,6 +465,10 @@ public struct TextInjector {
         for character: Character,
         mode: PhysicalTypingMode
     ) -> PhysicalKeystroke? {
+        if mode == .unicodeBackedShiftedCharacters,
+           let stroke = unicodeBackedShiftedPhysicalKeystroke(for: character) {
+            return stroke
+        }
         if mode == .withShiftModifiers, let stroke = shiftedPhysicalKeystroke(for: character) {
             return stroke
         }
@@ -464,6 +476,15 @@ public struct TextInjector {
             return nil
         }
         return PhysicalKeystroke(code: code, flags: [])
+    }
+
+    private static func unicodeBackedShiftedPhysicalKeystroke(for character: Character) -> PhysicalKeystroke? {
+        guard let shifted = shiftedPhysicalKeystroke(for: character) else { return nil }
+        return PhysicalKeystroke(
+            code: shifted.code,
+            flags: [],
+            unicodeOverride: String(character)
+        )
     }
 
     private static func shiftedPhysicalKeystroke(for character: Character) -> PhysicalKeystroke? {
@@ -588,7 +609,12 @@ public struct TextInjector {
             shiftDown?.post(tap: .cghidEventTap)
             usleep(1_000)
         }
-        postKeycode(stroke.code, flags: stroke.flags, source: source)
+        postKeycode(
+            stroke.code,
+            flags: stroke.flags,
+            source: source,
+            unicodeOverride: stroke.unicodeOverride
+        )
         if stroke.flags.contains(.maskShift) {
             usleep(1_000)
             let shiftUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Shift), keyDown: false)
@@ -597,13 +623,33 @@ public struct TextInjector {
         }
     }
 
-    private func postKeycode(_ code: CGKeyCode, flags: CGEventFlags = [], source: CGEventSource?) {
+    private func postKeycode(
+        _ code: CGKeyCode,
+        flags: CGEventFlags = [],
+        source: CGEventSource?,
+        unicodeOverride: String? = nil
+    ) {
         let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
         down?.flags = flags
         up?.flags = flags
+        if let unicodeOverride {
+            setUnicodeString(unicodeOverride, on: down)
+            setUnicodeString(unicodeOverride, on: up)
+        }
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+    }
+
+    private func setUnicodeString(_ string: String, on event: CGEvent?) {
+        let units = Array(string.utf16)
+        units.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            event?.keyboardSetUnicodeString(
+                stringLength: buffer.count,
+                unicodeString: baseAddress
+            )
+        }
     }
 
     private func sendKeyCombo(keycode: UInt16, modifiers: CGEventFlags) {
