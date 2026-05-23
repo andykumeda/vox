@@ -23,6 +23,8 @@
 
 **Remaining caveats / next steps:**
 - On the remote Mac, use Vox -> Check for Updates. Re-grant Mic / Input Monitoring / Accessibility if macOS prompts after the ad-hoc-signed update.
+- Non-critical next programming session: improve prose number normalization for time context. Current `NumberNormalizer` intentionally keeps bare small numbers as words in prose, so phrases like "around four" can stay `four` even when the speaker means a time. Add context-aware tests/rules for time cues such as `at`, `around`, `by`, `before`, `after`, `until`, `o'clock`, `AM`, `PM`, `morning`, `afternoon`, `evening`, and `tonight`, while avoiding broad conversion of ordinary counts like "I have four ideas."
+- Non-critical next programming session: decide how to handle spoken quote markers in prose. Vox does not currently have deterministic handling for phrases such as "quote unquote something", "quote something unquote", or "open quote something close quote"; if it works, it is coming from Whisper or Smart Cleanup rather than `PostProcessor`. Add tests before coding because "quote unquote" can mean literal quote marks around the next phrase, scare quotes around one word, or plain spoken filler depending on context.
 
 ---
 
