@@ -15,6 +15,7 @@
 
 **Remaining caveats / next steps:**
 - These UI follow-ups have not been pushed out through Sparkle, so the remote Mac does not have them yet.
+- User reported after this local commit that the Meeting window still is not opening. Do not assume `bbc3965` fixed the Meeting selection/menu path; review later when there is time to test. Start by confirming whether the intended surface is the main Vox Meeting section, the floating `MeetingHUDPanel`, or both, then trace `MenuBarController.openMeetingPanel()`, `MainWindowController.showMeeting()`, sidebar `onChange`, and the currently running app build/version.
 - Manual UI verification is still useful after the next local app rebuild/relaunch: select Meeting from the sidebar/menu and confirm the HUD comes forward; open Settings behind another large window and confirm Vox raises above it.
 
 ---
