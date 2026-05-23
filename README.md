@@ -98,7 +98,7 @@ Click the menu-bar Vox icon → **Settings**:
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
 - **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
-- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC and RustDesk keep the transcript on the local clipboard and use best-effort physical typing so remote clipboard lag cannot paste a prior transcription.
+- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC and RustDesk keep the transcript on the local clipboard and use physical typing so remote clipboard lag cannot paste a prior transcription.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
 ## Dictionary
@@ -169,7 +169,7 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. Screen Sharing/VNC and RustDesk use best-effort physical typing instead of clipboard paste so remote clipboard lag cannot insert a prior transcription. Vox toggles Caps Lock around uppercase runs to preserve sentence starts where remote sessions drop synthetic Shift; shifted punctuation such as question marks may be approximated. Paste Last Transcription uses the same target-specific path.
+Remote desktop apps need special paste handling. Screen Sharing/VNC and RustDesk use physical typing instead of clipboard paste so remote clipboard lag cannot insert a prior transcription. Screen Sharing/VNC sends shifted key events for uppercase letters and punctuation such as question marks. RustDesk uses the Caps Lock path because that client drops synthetic paste and modifier events. Paste Last Transcription uses the same target-specific path.
 
 ## Files
 

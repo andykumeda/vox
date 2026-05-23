@@ -162,8 +162,8 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing physical typing \(textToInsert.count) chars")
-            typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+            dlog("paste remote fallback: VNC/Screen Sharing shifted physical typing \(textToInsert.count) chars")
+            typePhysicalText(textToInsert, mode: .withShiftModifiers)
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
             typePhysicalText(textToInsert, mode: .capsLockForUppercase)
@@ -290,6 +290,7 @@ public struct TextInjector {
     }
 
     enum PhysicalTypingMode {
+        case withShiftModifiers
         case capsLockForUppercase
         case unmodifiedOnly
     }
@@ -456,10 +457,67 @@ public struct TextInjector {
         for character: Character,
         mode: PhysicalTypingMode
     ) -> PhysicalKeystroke? {
+        if mode == .withShiftModifiers, let stroke = shiftedPhysicalKeystroke(for: character) {
+            return stroke
+        }
         guard let code = unmodifiedPhysicalKeyCode(for: character) else {
             return nil
         }
         return PhysicalKeystroke(code: code, flags: [])
+    }
+
+    private static func shiftedPhysicalKeystroke(for character: Character) -> PhysicalKeystroke? {
+        let shift: CGEventFlags = .maskShift
+        switch character {
+        case "A": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_A), flags: shift)
+        case "B": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_B), flags: shift)
+        case "C": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_C), flags: shift)
+        case "D": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_D), flags: shift)
+        case "E": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_E), flags: shift)
+        case "F": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_F), flags: shift)
+        case "G": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_G), flags: shift)
+        case "H": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_H), flags: shift)
+        case "I": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_I), flags: shift)
+        case "J": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_J), flags: shift)
+        case "K": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_K), flags: shift)
+        case "L": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_L), flags: shift)
+        case "M": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_M), flags: shift)
+        case "N": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_N), flags: shift)
+        case "O": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_O), flags: shift)
+        case "P": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_P), flags: shift)
+        case "Q": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Q), flags: shift)
+        case "R": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_R), flags: shift)
+        case "S": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_S), flags: shift)
+        case "T": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_T), flags: shift)
+        case "U": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_U), flags: shift)
+        case "V": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_V), flags: shift)
+        case "W": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_W), flags: shift)
+        case "X": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_X), flags: shift)
+        case "Y": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Y), flags: shift)
+        case "Z": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Z), flags: shift)
+        case "!": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_1), flags: shift)
+        case "@": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_2), flags: shift)
+        case "#": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_3), flags: shift)
+        case "$": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_4), flags: shift)
+        case "%": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_5), flags: shift)
+        case "^": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_6), flags: shift)
+        case "&": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_7), flags: shift)
+        case "*": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_8), flags: shift)
+        case "(": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_9), flags: shift)
+        case ")": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_0), flags: shift)
+        case "_": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Minus), flags: shift)
+        case "+": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Equal), flags: shift)
+        case "{": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_LeftBracket), flags: shift)
+        case "}": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_RightBracket), flags: shift)
+        case "|": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Backslash), flags: shift)
+        case ":": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Semicolon), flags: shift)
+        case "\"": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Quote), flags: shift)
+        case "<": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Comma), flags: shift)
+        case ">": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Period), flags: shift)
+        case "?": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Slash), flags: shift)
+        case "~": return PhysicalKeystroke(code: CGKeyCode(kVK_ANSI_Grave), flags: shift)
+        default: return nil
+        }
     }
 
     private static func unmodifiedPhysicalKeyCode(for character: Character) -> CGKeyCode? {

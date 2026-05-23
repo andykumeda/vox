@@ -160,6 +160,18 @@ final class TextInjectorTests: XCTestCase {
         )
     }
 
+    func testScreenSharingPhysicalTypingPreservesShiftedCharacters() {
+        let strokes = TextInjector.physicalKeystrokes(
+            for: "Hello?",
+            mode: .withShiftModifiers
+        )
+
+        XCTAssertEqual(strokes.first?.code, CGKeyCode(kVK_ANSI_H))
+        XCTAssertTrue(strokes.first?.flags.contains(.maskShift) == true)
+        XCTAssertEqual(strokes.last?.code, CGKeyCode(kVK_ANSI_Slash))
+        XCTAssertTrue(strokes.last?.flags.contains(.maskShift) == true)
+    }
+
     func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {
         let strokes = TextInjector.physicalKeystrokes(
             for: "AB c",

@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.14</title>
+            <pubDate>Sat, 23 May 2026 02:14:06 +0000</pubDate>
+            <sparkle:version>33</sparkle:version>
+            <sparkle:shortVersionString>0.7.14</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC now sends explicit Shift-modified physical key events for uppercase letters and shifted punctuation such as question marks while still avoiding the stale shared clipboard path.</li>
+                    <li><strong>Note:</strong> RustDesk remains on the Caps Lock physical typing path because that client drops synthetic paste and modifier events.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.14/Vox.dmg"
+                sparkle:edSignature="wgaRqziwWZMzABjTZ6nr+CJMPWu9ddV9YYfoRZ3cK7XQApUf9Fn8GIW1XE6+WkH6RJXTqy3aDBAWPNQ3kSlhBA=="
+                length="2594373"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.13</title>
             <pubDate>Sat, 23 May 2026 02:04:45 +0000</pubDate>
             <sparkle:version>32</sparkle:version>
