@@ -127,11 +127,18 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertFalse(TextInjector.requiresExactPaste(for: .standard))
     }
 
-    func testScreenSharingUsesMenuPasteFallback() {
+    func testScreenSharingKeepsMenuPasteAsLastFallback() {
         XCTAssertTrue(TextInjector.usesMenuPasteFallback(for: .screenSharing))
         XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .rustDesk))
         XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .remoteControl))
         XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .standard))
+    }
+
+    func testScreenSharingUsesRemoteCommandVPaste() {
+        XCTAssertTrue(TextInjector.usesRemoteCommandVPaste(for: .screenSharing))
+        XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .rustDesk))
+        XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .remoteControl))
+        XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .standard))
     }
 
     func testScreenSharingWaitsForClipboardSync() {

@@ -112,9 +112,10 @@ Settings → Hotkeys lets you rebind:
 - **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`,
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
-- **Remote desktop paste fails** — Screen Sharing/VNC uses Screen Sharing's
-  shared clipboard/menu paste path so capitalization and question marks survive
-  VNC clients that drop Shift/Caps Lock key forwarding. RustDesk remains on
+- **Remote desktop paste fails** — Screen Sharing/VNC writes the exact processed
+  transcript to the local clipboard, waits for shared clipboard sync, then sends
+  remote Cmd+V so capitalization and question marks survive VNC clients that
+  drop Shift/Caps Lock key forwarding. RustDesk remains on
   physical typing because that client has historically dropped synthetic paste
   and modifier events. If you are remote-controlling the Mac that runs Vox,
   enable **Remote Control Mode** from the menu bar or Settings → Paste behavior.

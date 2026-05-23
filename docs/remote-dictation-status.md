@@ -1,11 +1,11 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-23 while preparing `v0.7.19`.
+Last updated: 2026-05-23 while preparing `v0.7.20`.
 
 ## Current Status
 
-Remote dictation is inserting the current recording again, but `v0.7.18` does
-not format the inserted text correctly in the remote session.
+Remote dictation is inserting the current recording again, but `v0.7.19` still
+does not format the inserted text correctly in the remote session.
 
 The active failures are:
 
@@ -38,6 +38,10 @@ useful.
   insertion, while the remote output still lost capitalization/question marks.
   This confirms the active failure is VNC insertion, not transcription or prose
   post-processing.
+- After installing `v0.7.19`, logs showed the exact menu-paste path did not
+  actually run: Screen Sharing returned `Edit > Send Clipboard is disabled` and
+  `Edit > Paste is disabled`, then Vox fell back to physical typing. That
+  fallback explains why capitalization and question marks were still broken.
 
 ## Release Timeline
 
@@ -164,14 +168,36 @@ state needed for uppercase letters and `?`.
 
 This release needs user validation.
 
+User validation failed. The `v0.7.19` code still depended on Screen Sharing
+menu items that were disabled in the user's session, so it fell back to the
+physical typing path.
+
+### `v0.7.20`
+
+Restores the earlier exact Screen Sharing insertion route from the working
+history:
+
+- write the exact processed transcript to the local pasteboard;
+- enable `Use Shared Clipboard` when that Screen Sharing menu item is available;
+- wait for shared clipboard sync;
+- send remote `Cmd+V` through System Events;
+- only if that AppleScript keystroke fails, try Screen Sharing `Edit -> Paste`
+  and then physical typing.
+
+This specifically avoids treating disabled `Send Clipboard` or disabled
+Screen Sharing `Edit -> Paste` menu items as a reason to immediately fall back
+to physical typing.
+
 ## Current Code Paths
 
-As of `v0.7.19`:
+As of `v0.7.20`:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
-- `.screenSharing` refreshes Screen Sharing's shared clipboard, waits for sync,
-  and invokes Screen Sharing's `Edit -> Paste` menu item. If that fails, it
-  falls back to Caps Lock-aware physical typing.
+- `.screenSharing` writes the exact processed transcript to the pasteboard,
+  enables shared clipboard if possible, waits for sync, then sends remote
+  `Cmd+V` through System Events. If that AppleScript keystroke fails, it tries
+  Screen Sharing's `Edit -> Paste` menu item, then falls back to Caps Lock-aware
+  physical typing.
 - `.rustDesk` uses Caps Lock-aware physical typing.
 - `.remoteControl` uses Shift-modified physical typing for every frontmost app.
 
@@ -200,7 +226,7 @@ The implementation files are:
 - Question punctuation is not surviving remote insertion.
 - `?` can become `/` when the current path relies on synthetic Shift.
 - Remote Control Mode did not fix those formatting failures.
-- `v0.7.19` attempts to fix Screen Sharing/VNC specifically, but it has not yet
+- `v0.7.20` attempts to fix Screen Sharing/VNC specifically, but it has not yet
   been validated by the user.
 
 ## What Is Not Currently Broken
@@ -221,9 +247,11 @@ The failure is more likely in remote insertion:
 - Unicode-backed key events were also not reliable in prior VNC testing.
 - Caps Lock physical typing is not reliable enough for first-letter uppercase
   and cannot type `?` without Shift.
-- Exact text insertion requires a pasteboard/menu/Accessibility path. Earlier
-  shared-clipboard approaches caused stale paste problems, so `v0.7.19` keeps
-  the transcript on the clipboard and adds a longer explicit sync window.
+- Exact text insertion requires a pasteboard/Accessibility path. The observed
+  `v0.7.19` failure was that disabled Screen Sharing menu items caused an
+  immediate fallback to physical typing. `v0.7.20` bypasses those disabled menu
+  items by using shared clipboard sync plus remote `Cmd+V` before any physical
+  fallback.
 
 ## Next Debugging Session
 

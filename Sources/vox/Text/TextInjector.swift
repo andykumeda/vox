@@ -170,9 +170,9 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing exact menu paste \(textToInsert.count) chars")
+            dlog("paste remote fallback: VNC/Screen Sharing exact clipboard Cmd+V \(textToInsert.count) chars")
             if !pasteWithScreenSharingSharedClipboard(textToInsert, pasteboard: pb) {
-                dlog("VNC/Screen Sharing exact menu paste failed; falling back to physical typing")
+                dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
                 typePhysicalText(textToInsert, mode: .capsLockForUppercase)
             }
         case .rustDesk:
@@ -262,6 +262,13 @@ public struct TextInjector {
     }
 
     static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
+        switch target {
+        case .screenSharing: true
+        case .rustDesk, .remoteControl, .standard: false
+        }
+    }
+
+    static func usesRemoteCommandVPaste(for target: PasteTarget) -> Bool {
         switch target {
         case .screenSharing: true
         case .rustDesk, .remoteControl, .standard: false
@@ -688,29 +695,28 @@ public struct TextInjector {
         _ text: String,
         pasteboard: NSPasteboard
     ) -> Bool {
-        var pushed = false
-        for attempt in 1...3 {
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-            dlog("VNC/Screen Sharing clipboard refresh attempt \(attempt)")
-            if pushFrontmostScreenSharingClipboard() {
-                pushed = true
-            }
-            Thread.sleep(forTimeInterval: 0.45)
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+
+        let sharedClipboardReady = enableFrontmostScreenSharingSharedClipboard()
+        if !sharedClipboardReady {
+            dlog("VNC/Screen Sharing shared clipboard control was unavailable")
         }
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        dlog("VNC/Screen Sharing waiting \(Self.prePasteDelay(for: .screenSharing))s for shared clipboard sync")
         Thread.sleep(forTimeInterval: Self.prePasteDelay(for: .screenSharing))
 
-        let pasted = pasteWithFrontmostScreenSharingMenu()
-        if !pasted && !pushed {
-            dlog("VNC/Screen Sharing shared clipboard push was unavailable")
+        dlog("VNC/Screen Sharing exact paste via remote Cmd+V")
+        if pasteWithSystemEventsKeyCode() {
+            return true
         }
-        return pasted
+        dlog("VNC/Screen Sharing remote Cmd+V failed; trying Edit > Paste menu")
+        return pasteWithFrontmostScreenSharingMenu()
     }
 
-    private func pushFrontmostScreenSharingClipboard() -> Bool {
+    private func enableFrontmostScreenSharingSharedClipboard() -> Bool {
         runAppleScript("""
         tell application "System Events"
             tell first application process whose frontmost is true
@@ -731,13 +737,16 @@ public struct TextInjector {
                             delay 0.2
                         end if
                     end if
-                    if exists menu item "Send Clipboard" then
-                        set sendItem to menu item "Send Clipboard"
-                        if enabled of sendItem is false then error "Edit > Send Clipboard is disabled"
-                        click sendItem
-                    end if
                 end tell
             end tell
+        end tell
+        """)
+    }
+
+    private func pasteWithSystemEventsKeyCode() -> Bool {
+        runAppleScript("""
+        tell application "System Events"
+            key code 9 using command down
         end tell
         """)
     }

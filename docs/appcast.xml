@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.20</title>
+            <pubDate>Sat, 23 May 2026 03:53:30 +0000</pubDate>
+            <sparkle:version>39</sparkle:version>
+            <sparkle:shortVersionString>0.7.20</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC no longer falls back to physical typing just because Screen Sharing's <code>Send Clipboard</code> or <code>Edit &gt; Paste</code> menu items are disabled.</li>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC now writes the exact processed transcript to the local clipboard, waits for shared clipboard sync, then sends remote <code>Cmd+V</code> before considering physical typing. This targets lost first-letter capitalization and <code>?</code> becoming unshifted punctuation.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.20/Vox.dmg"
+                sparkle:edSignature="qJxiz8q0MxMsOJcSTKPp5JU46Bn+N5jdFNqL0a/vqILRiUsNrphR+SFYkdh/UP8RCsayOw0DzD/8kqjLL1q0DQ=="
+                length="2600204"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.19</title>
             <pubDate>Sat, 23 May 2026 03:46:08 +0000</pubDate>
             <sparkle:version>38</sparkle:version>
