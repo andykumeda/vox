@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.13</title>
+            <pubDate>Sat, 23 May 2026 02:04:45 +0000</pubDate>
+            <sparkle:version>32</sparkle:version>
+            <sparkle:shortVersionString>0.7.13</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC now bypasses the shared clipboard and uses Caps Lock-aware physical typing, preventing remote clipboard lag from inserting the previous transcription.</li>
+                    <li><strong>Note:</strong> Remote physical typing prioritizes delivering the current text. Shifted punctuation such as question marks may be approximated in VNC/RustDesk sessions.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.13/Vox.dmg"
+                sparkle:edSignature="62gDMhvWEa5QKhVwE57gDeFCqBnc8amXvowRnU4wLMJi+CR+cEcbleGy4NsJLMnMK4AcO/oPXSWMO4PhrjmnCw=="
+                length="2592132"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.12</title>
             <pubDate>Sat, 23 May 2026 01:54:23 +0000</pubDate>
             <sparkle:version>31</sparkle:version>
