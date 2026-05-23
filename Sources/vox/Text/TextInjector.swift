@@ -163,9 +163,8 @@ public struct TextInjector {
         case .screenSharing:
             let delay = Self.prePasteDelay(for: target)
             dlog("paste remote fallback: VNC/Screen Sharing pushing clipboard")
-            guard pushScreenSharingClipboard() else {
-                dlog("VNC/Screen Sharing exact paste unavailable; shared clipboard control is disabled")
-                return
+            if !pushScreenSharingClipboard() {
+                dlog("VNC/Screen Sharing clipboard push failed; continuing with remote paste fallback")
             }
             // Re-publish after the shared-clipboard refresh in case Screen Sharing
             // pulled the remote side's older clipboard while toggling sync.
@@ -174,9 +173,12 @@ public struct TextInjector {
             expectedChangeCount = pb.changeCount
             dlog("paste remote fallback: VNC/Screen Sharing waiting \(delay)s for shared clipboard sync")
             Thread.sleep(forTimeInterval: delay)
-            dlog("paste remote fallback: VNC/Screen Sharing via remote Cmd+V")
-            if !pasteWithSystemEventsKeyCode() {
-                dlog("VNC/Screen Sharing exact paste failed")
+            dlog("paste remote fallback: VNC/Screen Sharing via Edit > Paste")
+            if !pasteWithScreenSharingMenu() {
+                dlog("VNC/Screen Sharing menu paste failed; trying remote Cmd+V")
+                if !pasteWithSystemEventsKeyCode() {
+                    dlog("VNC/Screen Sharing exact paste failed")
+                }
             }
         case .rustDesk:
             dlog("paste remote fallback: RustDesk unmodified physical typing \(text.count) chars")
@@ -269,6 +271,15 @@ public struct TextInjector {
         }
     }
 
+    static func continuesPasteWhenRemoteClipboardPushFails(for target: PasteTarget) -> Bool {
+        switch target {
+        case .screenSharing:
+            return true
+        case .standard, .rustDesk:
+            return false
+        }
+    }
+
     private func pushScreenSharingClipboard() -> Bool {
         runAppleScript("""
         tell application "Screen Sharing" to activate
@@ -294,6 +305,26 @@ public struct TextInjector {
                         set sendItem to menu item "Send Clipboard"
                         if enabled of sendItem is false then error "Edit > Send Clipboard is disabled"
                         click sendItem
+                    end if
+                end tell
+            end tell
+        end tell
+        """)
+    }
+
+    private func pasteWithScreenSharingMenu() -> Bool {
+        runAppleScript("""
+        tell application "Screen Sharing" to activate
+        delay 0.1
+        tell application "System Events"
+            tell process "Screen Sharing"
+                tell menu "Edit" of menu bar 1
+                    if exists menu item "Paste" then
+                        set pasteItem to menu item "Paste"
+                        if enabled of pasteItem is false then error "Edit > Paste is disabled"
+                        click pasteItem
+                    else
+                        error "Edit > Paste is unavailable"
                     end if
                 end tell
             end tell

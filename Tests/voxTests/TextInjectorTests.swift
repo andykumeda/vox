@@ -125,6 +125,12 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertFalse(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .standard))
     }
 
+    func testScreenSharingContinuesPasteWhenClipboardPushFails() {
+        XCTAssertTrue(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .screenSharing))
+        XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .rustDesk))
+        XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .standard))
+    }
+
     func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {
         let strokes = TextInjector.physicalKeystrokes(
             for: "AB c",

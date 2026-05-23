@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.11</title>
+            <pubDate>Sat, 23 May 2026 01:50:07 +0000</pubDate>
+            <sparkle:version>30</sparkle:version>
+            <sparkle:shortVersionString>0.7.11</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC no longer aborts paste when the explicit clipboard-push menu path is unavailable. Vox now treats that step as best-effort, then tries Screen Sharing's <code>Edit > Paste</code> and falls back to remote Cmd+V.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.11/Vox.dmg"
+                sparkle:edSignature="XqlCYF1hiTTCpW1t4FlTCrXq3b0CbUmK2qNjXro2NXcGfx3ZOJ4GrPyF7VlzETwy6xwSxtkWKnQEir3GPSC+CQ=="
+                length="2592986"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.10</title>
             <pubDate>Sat, 23 May 2026 01:46:11 +0000</pubDate>
             <sparkle:version>29</sparkle:version>
