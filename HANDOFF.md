@@ -1,3 +1,23 @@
+# Handoff — Vox state as of 2026-05-23 (Audio recorder stop deadlock fix)
+
+## Session 2026-05-23 — Fix frozen app on Fn release
+
+**Status:** Code fix on top of `8398141` / `main`. No version bump, no Sparkle release, no appcast edit. This fix is not in the currently frozen running app and is not on the remote Mac.
+
+**Cause found:** Running Vox PID `63812` (`dist/Vox.app`, version `0.7.21` build `40`, launched at 12:18 before the latest commit) froze after logging `Fn release` at 12:58:14 with no following `recording saved` line. A `sample` showed the main thread blocked in `AudioRecorder.stop()` at `engine.inputNode.removeTap(onBus: 0)`, while `RealtimeMessenger.mServiceQueue` was running the audio tap callback in `AudioRecorder.handle(buffer:)` and waiting for the same `AudioRecorder.lock`. `removeTap` waits for in-flight tap callbacks to drain, so holding the recorder lock while calling it deadlocked the main thread.
+
+**Code change:**
+- `Sources/vox/Audio/AudioRecorder.swift`: `stop()` now marks `isRecording = false`, releases `lock`, then removes the tap/stops the engine, and only reacquires `lock` to finalize the WAV header and clear recorder state. The converter is also cleared on successful stop.
+
+**Verification:**
+- `swift test` passed: 330 tests, 0 failures.
+
+**Remaining caveats / next steps:**
+- The frozen running app still needs to be terminated and relaunched from a rebuilt `dist/Vox.app`; source changes cannot unstick the already-deadlocked process.
+- These post-0.7.21 fixes, including the remote paste finalization and this audio stop fix, have not been pushed through Sparkle. The remote Mac will not have them until a new Sparkle release is cut and installed there.
+
+---
+
 # Handoff — Vox state as of 2026-05-23 (Post-0.7.21 remote paste finalization)
 
 ## Session 2026-05-23 — Remote paste async finalization + agent instructions

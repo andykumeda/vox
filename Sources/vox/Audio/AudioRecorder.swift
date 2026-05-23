@@ -144,17 +144,27 @@ public final class AudioRecorder {
     @discardableResult
     public func stop() -> URL? {
         lock.lock()
-        defer { lock.unlock() }
-        guard isRecording else { return nil }
+        guard isRecording else {
+            lock.unlock()
+            return nil
+        }
+        isRecording = false
+        lock.unlock()
+
+        // removeTap waits for any in-flight tap callback to finish. The tap
+        // callback also takes `lock`, so holding it here can deadlock the main
+        // thread while the audio callback waits for the same lock.
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        isRecording = false
 
+        lock.lock()
+        defer { lock.unlock() }
         guard let handle = self.fileHandle, let url = self.currentURL else { return nil }
         finaliseHeader(handle: handle, pcmByteCount: pcmBytesWritten)
         try? handle.close()
         self.fileHandle = nil
         self.currentURL = nil
+        self.converter = nil
         return url
     }
 
