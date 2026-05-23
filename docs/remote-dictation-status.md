@@ -1,11 +1,11 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-23 after user testing `v0.7.18`.
+Last updated: 2026-05-23 while preparing `v0.7.19`.
 
 ## Current Status
 
-Remote dictation is inserting the current recording again, but the inserted text
-is still not formatted correctly in the remote session.
+Remote dictation is inserting the current recording again, but `v0.7.18` does
+not format the inserted text correctly in the remote session.
 
 The active failures are:
 
@@ -32,6 +32,12 @@ useful.
   lower-case sentence starts and question-like sentences ending in `/`.
 - A Shift-based attempt turned `?` into `/`.
 - Remote Control Mode in `v0.7.18` did not improve the user-observed behavior.
+- On 2026-05-23, when the user was local on the Vox Mac and connected to a
+  remote Mac with VNC, logs showed `processed=Is this not gonna work?` and
+  `processed=Are you not going to capitalize the first letter?` before
+  insertion, while the remote output still lost capitalization/question marks.
+  This confirms the active failure is VNC insertion, not transcription or prose
+  post-processing.
 
 ## Release Timeline
 
@@ -148,12 +154,24 @@ seeing: first letters remain lowercase and `?` becomes `/`.
 
 The user reported that Remote Control Mode does not fix the remaining issue.
 
+### `v0.7.19`
+
+Changes Screen Sharing/VNC back to exact text insertion through Screen Sharing's
+shared clipboard/menu paste path, with physical typing only as a last fallback.
+This is based on logs proving the processed text is already correct before
+insertion, and on the observed fact that VNC key forwarding drops Shift/Caps
+state needed for uppercase letters and `?`.
+
+This release needs user validation.
+
 ## Current Code Paths
 
-As of `v0.7.18`:
+As of `v0.7.19`:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
-- `.screenSharing` uses Caps Lock-aware physical typing.
+- `.screenSharing` refreshes Screen Sharing's shared clipboard, waits for sync,
+  and invokes Screen Sharing's `Edit -> Paste` menu item. If that fails, it
+  falls back to Caps Lock-aware physical typing.
 - `.rustDesk` uses Caps Lock-aware physical typing.
 - `.remoteControl` uses Shift-modified physical typing for every frontmost app.
 
@@ -182,6 +200,8 @@ The implementation files are:
 - Question punctuation is not surviving remote insertion.
 - `?` can become `/` when the current path relies on synthetic Shift.
 - Remote Control Mode did not fix those formatting failures.
+- `v0.7.19` attempts to fix Screen Sharing/VNC specifically, but it has not yet
+  been validated by the user.
 
 ## What Is Not Currently Broken
 
@@ -196,12 +216,14 @@ cover prose first-letter capitalization and question-mark insertion.
 
 The failure is more likely in remote insertion:
 
-- Shift-modified physical key events are not reliable through the remote path.
+- Shift-modified physical key events are not reliable through Screen
+  Sharing/VNC.
 - Unicode-backed key events were also not reliable in prior VNC testing.
-- Caps Lock can help uppercase letters in some paths, but it cannot type `?`
-  without Shift.
-- Exact text insertion may require a pasteboard/menu/Accessibility path, but
-  earlier shared-clipboard approaches caused stale paste problems.
+- Caps Lock physical typing is not reliable enough for first-letter uppercase
+  and cannot type `?` without Shift.
+- Exact text insertion requires a pasteboard/menu/Accessibility path. Earlier
+  shared-clipboard approaches caused stale paste problems, so `v0.7.19` keeps
+  the transcript on the clipboard and adds a longer explicit sync window.
 
 ## Next Debugging Session
 

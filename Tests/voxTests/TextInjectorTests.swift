@@ -114,42 +114,42 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testRemoteTargetsUsePhysicalTypingFallback() {
-        XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
+        XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .screenSharing))
         XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .rustDesk))
         XCTAssertTrue(TextInjector.usesPhysicalTypingFallback(for: .remoteControl))
         XCTAssertFalse(TextInjector.usesPhysicalTypingFallback(for: .standard))
     }
 
-    func testRemoteTargetsDoNotRequireExactPaste() {
-        XCTAssertFalse(TextInjector.requiresExactPaste(for: .screenSharing))
+    func testScreenSharingRequiresExactPaste() {
+        XCTAssertTrue(TextInjector.requiresExactPaste(for: .screenSharing))
         XCTAssertFalse(TextInjector.requiresExactPaste(for: .rustDesk))
         XCTAssertFalse(TextInjector.requiresExactPaste(for: .remoteControl))
         XCTAssertFalse(TextInjector.requiresExactPaste(for: .standard))
     }
 
-    func testRemoteTargetsDoNotUseMenuPasteFallback() {
-        XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .screenSharing))
+    func testScreenSharingUsesMenuPasteFallback() {
+        XCTAssertTrue(TextInjector.usesMenuPasteFallback(for: .screenSharing))
         XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .rustDesk))
         XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .remoteControl))
         XCTAssertFalse(TextInjector.usesMenuPasteFallback(for: .standard))
     }
 
-    func testRemotePhysicalTypingDoesNotWaitForClipboardSync() {
-        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 0)
+    func testScreenSharingWaitsForClipboardSync() {
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.25)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 0)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .remoteControl), 0)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .standard), 0)
     }
 
-    func testScreenSharingDoesNotPushSharedClipboardAfterPasteboardWrite() {
-        XCTAssertFalse(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .screenSharing))
+    func testScreenSharingPushesSharedClipboardAfterPasteboardWrite() {
+        XCTAssertTrue(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .screenSharing))
         XCTAssertFalse(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .rustDesk))
         XCTAssertFalse(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .remoteControl))
         XCTAssertFalse(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .standard))
     }
 
-    func testScreenSharingDoesNotDependOnClipboardPush() {
-        XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .screenSharing))
+    func testScreenSharingContinuesWhenClipboardPushFails() {
+        XCTAssertTrue(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .screenSharing))
         XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .rustDesk))
         XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .remoteControl))
         XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .standard))

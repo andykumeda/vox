@@ -170,8 +170,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing physical typing \(textToInsert.count) chars")
-            typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+            dlog("paste remote fallback: VNC/Screen Sharing exact menu paste \(textToInsert.count) chars")
+            if !pasteWithScreenSharingSharedClipboard(textToInsert, pasteboard: pb) {
+                dlog("VNC/Screen Sharing exact menu paste failed; falling back to physical typing")
+                typePhysicalText(textToInsert, mode: .capsLockForUppercase)
+            }
         case .rustDesk:
             dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
             typePhysicalText(textToInsert, mode: .capsLockForUppercase)
@@ -246,40 +249,48 @@ public struct TextInjector {
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .remoteControl: true
-        case .standard: false
+        case .rustDesk, .remoteControl: true
+        case .screenSharing, .standard: false
         }
     }
 
     static func requiresExactPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .remoteControl, .standard: false
+        case .screenSharing: true
+        case .rustDesk, .remoteControl, .standard: false
         }
     }
 
     static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .remoteControl, .standard: false
+        case .screenSharing: true
+        case .rustDesk, .remoteControl, .standard: false
         }
     }
 
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
-        case .screenSharing, .standard, .rustDesk, .remoteControl:
+        case .standard, .rustDesk, .remoteControl:
             return 0
+        case .screenSharing:
+            return 1.25
         }
     }
 
     static func pushesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .standard, .rustDesk, .remoteControl:
+        case .screenSharing:
+            return true
+        case .standard, .rustDesk, .remoteControl:
             return false
         }
     }
 
     static func continuesPasteWhenRemoteClipboardPushFails(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .standard, .rustDesk, .remoteControl:
+        case .screenSharing:
+            return true
+        case .standard, .rustDesk, .remoteControl:
             return false
         }
     }
@@ -678,14 +689,14 @@ public struct TextInjector {
         pasteboard: NSPasteboard
     ) -> Bool {
         var pushed = false
-        for attempt in 1...2 {
+        for attempt in 1...3 {
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
             dlog("VNC/Screen Sharing clipboard refresh attempt \(attempt)")
             if pushFrontmostScreenSharingClipboard() {
                 pushed = true
             }
-            Thread.sleep(forTimeInterval: 0.35)
+            Thread.sleep(forTimeInterval: 0.45)
         }
 
         pasteboard.clearContents()

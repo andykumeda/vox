@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.19</title>
+            <pubDate>Sat, 23 May 2026 03:46:08 +0000</pubDate>
+            <sparkle:version>38</sparkle:version>
+            <sparkle:shortVersionString>0.7.19</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC now uses Screen Sharing's shared clipboard/menu paste path for exact text, because live logs showed Vox was producing the correct processed text but VNC physical key forwarding dropped Shift/Caps Lock needed for first-letter capitalization and question marks.</li>
+                    <li><strong>Fallback:</strong> If Screen Sharing's menu paste path is unavailable, Vox falls back to the prior physical typing path.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.19/Vox.dmg"
+                sparkle:edSignature="Ab4thpIGov3+X5tPFzrmgfldXzlxdIM4DIOq5bRxXPvbSY9FcZ1oThn3v6EOTEs/Ezjy3CSrqcUxvrS2Nky0BQ=="
+                length="2599738"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.18</title>
             <pubDate>Sat, 23 May 2026 03:04:16 +0000</pubDate>
             <sparkle:version>37</sparkle:version>
