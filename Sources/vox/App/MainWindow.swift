@@ -16,9 +16,9 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
     public func showWindow() {
         if window == nil { build() }
         guard let window else { return }
+        applyPresentation(for: selection.current)
         if !window.isVisible { window.center() }
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        bringToFront(window)
     }
 
     public func showHome()       { showWindow(section: .home) }
@@ -30,6 +30,7 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
     private func showWindow(section: SidebarItem) {
         selection.current = section
         showWindow()
+        handleSelectionChange(section)
     }
 
     private func build() {
@@ -48,11 +49,43 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         win.delegate = self
 
-        let host = NSHostingController(rootView: MainWindowRootView(selection: selection))
+        let host = NSHostingController(rootView: MainWindowRootView(
+            selection: selection,
+            onSelectionChange: { [weak self] item in
+                Task { @MainActor in
+                    self?.handleSelectionChange(item)
+                }
+            }
+        ))
         win.contentViewController = host
 
         win.center()
         self.window = win
+    }
+
+    private func handleSelectionChange(_ item: SidebarItem) {
+        applyPresentation(for: item)
+
+        if item == .meeting {
+            MeetingHUDPanel.shared.show()
+        }
+
+        if item == .settings, let window, window.isVisible {
+            bringToFront(window)
+        }
+    }
+
+    private func applyPresentation(for item: SidebarItem) {
+        guard let window else { return }
+        window.level = item == .settings ? .floating : .normal
+    }
+
+    private func bringToFront(_ window: NSWindow) {
+        NSApp.activate(ignoringOtherApps: true)
+        if selection.current == .settings {
+            window.orderFrontRegardless()
+        }
+        window.makeKeyAndOrderFront(nil)
     }
 
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -68,6 +101,7 @@ final class SidebarSelection: ObservableObject {
 
 private struct MainWindowRootView: View {
     @ObservedObject var selection: SidebarSelection
+    let onSelectionChange: (SidebarItem) -> Void
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
@@ -112,6 +146,9 @@ private struct MainWindowRootView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 520)
+        .onChange(of: selection.current) { newValue in
+            onSelectionChange(newValue)
+        }
     }
 }
 

@@ -1,3 +1,24 @@
+# Handoff — Vox state as of 2026-05-23 (Post-0.7.22 UI follow-ups)
+
+## Session 2026-05-23 — Meeting panel selection + Settings fronting
+
+**Status:** Local code/docs changes on top of `v0.7.22` / `main`. No version bump, no appcast edit, and no Sparkle release for these UI follow-ups yet. The remote Mac will not have this version until the next Sparkle release is cut and installed there.
+
+**Changes:**
+- `Sources/vox/App/MainWindow.swift`: selecting the **Meeting** section in the main Vox window now brings the floating Meeting HUD forward. Selecting **Settings** raises the Vox window to `.floating` level and orders it front regardless so it does not hide behind larger normal app windows; switching away from Settings resets the main window to normal level.
+- `Sources/vox/App/MenuBarController.swift`: the menu-bar **Meeting** item routes through `MainWindowController.showMeeting()`, so it opens the Meeting view and surfaces the floating HUD through the same path as the sidebar.
+- `Sources/vox/App/SettingsWindow.swift`: the legacy standalone settings controller also uses floating level plus `orderFrontRegardless()` when shown.
+- `README.md`, `Resources/help.md`: updated Meeting and Settings behavior.
+
+**Verification:**
+- `swift test` passed: 330 tests, 0 failures.
+
+**Remaining caveats / next steps:**
+- These UI follow-ups have not been pushed out through Sparkle, so the remote Mac does not have them yet.
+- Manual UI verification is still useful after the next local app rebuild/relaunch: select Meeting from the sidebar/menu and confirm the HUD comes forward; open Settings behind another large window and confirm Vox raises above it.
+
+---
+
 # Handoff — Vox state as of 2026-05-23 (Release 0.7.22)
 
 ## Session 2026-05-23 — Release 0.7.22: async remote paste + recorder stop deadlock fix

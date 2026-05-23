@@ -88,7 +88,7 @@ Two ways to bypass Smart Cleanup for a single dictation:
 
 ## Settings
 
-Click the menu-bar Vox icon → **Settings**:
+Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vox window raises above normal app windows so it does not get hidden behind a larger window:
 
 - **OpenAI API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `openai-api-key`). Click **Always Allow** on the keychain prompt the first time.
 - **Model** — `gpt-4o-mini-transcribe` (~$0.003/min, default), `gpt-4o-transcribe` (~$0.006/min, best quality), or `whisper-1` (~$0.006/min, no prompt-following).
@@ -123,7 +123,7 @@ A replacement that ends with one of these words fires that key after pasting:
 
 Vox transcribes meetings end-to-end by capturing **system audio** (Zoom/Meet/etc, via ScreenCaptureKit) and your **local mic** in parallel.
 
-- Press the meeting hotkey (default `⌃⌥⇧M`) or pick **Meeting** from the menu bar to open the floating panel.
+- Press the meeting hotkey (default `⌃⌥⇧M`) to toggle the floating panel. Pick **Meeting** from the menu bar or select the **Meeting** section in the Vox window to open the Meeting view and bring the floating panel forward.
 - Click the green **Record** disc to start. Click the red **Stop** square to end.
 - Closing the panel with `X` only hides the UI — recording continues. Re-open the panel via hotkey or menu to see the running timer or stop.
 - On Stop, Vox transcribes via the configured provider:

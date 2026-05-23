@@ -34,8 +34,10 @@ A replacement that ends with one of these words fires that key after pasting:
 Vox can transcribe meetings end-to-end by capturing system audio (the people on
 the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
 
-- Press the **Meeting hotkey** (default `⌃⌥⇧M`) or pick **Meeting** from the
-  menu-bar dropdown to open the floating Meeting panel.
+- Press the **Meeting hotkey** (default `⌃⌥⇧M`) to toggle the floating Meeting
+  panel. Pick **Meeting** from the menu-bar dropdown or select the **Meeting**
+  section in the Vox window to open the Meeting view and bring the panel
+  forward.
 - Click the **green Record disc** to start the session. Click the **red Stop
   square** to end it.
 - Closing the panel with the `X` only hides the UI — recording continues.

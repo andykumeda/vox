@@ -251,7 +251,7 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openMeetingPanel() {
-        Task { @MainActor in MeetingHUDPanel.shared.show() }
+        Task { @MainActor in MainWindowController.shared.showMeeting() }
     }
 
     @objc private func openDictionary() {

@@ -753,6 +753,7 @@ final class SettingsWindowController: NSWindowController {
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.level = .floating
         self.init(window: window)
     }
 
@@ -760,6 +761,7 @@ final class SettingsWindowController: NSWindowController {
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.center()
+        window?.orderFrontRegardless()
         window?.makeKeyAndOrderFront(nil)
     }
 }
