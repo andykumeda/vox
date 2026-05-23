@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.12</title>
+            <pubDate>Sat, 23 May 2026 01:54:23 +0000</pubDate>
+            <sparkle:version>31</sparkle:version>
+            <sparkle:shortVersionString>0.7.12</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Remote insertion now capitalizes the first alphabetic character for prose-looking Screen Sharing/VNC and RustDesk dictation while leaving local paste and command-like text unchanged.</li>
+                    <li><strong>Fix:</strong> RustDesk physical typing uses the Caps Lock path again so uppercase letters can survive remote forwarding.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.12/Vox.dmg"
+                sparkle:edSignature="q26kAGVAGWvvF4Ox9V2pQurr9r0JSkmxdxE52Vpzu3m6mB/8xbOek2djabeYGVMSYYnOi33ZmpcyBmXwoBZsBA=="
+                length="2596607"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.11</title>
             <pubDate>Sat, 23 May 2026 01:50:07 +0000</pubDate>
             <sparkle:version>30</sparkle:version>

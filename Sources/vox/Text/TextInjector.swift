@@ -148,13 +148,14 @@ public struct TextInjector {
         keepOnClipboard: Bool = false
     ) {
         let target = pasteTargetForFrontmostApp()
+        let textToInsert = Self.textForPaste(text, target: target)
         let pb = NSPasteboard.general
         let previous = Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target)
             ? pb.string(forType: .string)
             : nil
 
         pb.clearContents()
-        pb.setString(text, forType: .string)
+        pb.setString(textToInsert, forType: .string)
         var expectedChangeCount = pb.changeCount
 
         switch target {
@@ -169,7 +170,7 @@ public struct TextInjector {
             // Re-publish after the shared-clipboard refresh in case Screen Sharing
             // pulled the remote side's older clipboard while toggling sync.
             pb.clearContents()
-            pb.setString(text, forType: .string)
+            pb.setString(textToInsert, forType: .string)
             expectedChangeCount = pb.changeCount
             dlog("paste remote fallback: VNC/Screen Sharing waiting \(delay)s for shared clipboard sync")
             Thread.sleep(forTimeInterval: delay)
@@ -181,8 +182,8 @@ public struct TextInjector {
                 }
             }
         case .rustDesk:
-            dlog("paste remote fallback: RustDesk unmodified physical typing \(text.count) chars")
-            typePhysicalText(text, mode: .unmodifiedOnly)
+            dlog("paste remote fallback: RustDesk physical typing \(textToInsert.count) chars")
+            typePhysicalText(textToInsert, mode: .capsLockForUppercase)
         }
         if Self.shouldRestorePasteboard(keepOnClipboard: keepOnClipboard, target: target) {
             schedulePasteboardClear(previous: previous, expectedChangeCount: expectedChangeCount)
@@ -278,6 +279,39 @@ public struct TextInjector {
         case .standard, .rustDesk:
             return false
         }
+    }
+
+    static func textForPaste(_ text: String, target: PasteTarget) -> String {
+        guard target == .screenSharing || target == .rustDesk else { return text }
+        guard looksLikeProseForRemoteCapitalization(text) else { return text }
+        return capitalizeFirstAlphabeticCharacter(text)
+    }
+
+    private static func looksLikeProseForRemoteCapitalization(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if trimmed.contains("\n") { return false }
+        if trimmed.range(of: #"^(\./|\.\./|/|~)"#, options: .regularExpression) != nil {
+            return false
+        }
+        let firstToken = trimmed.split(whereSeparator: { $0.isWhitespace }).first.map(String.init) ?? ""
+        let commandTokens: Set<String> = [
+            "awk", "cat", "cd", "chmod", "chown", "cp", "curl", "docker",
+            "find", "gh", "git", "grep", "head", "kill", "kubectl", "less",
+            "ls", "mkdir", "mv", "npm", "python", "python3", "rm", "sed",
+            "ssh", "sudo", "tail", "touch", "vim", "wc", "xargs"
+        ]
+        if commandTokens.contains(firstToken) { return false }
+        return trimmed.last.map { ".?!".contains($0) } ?? false
+    }
+
+    private static func capitalizeFirstAlphabeticCharacter(_ text: String) -> String {
+        guard let range = text.range(of: #"[A-Za-z]"#, options: .regularExpression) else {
+            return text
+        }
+        var result = text
+        result.replaceSubrange(range, with: String(result[range]).uppercased())
+        return result
     }
 
     private func pushScreenSharingClipboard() -> Bool {

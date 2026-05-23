@@ -131,6 +131,35 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertFalse(TextInjector.continuesPasteWhenRemoteClipboardPushFails(for: .standard))
     }
 
+    func testRemotePasteCapitalizesProseFirstLetter() {
+        XCTAssertEqual(
+            TextInjector.textForPaste("hello there.", target: .screenSharing),
+            "Hello there."
+        )
+        XCTAssertEqual(
+            TextInjector.textForPaste("  hello there?", target: .rustDesk),
+            "  Hello there?"
+        )
+    }
+
+    func testRemotePasteDoesNotCapitalizeCommandLikeText() {
+        XCTAssertEqual(
+            TextInjector.textForPaste("git status", target: .screenSharing),
+            "git status"
+        )
+        XCTAssertEqual(
+            TextInjector.textForPaste("./scripts/make-dmg.sh", target: .screenSharing),
+            "./scripts/make-dmg.sh"
+        )
+    }
+
+    func testStandardPasteDoesNotRewriteText() {
+        XCTAssertEqual(
+            TextInjector.textForPaste("hello there.", target: .standard),
+            "hello there."
+        )
+    }
+
     func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {
         let strokes = TextInjector.physicalKeystrokes(
             for: "AB c",
