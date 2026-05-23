@@ -114,15 +114,15 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testScreenSharingPasteWaitsForClipboardSync() {
-        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.5)
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 3.0)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 0)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .standard), 0)
     }
 
-    func testScreenSharingRefreshesSharedClipboardAfterPasteboardWrite() {
-        XCTAssertTrue(TextInjector.refreshesRemoteClipboardAfterPasteboardWrite(for: .screenSharing))
-        XCTAssertFalse(TextInjector.refreshesRemoteClipboardAfterPasteboardWrite(for: .rustDesk))
-        XCTAssertFalse(TextInjector.refreshesRemoteClipboardAfterPasteboardWrite(for: .standard))
+    func testScreenSharingPushesSharedClipboardAfterPasteboardWrite() {
+        XCTAssertTrue(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .screenSharing))
+        XCTAssertFalse(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .rustDesk))
+        XCTAssertFalse(TextInjector.pushesRemoteClipboardAfterPasteboardWrite(for: .standard))
     }
 
     func testRemotePhysicalTypingUsesCapsLockForUppercaseRuns() {

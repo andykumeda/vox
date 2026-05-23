@@ -162,8 +162,8 @@ public struct TextInjector {
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
             let delay = Self.prePasteDelay(for: target)
-            dlog("paste remote fallback: VNC/Screen Sharing refreshing shared clipboard")
-            guard refreshScreenSharingSharedClipboard() else {
+            dlog("paste remote fallback: VNC/Screen Sharing pushing clipboard")
+            guard pushScreenSharingClipboard() else {
                 dlog("VNC/Screen Sharing exact paste unavailable; shared clipboard control is disabled")
                 return
             }
@@ -254,13 +254,13 @@ public struct TextInjector {
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
         case .screenSharing:
-            return 1.5
+            return 3.0
         case .standard, .rustDesk:
             return 0
         }
     }
 
-    static func refreshesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
+    static func pushesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
         switch target {
         case .screenSharing:
             return true
@@ -269,27 +269,33 @@ public struct TextInjector {
         }
     }
 
-    private func refreshScreenSharingSharedClipboard() -> Bool {
+    private func pushScreenSharingClipboard() -> Bool {
         runAppleScript("""
         tell application "Screen Sharing" to activate
         delay 0.1
         tell application "System Events"
             tell process "Screen Sharing"
-                set targetItem to menu item "Use Shared Clipboard" of menu "Edit" of menu bar 1
-                if enabled of targetItem is false then error "Edit > Use Shared Clipboard is disabled"
-                set isChecked to false
-                try
-                    set markChar to value of attribute "AXMenuItemMarkChar" of targetItem
-                    if markChar is not missing value and markChar is not "" then set isChecked to true
-                end try
-                try
-                    if selected of targetItem is true then set isChecked to true
-                end try
-                if isChecked is true then
-                    click targetItem
-                    delay 0.2
-                end if
-                click targetItem
+                tell menu "Edit" of menu bar 1
+                    set sharedItem to menu item "Use Shared Clipboard"
+                    if enabled of sharedItem is false then error "Edit > Use Shared Clipboard is disabled"
+                    set isChecked to false
+                    try
+                        set markChar to value of attribute "AXMenuItemMarkChar" of sharedItem
+                        if markChar is not missing value and markChar is not "" then set isChecked to true
+                    end try
+                    try
+                        if selected of sharedItem is true then set isChecked to true
+                    end try
+                    if isChecked is false then
+                        click sharedItem
+                        delay 0.2
+                    end if
+                    if exists menu item "Send Clipboard" then
+                        set sendItem to menu item "Send Clipboard"
+                        if enabled of sendItem is false then error "Edit > Send Clipboard is disabled"
+                        click sendItem
+                    end if
+                end tell
             end tell
         end tell
         """)
