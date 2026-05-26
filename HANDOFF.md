@@ -1,6 +1,6 @@
 # Handoff — Vox state as of 2026-05-26 (Release 0.7.24 dual Vox remote hotkey)
 
-**Status:** Release 0.7.24 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.24` / build `43`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `A1qsa0EtaO5bT/SVfSzBeefLxHnd+/ry8PG2pOBtHCMUcvEI6HHiGl8W1BBLtA7ogrBw+9E/7vjogwJoUK/VAQ==`; length `2620586`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.24/Vox.dmg`.
+**Status:** Release 0.7.24 is cut from `main`. Release commit `71d2826` is tagged `v0.7.24` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.24`. `Resources/Info.plist` bumped to `0.7.24` / build `43`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `A1qsa0EtaO5bT/SVfSzBeefLxHnd+/ry8PG2pOBtHCMUcvEI6HHiGl8W1BBLtA7ogrBw+9E/7vjogwJoUK/VAQ==`; length `2620586`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.24/Vox.dmg`.
 
 **User report:** After installing/releasing the auto-relaunch fix, user reported the issue is still not resolved and is now intermittent. They gave an example where the second sentence was corrupted, then noticed that recording from the viewer Mac also triggers the remote Vox instance running on the controlled Mac. That likely means two Vox instances can record/paste for one Fn press.
 
@@ -16,9 +16,10 @@
 - `swift test` passed: 334 tests, 0 failures.
 - `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
 - `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+- GitHub release asset `Vox.dmg` uploaded with size `2620586` and SHA-256 `c2c78cb3e7468c078833e49faf99eb0128d7fe2f7e4857253adc7f8b0ccd73c1`.
+- Public appcast at `https://andykumeda.github.io/vox/appcast.xml` advertises `Vox 0.7.24`, Sparkle version `43`, the matching EdDSA signature, and the GitHub DMG URL.
 
 **Remaining caveats / next steps:**
-- Complete release actions: commit, tag `v0.7.24`, create GitHub release with the exact signed `dist/Vox.dmg`, push `main`/tag, and verify public appcast once GitHub Pages updates.
 - After update on the controlled/remote Mac, enable **Ignore Record Hotkey on This Mac** there.
 
 ---
