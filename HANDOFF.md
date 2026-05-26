@@ -1,6 +1,6 @@
 # Handoff — Vox state as of 2026-05-26 (Release 0.7.27 Screen Sharing text-first)
 
-**Status:** Release 0.7.27 is prepared from `main` but not yet committed/tagged at the time this section was written. `Resources/Info.plist` is bumped to `0.7.27` / build `46`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `7lYZQH5ur6CuYYwTij1iSCbRGlF223HnUDUr92BD86rspxDhmYXjRIu+aTnjiwIa20HZ1JTSLTvCqwXNMxysDQ==`; length `2620736`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.27/Vox.dmg`.
+**Status:** Release 0.7.27 is cut from `main`. Release commit `08d7876` is tagged `v0.7.27` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.27`. `Resources/Info.plist` is bumped to `0.7.27` / build `46`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `7lYZQH5ur6CuYYwTij1iSCbRGlF223HnUDUr92BD86rspxDhmYXjRIu+aTnjiwIa20HZ1JTSLTvCqwXNMxysDQ==`; length `2620736`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.27/Vox.dmg`.
 
 **User report:** After updating to 0.7.26, the user again saw the previous recording pasted. They then clarified that Notepad also fails, so the issue is not Wave-specific. This points to Screen Sharing/VNC shared clipboard lag across remote apps.
 
@@ -16,10 +16,11 @@
 - `swift test` passed: 336 tests, 0 failures.
 - `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
 - `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced signature `7lYZQH5ur6CuYYwTij1iSCbRGlF223HnUDUr92BD86rspxDhmYXjRIu+aTnjiwIa20HZ1JTSLTvCqwXNMxysDQ==`, length `2620736`.
-- Local DMG SHA-256: `faa315795b5b57f85c20b3a98dd9ba4213302c683c36bd9db03e762836cf3651`.
+- GitHub release asset `Vox.dmg` uploaded with size `2620736` and SHA-256 `faa315795b5b57f85c20b3a98dd9ba4213302c683c36bd9db03e762836cf3651`.
+- Direct DMG URL returns HTTP 302 to the release asset.
+- Public appcast at `https://andykumeda.github.io/vox/appcast.xml` advertises `Vox 0.7.27`, Sparkle version `46`, the matching EdDSA signature, and the GitHub DMG URL.
 
 **Remaining caveats / next steps:**
-- Commit, tag `v0.7.27`, push, create the GitHub release, and verify the public appcast.
 - Have the remote Mac update to 0.7.27 through Sparkle and test Notepad and Wave. This release avoids the known stale shared-clipboard primary path, but live remote insertion still needs confirmation.
 
 ---
