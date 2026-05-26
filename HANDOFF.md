@@ -1,6 +1,6 @@
 # Handoff — Vox state as of 2026-05-26 (Release 0.7.26 Screen Sharing Send Clipboard push)
 
-**Status:** Release 0.7.26 is prepared from `main` but not yet committed/tagged at the time this section was written. `Resources/Info.plist` is bumped to `0.7.26` / build `45`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `4xiFLEGWrauYVgyg0v66sule2/Xfi4hhdq6c2ptWEbkiLatc9A6yp1qXyhVI+91qN8FAY4bQusbOEWVNRP6eCA==`; length `2621246`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.26/Vox.dmg`.
+**Status:** Release 0.7.26 is cut from `main`. Release commit `546ff56` is tagged `v0.7.26` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.26`. `Resources/Info.plist` is bumped to `0.7.26` / build `45`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `4xiFLEGWrauYVgyg0v66sule2/Xfi4hhdq6c2ptWEbkiLatc9A6yp1qXyhVI+91qN8FAY4bQusbOEWVNRP6eCA==`; length `2621246`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.26/Vox.dmg`.
 
 **User report:** After 0.7.25, repeated dictation into iMessage was clean, but testing Wave inserted the previous recording. That points back to stale Screen Sharing/VNC shared clipboard delivery in Wave, not transcription, prose cleanup, or a second remote Vox process.
 
@@ -16,10 +16,11 @@
 - `swift test` passed: 334 tests, 0 failures.
 - `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
 - `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced signature `4xiFLEGWrauYVgyg0v66sule2/Xfi4hhdq6c2ptWEbkiLatc9A6yp1qXyhVI+91qN8FAY4bQusbOEWVNRP6eCA==`, length `2621246`.
-- Local DMG SHA-256: `5918d09652e92940b22ec8a0806e96b27a159c579556568390ee1e7e77ef0669`.
+- GitHub release asset `Vox.dmg` uploaded with size `2621246` and SHA-256 `5918d09652e92940b22ec8a0806e96b27a159c579556568390ee1e7e77ef0669`.
+- Direct DMG URL returns HTTP 302 to the release asset.
+- Public appcast at `https://andykumeda.github.io/vox/appcast.xml` advertises `Vox 0.7.26`, Sparkle version `45`, the matching EdDSA signature, and the GitHub DMG URL.
 
 **Remaining caveats / next steps:**
-- Commit, tag `v0.7.26`, push, create the GitHub release, and verify the public appcast.
 - Have the remote Mac update to 0.7.26 through Sparkle and test Wave specifically. iMessage was already clean before this release.
 
 ---
