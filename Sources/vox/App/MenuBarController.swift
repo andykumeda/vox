@@ -214,6 +214,13 @@ final class MenuBarController: NSObject {
         )
         remoteControlItem.state = AppSettings.remoteControlModeEnabled ? .on : .off
         menu.addItem(remoteControlItem)
+        let ignoreRecordHotkeyItem = makeMenuItem(
+            title: "Ignore Record Hotkey on This Mac",
+            symbol: "keyboard",
+            action: #selector(toggleIgnoreRecordHotkey)
+        )
+        ignoreRecordHotkeyItem.state = AppSettings.ignoreRecordHotkey ? .on : .off
+        menu.addItem(ignoreRecordHotkeyItem)
         menu.addItem(.separator())
         menu.addItem(makeMenuItem(
             title: "Settings", symbol: "gearshape",
@@ -273,6 +280,12 @@ final class MenuBarController: NSObject {
     @objc private func toggleRemoteControlMode() {
         AppSettings.remoteControlModeEnabled.toggle()
         dlog("remote control mode -> \(AppSettings.remoteControlModeEnabled)")
+        configureMenu()
+    }
+
+    @objc private func toggleIgnoreRecordHotkey() {
+        AppSettings.ignoreRecordHotkey.toggle()
+        dlog("ignore record hotkey -> \(AppSettings.ignoreRecordHotkey)")
         configureMenu()
     }
 
@@ -552,6 +565,10 @@ final class MenuBarController: NSObject {
 
     private func beginRecording(verbatim: Bool = false) {
         guard state == .idle else { return }
+        if AppSettings.ignoreRecordHotkey {
+            dlog("dictation Fn ignored — record hotkey disabled on this Mac")
+            return
+        }
         if DictationMutex.isBlocked() {
             dlog("dictation Fn ignored — meeting recording active")
             // Audible cue so the user notices their dictation isn't going through.

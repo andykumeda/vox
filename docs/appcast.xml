@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.24</title>
+            <pubDate>Tue, 26 May 2026 17:28:43 +0000</pubDate>
+            <sparkle:version>43</sparkle:version>
+            <sparkle:shortVersionString>0.7.24</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Adds <strong>Ignore Record Hotkey on This Mac</strong> for remote-control setups where both Macs have Vox running and forwarded Fn presses can trigger both instances.</li>
+                    <li><strong>Behavior:</strong> Enable the toggle on the controlled/remote Mac so only the viewer-side Vox records and pastes.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.24/Vox.dmg"
+                sparkle:edSignature="A1qsa0EtaO5bT/SVfSzBeefLxHnd+/ry8PG2pOBtHCMUcvEI6HHiGl8W1BBLtA7ogrBw+9E/7vjogwJoUK/VAQ=="
+                length="2620586"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.23</title>
             <pubDate>Tue, 26 May 2026 17:20:28 +0000</pubDate>
             <sparkle:version>42</sparkle:version>

@@ -123,9 +123,12 @@ Settings → Hotkeys lets you rebind:
   VNC clients that drop Shift/Caps Lock key forwarding; shared-clipboard Cmd+V
   and physical typing remain fallbacks. RustDesk writes the exact processed
   transcript to the local clipboard, waits for remote clipboard sync, then sends
-  remote Cmd+V; Caps Lock-aware physical typing is the fallback. If you are
-  remote-controlling the Mac that runs Vox,
+  remote Cmd+V; Caps Lock-aware physical typing is the fallback. If you are remote-controlling the Mac that runs Vox,
   enable **Remote Control Mode** from the menu bar or Settings → Paste behavior.
+- **Both Macs record at once** — if the viewer Mac and controlled Mac both have
+  Vox running, forwarded Fn presses can trigger both instances. On the
+  controlled/remote Mac, open the Vox menu and enable **Ignore Record Hotkey on
+  This Mac** so only the viewer-side Vox records.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
   must be **Do Nothing**.
 - **Wrong transcription on short phrases** — add a Dictionary entry to fix

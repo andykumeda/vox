@@ -1,6 +1,6 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-23 after remote paste async finalization and testing.
+Last updated: 2026-05-26 after identifying dual-Vox remote hotkey conflict.
 
 ## Current Status
 
@@ -8,10 +8,6 @@ Remote dictation is inserting the current recording through formatting-preservin
 paths. The post-0.7.21 finalization keeps the selected exact insertion routes
 and makes paste operations asynchronous so remote clipboard synchronization
 waits do not block the main actor or menu flow.
-
-These post-0.7.21 fixes ship in `v0.7.22` / Sparkle build `41`. The remote Mac
-can install them with Vox -> Check for Updates once the GitHub release asset
-and GitHub Pages appcast are available.
 
 Current behavior:
 
@@ -22,6 +18,10 @@ Current behavior:
   typing remains the fallback.
 - Paste Last Transcription uses the same async target-specific path as fresh
   dictation.
+- If both the viewer Mac and controlled Mac have Vox running, turn on **Ignore
+  Record Hotkey on This Mac** on the controlled/remote Mac. Otherwise one Fn
+  press can start two Vox recordings and the remote instance can paste a second,
+  bad, or stale transcription.
 
 The historical failures addressed in this run were:
 
@@ -236,9 +236,20 @@ Sharing/VNC and RustDesk both have physical typing fallbacks, and Screen
 Sharing/VNC can use a remote Cmd+V fallback after the System Events text route.
 System Events text chunks now normalize `\r` and `\r\n` to newline key events.
 
+### Post-0.7.23 intermittent Screen Sharing regression
+
+After the 0.7.23 auto-relaunch release, the user reported that the remote
+insertion failure was still intermittent and could corrupt the second sentence
+of a dictation. The user then observed that recording on the viewer Mac also
+triggered the remote Vox instance running on the controlled Mac. That is a
+stronger fit for the symptom than paste-order alone: both instances can record
+from different audio contexts and both can paste. Vox now has a menu-bar
+toggle, **Ignore Record Hotkey on This Mac**, intended for the controlled/remote
+Mac so forwarded Fn presses do not trigger that remote instance.
+
 ## Current Code Paths
 
-As of current main after the post-0.7.21 finalization:
+As of current main after the post-0.7.23 dual-Vox remote hotkey follow-up:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
 - `.screenSharing` sends exact text through System Events `keystroke` into the
@@ -249,6 +260,8 @@ As of current main after the post-0.7.21 finalization:
   Events. It falls back to Caps Lock-aware physical typing if that keystroke
   fails.
 - `.remoteControl` uses Shift-modified physical typing for every frontmost app.
+- `ignoreRecordHotkey` disables only the record hotkey on that Mac, leaving
+  menu access, update checks, and Paste Last available.
 - Regular dictation and Paste Last Transcription use the async paste path so
   remote sync waits do not block the main actor.
 

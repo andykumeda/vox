@@ -1,3 +1,28 @@
+# Handoff — Vox state as of 2026-05-26 (Release 0.7.24 dual Vox remote hotkey)
+
+**Status:** Release 0.7.24 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.24` / build `43`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `A1qsa0EtaO5bT/SVfSzBeefLxHnd+/ry8PG2pOBtHCMUcvEI6HHiGl8W1BBLtA7ogrBw+9E/7vjogwJoUK/VAQ==`; length `2620586`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.24/Vox.dmg`.
+
+**User report:** After installing/releasing the auto-relaunch fix, user reported the issue is still not resolved and is now intermittent. They gave an example where the second sentence was corrupted, then noticed that recording from the viewer Mac also triggers the remote Vox instance running on the controlled Mac. That likely means two Vox instances can record/paste for one Fn press.
+
+**Change:**
+- `Sources/vox/Util/AppSettings.swift`: added persistent `ignoreRecordHotkey` setting.
+- `Sources/vox/App/MenuBarController.swift`: added menu-bar toggle **Ignore Record Hotkey on This Mac**. When enabled, record hotkey presses are logged and ignored on that Mac. This should be enabled on the controlled/remote Mac when the viewer Mac is the intended dictation source.
+- `Tests/voxTests/AppSettingsTests.swift`: covers the new setting default/persistence.
+- `README.md`, `Resources/help.md`, `docs/remote-dictation-status.md`: document the dual-Vox remote hotkey conflict and mitigation.
+- `Resources/Info.plist`, `docs/appcast.xml`: 0.7.24 Sparkle metadata.
+
+**Verification:**
+- Focused `swift test --filter 'AppSettingsTests|TextInjectorTests|HotkeyMonitorTests'` passed: 41 tests, 0 failures.
+- `swift test` passed: 334 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Remaining caveats / next steps:**
+- Complete release actions: commit, tag `v0.7.24`, create GitHub release with the exact signed `dist/Vox.dmg`, push `main`/tag, and verify public appcast once GitHub Pages updates.
+- After update on the controlled/remote Mac, enable **Ignore Record Hotkey on This Mac** there.
+
+---
+
 # Handoff — Vox state as of 2026-05-26 (Release 0.7.23 auto relaunch)
 
 **Status:** Release 0.7.23 is cut from `main`. Release commit `2819c76` is tagged `v0.7.23` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.23`. `Resources/Info.plist` bumped to `0.7.23` / build `42`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `T+p+WrzmPrwWRYEgL3nqvdHF3D9cHZSVqXDncStVwkEDuth+OfZPyNR7znn6lF3BVPIceaI3zKcZLvabcBwsAQ==`; length `2618015`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.23/Vox.dmg`. User reported repeated failures from the same remote Mac/server, so local `~/Library/Logs/vox.log` is not expected to contain the failure details.

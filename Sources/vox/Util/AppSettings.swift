@@ -130,6 +130,7 @@ public enum ModeOverride: String, CaseIterable, Sendable {
 enum AppSettings {
     private static let keepKey = "keepTranscriptionOnClipboard"
     private static let remoteControlModeKey = "remoteControlModeEnabled"
+    private static let ignoreRecordHotkeyKey = "ignoreRecordHotkey"
     private static let modelKey = "transcriptionModel"
     private static let forceProseKey = "forceProseMode"   // legacy — read for migration only
     private static let modeOverrideKey = "modeOverride"
@@ -161,6 +162,11 @@ enum AppSettings {
     static var remoteControlModeEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: remoteControlModeKey) }
         set { UserDefaults.standard.set(newValue, forKey: remoteControlModeKey) }
+    }
+
+    static var ignoreRecordHotkey: Bool {
+        get { UserDefaults.standard.bool(forKey: ignoreRecordHotkeyKey) }
+        set { UserDefaults.standard.set(newValue, forKey: ignoreRecordHotkeyKey) }
     }
 
     static var transcriptionModel: TranscriptionModel {
