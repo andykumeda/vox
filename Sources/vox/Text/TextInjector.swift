@@ -208,11 +208,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing System Events keystroke \(operation.textToInsert.count) chars")
-            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
-                dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
-                if !pasteWithScreenSharingSharedClipboard(operation.textToInsert) {
-                    dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
+            dlog("paste remote fallback: VNC/Screen Sharing exact clipboard Cmd+V \(operation.textToInsert.count) chars")
+            if !pasteWithScreenSharingSharedClipboard(operation.textToInsert) {
+                dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; trying System Events keystroke")
+                if !typeWithSystemEventsKeystroke(operation.textToInsert) {
+                    dlog("VNC/Screen Sharing System Events keystroke failed; falling back to physical typing")
                     typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
                 }
             }
@@ -233,11 +233,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing System Events keystroke \(operation.textToInsert.count) chars")
-            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
-                dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
-                if !(await pasteWithScreenSharingSharedClipboardAsync(operation.textToInsert)) {
-                    dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
+            dlog("paste remote fallback: VNC/Screen Sharing exact clipboard Cmd+V \(operation.textToInsert.count) chars")
+            if !(await pasteWithScreenSharingSharedClipboardAsync(operation.textToInsert)) {
+                dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; trying System Events keystroke")
+                if !typeWithSystemEventsKeystroke(operation.textToInsert) {
+                    dlog("VNC/Screen Sharing System Events keystroke failed; falling back to physical typing")
                     typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
                 }
             }
@@ -357,7 +357,7 @@ public struct TextInjector {
         case .rustDesk:
             return 1.25
         case .screenSharing:
-            return 1.25
+            return 1.75
         }
     }
 

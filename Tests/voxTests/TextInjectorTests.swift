@@ -142,7 +142,7 @@ final class TextInjectorTests: XCTestCase {
     }
 
     func testRemoteClipboardPasteWaitsForClipboardSync() {
-        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.25)
+        XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 1.75)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 1.25)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .remoteControl), 0)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .standard), 0)

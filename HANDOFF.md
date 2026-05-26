@@ -1,3 +1,27 @@
+# Handoff — Vox state as of 2026-05-26 (Screen Sharing clipboard-first follow-up)
+
+**Status:** Local code/docs changes on top of pushed `0.7.24` release. No version bump, no appcast edit, and no `0.7.25` release yet.
+
+**User report:** After `0.7.24`, user said the corruption still happened and clarified the remote Vox process had already been killed. Process check on this Mac also showed no running Vox process and no `com.andykumeda.vox` LaunchAgent service. User then noted the issue seems app-specific: iMessage transcriptions seem okay, while Wave is the failing app. The visible output is therefore more likely Screen Sharing/VNC text insertion corruption in a terminal-like receiver, not dual Vox instances.
+
+**Change:**
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC now tries exact shared-clipboard remote `Cmd+V` first, then falls back to System Events text `keystroke`, then physical typing. The previous order streamed text with System Events first, which appears to corrupt/drop/reorder characters during longer dictations in the user's remote session.
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC clipboard-sync wait increased from 1.25 s to 1.75 s.
+- `Tests/voxTests/TextInjectorTests.swift`: updated Screen Sharing sync wait expectation.
+- `README.md`, `Resources/help.md`, `docs/remote-dictation-status.md`: updated current remote insertion behavior.
+- `Resources/Info.plist`, `docs/appcast.xml`: 0.7.25 Sparkle metadata.
+
+**Verification:**
+- Focused `swift test --filter TextInjectorTests` passed: 33 tests, 0 failures.
+- `swift test` passed: 334 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced signature `zzujhv2PYa6t719dTeGPjRl309ivGviyMkpX2m0ta71UXfyrlQAJFgfJ7L6gTJWYqTt1JZrSuTUzRBKZm5f6AA==`, length `2620684`.
+
+**Remaining caveats / next steps:**
+- Complete release actions: commit, tag `v0.7.25`, create GitHub release with the exact signed `dist/Vox.dmg`, push `main`/tag, and verify public appcast once GitHub Pages updates.
+
+---
+
 # Handoff — Vox state as of 2026-05-26 (Release 0.7.24 dual Vox remote hotkey)
 
 **Status:** Release 0.7.24 is cut from `main`. Release commit `71d2826` is tagged `v0.7.24` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.24`. `Resources/Info.plist` bumped to `0.7.24` / build `43`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `A1qsa0EtaO5bT/SVfSzBeefLxHnd+/ry8PG2pOBtHCMUcvEI6HHiGl8W1BBLtA7ogrBw+9E/7vjogwJoUK/VAQ==`; length `2620586`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.24/Vox.dmg`.

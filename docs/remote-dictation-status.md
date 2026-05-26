@@ -1,6 +1,6 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-26 after identifying dual-Vox remote hotkey conflict.
+Last updated: 2026-05-26 after reverting Screen Sharing/VNC to clipboard-first insertion.
 
 ## Current Status
 
@@ -11,8 +11,9 @@ waits do not block the main actor or menu flow.
 
 Current behavior:
 
-- Screen Sharing/VNC uses System Events text keystrokes first. Shared-clipboard
-  Cmd+V and physical typing remain fallbacks.
+- Screen Sharing/VNC writes the exact processed transcript to the local
+  clipboard, waits for remote clipboard sync, then sends remote Cmd+V. System
+  Events text typing and physical typing remain fallbacks.
 - RustDesk writes the exact processed transcript to the local clipboard, waits
   for remote clipboard sync, then sends remote Cmd+V. Caps Lock-aware physical
   typing remains the fallback.
@@ -247,14 +248,23 @@ from different audio contexts and both can paste. Vox now has a menu-bar
 toggle, **Ignore Record Hotkey on This Mac**, intended for the controlled/remote
 Mac so forwarded Fn presses do not trigger that remote instance.
 
+The user then confirmed the remote Vox process had already been killed, so the
+dual-instance conflict was not the active cause for the visible garbled text.
+They also noted that iMessage seems okay while Wave is the failing app. That
+puts the failure back in the Screen Sharing/VNC insertion path, especially for
+terminal-like receivers. Vox now uses the shared-clipboard remote Cmd+V route
+first for Screen Sharing/VNC, with a longer 1.75 s clipboard-sync wait. System
+Events text typing remains only as fallback if clipboard paste is unavailable.
+
 ## Current Code Paths
 
-As of current main after the post-0.7.23 dual-Vox remote hotkey follow-up:
+As of current main after the post-0.7.24 Screen Sharing clipboard-first follow-up:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
-- `.screenSharing` sends exact text through System Events `keystroke` into the
-  Screen Sharing window. If that fails, it falls back to the shared-clipboard
-  `Cmd+V` path, then Caps Lock-aware physical typing.
+- `.screenSharing` writes the exact processed transcript to the local
+  pasteboard, waits 1.75 s for shared clipboard sync, sends remote `Cmd+V`
+  through System Events, then falls back to System Events text typing and
+  Caps Lock-aware physical typing.
 - `.rustDesk` writes the exact processed transcript to the local pasteboard,
   waits for shared clipboard sync, then sends remote `Cmd+V` through System
   Events. It falls back to Caps Lock-aware physical typing if that keystroke

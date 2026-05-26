@@ -118,12 +118,11 @@ Settings → Hotkeys lets you rebind:
 - **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`,
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
-- **Remote desktop paste fails** — Screen Sharing/VNC first sends exact text
-  through System Events keystrokes so capitalization and question marks survive
-  VNC clients that drop Shift/Caps Lock key forwarding; shared-clipboard Cmd+V
-  and physical typing remain fallbacks. RustDesk writes the exact processed
+- **Remote desktop paste fails** — Screen Sharing/VNC writes the exact processed
   transcript to the local clipboard, waits for remote clipboard sync, then sends
-  remote Cmd+V; Caps Lock-aware physical typing is the fallback. If you are remote-controlling the Mac that runs Vox,
+  remote Cmd+V. System Events text typing and physical typing remain fallbacks.
+  RustDesk uses the same delayed clipboard + remote Cmd+V strategy, with
+  Caps Lock-aware physical typing as fallback. If you are remote-controlling the Mac that runs Vox,
   enable **Remote Control Mode** from the menu bar or Settings → Paste behavior.
 - **Both Macs record at once** — if the viewer Mac and controlled Mac both have
   Vox running, forwarded Fn presses can trigger both instances. On the
