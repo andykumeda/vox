@@ -1,6 +1,6 @@
-# Handoff — Vox state as of 2026-05-26 (Screen Sharing clipboard-first follow-up)
+# Handoff — Vox state as of 2026-05-26 (Release 0.7.25 Screen Sharing clipboard-first)
 
-**Status:** Local code/docs changes on top of pushed `0.7.24` release. No version bump, no appcast edit, and no `0.7.25` release yet.
+**Status:** Release 0.7.25 is cut from `main`. Release commit `949e966` is tagged `v0.7.25` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.25`. `Resources/Info.plist` bumped to `0.7.25` / build `44`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `zzujhv2PYa6t719dTeGPjRl309ivGviyMkpX2m0ta71UXfyrlQAJFgfJ7L6gTJWYqTt1JZrSuTUzRBKZm5f6AA==`; length `2620684`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.25/Vox.dmg`.
 
 **User report:** After `0.7.24`, user said the corruption still happened and clarified the remote Vox process had already been killed. Process check on this Mac also showed no running Vox process and no `com.andykumeda.vox` LaunchAgent service. User then noted the issue seems app-specific: iMessage transcriptions seem okay, while Wave is the failing app. The visible output is therefore more likely Screen Sharing/VNC text insertion corruption in a terminal-like receiver, not dual Vox instances.
 
@@ -10,15 +10,18 @@
 - `Tests/voxTests/TextInjectorTests.swift`: updated Screen Sharing sync wait expectation.
 - `README.md`, `Resources/help.md`, `docs/remote-dictation-status.md`: updated current remote insertion behavior.
 - `Resources/Info.plist`, `docs/appcast.xml`: 0.7.25 Sparkle metadata.
+- `Resources/Info.plist`, `docs/appcast.xml`: 0.7.25 Sparkle metadata.
 
 **Verification:**
 - Focused `swift test --filter TextInjectorTests` passed: 33 tests, 0 failures.
 - `swift test` passed: 334 tests, 0 failures.
 - `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
 - `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced signature `zzujhv2PYa6t719dTeGPjRl309ivGviyMkpX2m0ta71UXfyrlQAJFgfJ7L6gTJWYqTt1JZrSuTUzRBKZm5f6AA==`, length `2620684`.
+- GitHub release asset `Vox.dmg` uploaded with size `2620684` and SHA-256 `9ba2d0d21d59d8d016a62b2c11d08ddc178bd63cfd14b29e892fa1cd1221fdda`.
+- Public appcast at `https://andykumeda.github.io/vox/appcast.xml` advertises `Vox 0.7.25`, Sparkle version `44`, the matching EdDSA signature, and the GitHub DMG URL.
 
 **Remaining caveats / next steps:**
-- Complete release actions: commit, tag `v0.7.25`, create GitHub release with the exact signed `dist/Vox.dmg`, push `main`/tag, and verify public appcast once GitHub Pages updates.
+- Have the remote Mac update to 0.7.25 through Sparkle and test Wave specifically. iMessage had appeared okay before this release; Wave was the failing app.
 
 ---
 
