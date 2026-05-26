@@ -1,3 +1,29 @@
+# Handoff — Vox state as of 2026-05-26 (Release 0.7.27 Screen Sharing text-first)
+
+**Status:** Release 0.7.27 is prepared from `main` but not yet committed/tagged at the time this section was written. `Resources/Info.plist` is bumped to `0.7.27` / build `46`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `7lYZQH5ur6CuYYwTij1iSCbRGlF223HnUDUr92BD86rspxDhmYXjRIu+aTnjiwIa20HZ1JTSLTvCqwXNMxysDQ==`; length `2620736`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.27/Vox.dmg`.
+
+**User report:** After updating to 0.7.26, the user again saw the previous recording pasted. They then clarified that Notepad also fails, so the issue is not Wave-specific. This points to Screen Sharing/VNC shared clipboard lag across remote apps.
+
+**Change:**
+- `Sources/vox/Text/TextInjector.swift`: Screen Sharing/VNC now tries System Events text insertion before any shared-clipboard paste. The shared-clipboard `Cmd+V` path remains only as fallback if System Events text insertion fails.
+- `Sources/vox/Text/TextInjector.swift`: System Events text insertion now uses smaller 24-character chunks with 0.04 s pauses to reduce remote keystroke corruption while avoiding stale clipboard paste.
+- `Tests/voxTests/TextInjectorTests.swift`: covers the Screen Sharing text-first policy and conservative chunking.
+- `docs/remote-dictation-status.md`: records that the stale previous-recording paste reproduced in Notepad as well as Wave.
+- `Resources/Info.plist`, `docs/appcast.xml`: 0.7.27 Sparkle metadata.
+
+**Verification:**
+- `swift test --filter TextInjectorTests` passed: 35 tests, 0 failures.
+- `swift test` passed: 336 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced signature `7lYZQH5ur6CuYYwTij1iSCbRGlF223HnUDUr92BD86rspxDhmYXjRIu+aTnjiwIa20HZ1JTSLTvCqwXNMxysDQ==`, length `2620736`.
+- Local DMG SHA-256: `faa315795b5b57f85c20b3a98dd9ba4213302c683c36bd9db03e762836cf3651`.
+
+**Remaining caveats / next steps:**
+- Commit, tag `v0.7.27`, push, create the GitHub release, and verify the public appcast.
+- Have the remote Mac update to 0.7.27 through Sparkle and test Notepad and Wave. This release avoids the known stale shared-clipboard primary path, but live remote insertion still needs confirmation.
+
+---
+
 # Handoff — Vox state as of 2026-05-26 (Release 0.7.26 Screen Sharing Send Clipboard push)
 
 **Status:** Release 0.7.26 is cut from `main`. Release commit `546ff56` is tagged `v0.7.26` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.26`. `Resources/Info.plist` is bumped to `0.7.26` / build `45`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `4xiFLEGWrauYVgyg0v66sule2/Xfi4hhdq6c2ptWEbkiLatc9A6yp1qXyhVI+91qN8FAY4bQusbOEWVNRP6eCA==`; length `2621246`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.26/Vox.dmg`.

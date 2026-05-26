@@ -141,6 +141,13 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertFalse(TextInjector.usesRemoteCommandVPaste(for: .standard))
     }
 
+    func testScreenSharingUsesSystemEventsTextBeforeSharedClipboard() {
+        XCTAssertTrue(TextInjector.usesSystemEventsTextFirst(for: .screenSharing))
+        XCTAssertFalse(TextInjector.usesSystemEventsTextFirst(for: .rustDesk))
+        XCTAssertFalse(TextInjector.usesSystemEventsTextFirst(for: .remoteControl))
+        XCTAssertFalse(TextInjector.usesSystemEventsTextFirst(for: .standard))
+    }
+
     func testRemoteClipboardPasteWaitsForClipboardSync() {
         XCTAssertEqual(TextInjector.prePasteDelay(for: .screenSharing), 2.5)
         XCTAssertEqual(TextInjector.prePasteDelay(for: .rustDesk), 1.25)
@@ -174,6 +181,19 @@ final class TextInjectorTests: XCTestCase {
             TextInjector.appleScriptKeystrokeChunks(for: "A\rB\r\nC"),
             ["A", "\n", "B", "\n", "C"]
         )
+    }
+
+    func testAppleScriptKeystrokeChunksUseConservativeRemoteChunkSize() {
+        let input = String(repeating: "a", count: TextInjector.systemEventsTextChunkLimit + 1)
+
+        XCTAssertEqual(
+            TextInjector.appleScriptKeystrokeChunks(for: input),
+            [
+                String(repeating: "a", count: TextInjector.systemEventsTextChunkLimit),
+                "a"
+            ]
+        )
+        XCTAssertGreaterThanOrEqual(TextInjector.systemEventsTextChunkDelay, 0.04)
     }
 
     func testAppleScriptStringLiteralEscapesQuotesAndBackslashes() {

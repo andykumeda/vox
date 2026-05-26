@@ -41,9 +41,9 @@ show that failing session.
 
 ## Known User Observations
 
-- Current issue: in Screen Sharing/VNC, iMessage insertion looks clean, but Wave
-  can receive the previous recording after Vox writes a newer transcript to the
-  local clipboard.
+- Current issue: in Screen Sharing/VNC, iMessage insertion can look clean, but
+  remote apps including Wave and Notepad can receive the previous recording
+  after Vox writes a newer transcript to the local clipboard.
 - Earlier issue: Vox inserted current text but lowercased the first letter and
   produced `/` instead of `?`.
 - The user demonstrated the previous shifted-punctuation failure with dictated
@@ -259,21 +259,27 @@ first for Screen Sharing/VNC, with a longer 1.75 s clipboard-sync wait. System
 Events text typing remains only as fallback if clipboard paste is unavailable.
 
 After the 0.7.25 clipboard-first build, iMessage insertion looked clean, but
-Wave still received the previous recording. Vox now explicitly invokes Screen
+Wave still received the previous recording. 0.7.26 explicitly invoked Screen
 Sharing's `Edit > Send Clipboard` after writing the new transcript to the local
-clipboard, then waits 2.5 seconds before remote `Cmd+V`. The clipboard push is
-best-effort: disabled or unavailable menu items are logged and Vox continues to
-the normal paste and fallback sequence.
+clipboard, then waited 2.5 seconds before remote `Cmd+V`.
+
+After the 0.7.26 Send Clipboard build, the stale previous-recording paste also
+reproduced in Notepad. That means the active failure is not Wave-specific; it is
+the shared clipboard route itself. 0.7.27 makes Screen Sharing/VNC try System
+Events text insertion first, with smaller 24-character chunks and 0.04 s pauses,
+so the primary path no longer depends on the remote shared clipboard. Shared
+clipboard paste remains only as fallback.
 
 ## Current Code Paths
 
-As of current main after the post-0.7.24 Screen Sharing clipboard-first follow-up:
+As of current main after the post-0.7.26 Screen Sharing stale-clipboard follow-up:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
-- `.screenSharing` writes the exact processed transcript to the local
-  pasteboard, waits 1.75 s for shared clipboard sync, sends remote `Cmd+V`
-  through System Events, then falls back to System Events text typing and
-  Caps Lock-aware physical typing.
+- `.screenSharing` sends the exact processed transcript through System Events
+  text insertion first, using conservative 24-character chunks with 0.04 s
+  pauses. Only if that fails does it write the transcript to the local
+  pasteboard, best-effort invoke `Send Clipboard`, wait for shared clipboard
+  sync, and send remote `Cmd+V`.
 - `.rustDesk` writes the exact processed transcript to the local pasteboard,
   waits for shared clipboard sync, then sends remote `Cmd+V` through System
   Events. It falls back to Caps Lock-aware physical typing if that keystroke
@@ -305,10 +311,10 @@ The implementation files are:
 
 ## What Is Still Broken
 
-Live validation is still needed against Wave in the user's remote Screen
-Sharing session. The active symptom before `v0.7.26` was stale remote clipboard
-delivery: Wave inserted the previous recording even though iMessage insertion
-looked clean.
+Live validation is still needed in the user's remote Screen Sharing session.
+The active symptom before `v0.7.27` was stale remote clipboard delivery: remote
+apps including Wave and Notepad inserted the previous recording even though
+iMessage insertion looked clean.
 
 ## What Is Not Currently Broken
 
@@ -331,9 +337,11 @@ The failure is more likely in remote insertion:
   and cannot type `?` without Shift.
 - Exact text insertion requires a pasteboard/Accessibility path. The observed
   `v0.7.19` failure was that disabled Screen Sharing menu items caused an
-  immediate fallback to physical typing. Current builds use shared clipboard
-  sync plus remote `Cmd+V` before any physical fallback, and `v0.7.26` adds an
-  explicit best-effort `Send Clipboard` push before pasting.
+  immediate fallback to physical typing. Later builds used shared clipboard
+  sync plus remote `Cmd+V` before any physical fallback. `v0.7.26` added an
+  explicit best-effort `Send Clipboard` push before pasting, but that still
+  lagged in Wave and Notepad. `v0.7.27` therefore avoids the shared clipboard as
+  the primary Screen Sharing/VNC path.
 
 ## If Remote Insertion Regresses
 

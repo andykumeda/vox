@@ -208,11 +208,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing exact clipboard Cmd+V \(operation.textToInsert.count) chars")
-            if !pasteWithScreenSharingSharedClipboard(operation.textToInsert) {
-                dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; trying System Events keystroke")
-                if !typeWithSystemEventsKeystroke(operation.textToInsert) {
-                    dlog("VNC/Screen Sharing System Events keystroke failed; falling back to physical typing")
+            dlog("paste remote fallback: VNC/Screen Sharing System Events text first \(operation.textToInsert.count) chars")
+            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
+                dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
+                if !pasteWithScreenSharingSharedClipboard(operation.textToInsert) {
+                    dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
                     typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
                 }
             }
@@ -233,11 +233,11 @@ public struct TextInjector {
         case .standard:
             sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
         case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing exact clipboard Cmd+V \(operation.textToInsert.count) chars")
-            if !(await pasteWithScreenSharingSharedClipboardAsync(operation.textToInsert)) {
-                dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; trying System Events keystroke")
-                if !typeWithSystemEventsKeystroke(operation.textToInsert) {
-                    dlog("VNC/Screen Sharing System Events keystroke failed; falling back to physical typing")
+            dlog("paste remote fallback: VNC/Screen Sharing System Events text first \(operation.textToInsert.count) chars")
+            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
+                dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
+                if !(await pasteWithScreenSharingSharedClipboardAsync(operation.textToInsert)) {
+                    dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
                     typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
                 }
             }
@@ -343,6 +343,13 @@ public struct TextInjector {
         }
     }
 
+    static func usesSystemEventsTextFirst(for target: PasteTarget) -> Bool {
+        switch target {
+        case .screenSharing: true
+        case .rustDesk, .remoteControl, .standard: false
+        }
+    }
+
     static func usesRemoteCommandVPaste(for target: PasteTarget) -> Bool {
         switch target {
         case .screenSharing, .rustDesk: true
@@ -360,6 +367,9 @@ public struct TextInjector {
             return 2.5
         }
     }
+
+    static let systemEventsTextChunkLimit = 24
+    static let systemEventsTextChunkDelay = 0.04
 
     static func pushesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
         switch target {
@@ -843,7 +853,7 @@ public struct TextInjector {
             default:
                 return "keystroke \(Self.appleScriptStringLiteral(chunk))"
             }
-        }.joined(separator: "\n            delay 0.01\n            ")
+        }.joined(separator: "\n            delay \(Self.systemEventsTextChunkDelay)\n            ")
         return runAppleScript("""
         tell application "System Events"
             \(commands)
@@ -867,7 +877,7 @@ public struct TextInjector {
                 continue
             }
             current.append(character)
-            if current.count >= 80 {
+            if current.count >= systemEventsTextChunkLimit {
                 chunks.append(current)
                 current = ""
             }
