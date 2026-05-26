@@ -357,7 +357,7 @@ public struct TextInjector {
         case .rustDesk:
             return 1.25
         case .screenSharing:
-            return 1.75
+            return 2.5
         }
     }
 
@@ -777,6 +777,7 @@ public struct TextInjector {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        pushFrontmostScreenSharingClipboard()
         dlog("VNC/Screen Sharing waiting \(Self.prePasteDelay(for: .screenSharing))s for shared clipboard sync")
         Thread.sleep(forTimeInterval: Self.prePasteDelay(for: .screenSharing))
 
@@ -799,6 +800,7 @@ public struct TextInjector {
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
         }
+        pushFrontmostScreenSharingClipboard()
         dlog("VNC/Screen Sharing waiting \(Self.prePasteDelay(for: .screenSharing))s for shared clipboard sync")
         await waitForRemoteClipboardSync(target: .screenSharing)
 
@@ -906,6 +908,28 @@ public struct TextInjector {
             end tell
         end tell
         """)
+    }
+
+    private func pushFrontmostScreenSharingClipboard() {
+        let pushed = runAppleScript("""
+        tell application "System Events"
+            tell first application process whose frontmost is true
+                tell menu "Edit" of menu bar 1
+                    if exists menu item "Send Clipboard" then
+                        set sendItem to menu item "Send Clipboard"
+                        if enabled of sendItem then
+                            click sendItem
+                        else
+                            error "Edit > Send Clipboard is disabled"
+                        end if
+                    else
+                        error "Edit > Send Clipboard is unavailable"
+                    end if
+                end tell
+            end tell
+        end tell
+        """)
+        dlog("VNC/Screen Sharing Send Clipboard push -> \(pushed)")
     }
 
     private func pasteWithSystemEventsKeyCode() -> Bool {

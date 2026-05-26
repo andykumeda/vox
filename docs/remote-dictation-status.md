@@ -41,12 +41,14 @@ show that failing session.
 
 ## Known User Observations
 
-- Earlier issue: Vox pasted the previous recording instead of the most recent
-  one.
-- Current issue: Vox inserts the current text, but it is lowercasing the first
-  letter and not producing question marks.
-- The user demonstrated the current failure with dictated text such as
-  lower-case sentence starts and question-like sentences ending in `/`.
+- Current issue: in Screen Sharing/VNC, iMessage insertion looks clean, but Wave
+  can receive the previous recording after Vox writes a newer transcript to the
+  local clipboard.
+- Earlier issue: Vox inserted current text but lowercased the first letter and
+  produced `/` instead of `?`.
+- The user demonstrated the previous shifted-punctuation failure with dictated
+  text such as lower-case sentence starts and question-like sentences ending in
+  `/`.
 - A Shift-based attempt turned `?` into `/`.
 - Remote Control Mode in `v0.7.18` did not improve the user-observed behavior.
 - On 2026-05-23, when the user was local on the Vox Mac and connected to a
@@ -256,6 +258,13 @@ terminal-like receivers. Vox now uses the shared-clipboard remote Cmd+V route
 first for Screen Sharing/VNC, with a longer 1.75 s clipboard-sync wait. System
 Events text typing remains only as fallback if clipboard paste is unavailable.
 
+After the 0.7.25 clipboard-first build, iMessage insertion looked clean, but
+Wave still received the previous recording. Vox now explicitly invokes Screen
+Sharing's `Edit > Send Clipboard` after writing the new transcript to the local
+clipboard, then waits 2.5 seconds before remote `Cmd+V`. The clipboard push is
+best-effort: disabled or unavailable menu items are logged and Vox continues to
+the normal paste and fallback sequence.
+
 ## Current Code Paths
 
 As of current main after the post-0.7.24 Screen Sharing clipboard-first follow-up:
@@ -296,15 +305,17 @@ The implementation files are:
 
 ## What Is Still Broken
 
-No active remote-dictation blocker is recorded for this checkout after the
-completed testing. Watch specifically for regressions in first-letter
-capitalization, `?` insertion, and previous-recording clipboard lag.
+Live validation is still needed against Wave in the user's remote Screen
+Sharing session. The active symptom before `v0.7.26` was stale remote clipboard
+delivery: Wave inserted the previous recording even though iMessage insertion
+looked clean.
 
 ## What Is Not Currently Broken
 
-- The current user report is not that Vox pastes the previous recording.
 - The current user report is not that prose post-processing produces lowercase
   or missing-question-mark text locally.
+- The current user report is not that both local and remote Vox instances are
+  recording; the remote Vox process had already been killed.
 
 ## Historical Failure Boundary
 
@@ -320,15 +331,14 @@ The failure is more likely in remote insertion:
   and cannot type `?` without Shift.
 - Exact text insertion requires a pasteboard/Accessibility path. The observed
   `v0.7.19` failure was that disabled Screen Sharing menu items caused an
-  immediate fallback to physical typing. `v0.7.20` bypasses those disabled menu
-  items by using shared clipboard sync plus remote `Cmd+V` before any physical
-  fallback.
+  immediate fallback to physical typing. Current builds use shared clipboard
+  sync plus remote `Cmd+V` before any physical fallback, and `v0.7.26` adds an
+  explicit best-effort `Send Clipboard` push before pasting.
 
 ## If Remote Insertion Regresses
 
-Do not spend the next session debugging "previous recording paste" unless the
-user reports that it has regressed. First identify whether the new failure is
-current-text delivery, capitalization, shifted punctuation, or a blocked
+First identify whether the failure is stale remote clipboard delivery,
+current-text corruption, capitalization, shifted punctuation, or a blocked
 Accessibility/AppleScript path.
 
 Recommended sequence:

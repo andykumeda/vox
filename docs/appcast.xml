@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.26</title>
+            <pubDate>Tue, 26 May 2026 17:45:36 +0000</pubDate>
+            <sparkle:version>45</sparkle:version>
+            <sparkle:shortVersionString>0.7.26</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Screen Sharing/VNC now explicitly pushes Screen Sharing's shared clipboard before remote paste, targeting Wave receiving the previous dictation.</li>
+                    <li><strong>Behavior:</strong> The clipboard push is best-effort; Vox still waits for sync and continues through the existing paste/fallback path if the menu item is unavailable.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.26/Vox.dmg"
+                sparkle:edSignature="4xiFLEGWrauYVgyg0v66sule2/Xfi4hhdq6c2ptWEbkiLatc9A6yp1qXyhVI+91qN8FAY4bQusbOEWVNRP6eCA=="
+                length="2621246"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.25</title>
             <pubDate>Tue, 26 May 2026 17:36:29 +0000</pubDate>
             <sparkle:version>44</sparkle:version>
