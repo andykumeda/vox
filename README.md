@@ -56,6 +56,11 @@ open dist/Vox.app
 
 `build-app.sh` probes for the `vox-dev` identity in two phases: (a) `find-identity -v -p codesigning` against the default search list, then (b) the login keychain alone (MDM-managed Macs where the cert can't reach System trust). Designated requirement is pinned to the cert SHA so Keychain ACLs don't re-prompt every rebuild.
 
+On first app launch, Vox installs a per-user LaunchAgent at
+`~/Library/LaunchAgents/com.andykumeda.vox.plist` and hands off to that
+supervised process. If Vox crashes or exits abnormally later, launchd restarts
+it automatically. Choosing **Quit Vox** exits normally and does not relaunch.
+
 Always launch via `open`, not by running the binary directly:
 
 ```sh

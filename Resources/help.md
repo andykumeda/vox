@@ -109,8 +109,12 @@ Settings → Hotkeys lets you rebind:
 - Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
 - Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`
 - Logs: `~/Library/Logs/vox.log`
+- Auto-relaunch agent: `~/Library/LaunchAgents/com.andykumeda.vox.plist`
 
 ## Troubleshooting
+- **Vox disappears after a crash** — launch it once from the app bundle. Vox
+  installs a per-user LaunchAgent that restarts abnormal exits automatically.
+  Choosing **Quit Vox** still exits normally and stays quit.
 - **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`,
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.

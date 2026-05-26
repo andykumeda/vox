@@ -1,3 +1,25 @@
+# Handoff — Vox state as of 2026-05-26 (Release 0.7.23 auto relaunch)
+
+**Status:** Release 0.7.23 is being cut from `main`. `Resources/Info.plist` bumped to `0.7.23` / build `42`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `T+p+WrzmPrwWRYEgL3nqvdHF3D9cHZSVqXDncStVwkEDuth+OfZPyNR7znn6lF3BVPIceaI3zKcZLvabcBwsAQ==`; length `2618015`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.23/Vox.dmg`. User reported repeated failures from the same remote Mac/server, so local `~/Library/Logs/vox.log` is not expected to contain the failure details.
+
+**Change:**
+- `Sources/vox/App/AutoRelaunch.swift`: Vox now installs `~/Library/LaunchAgents/com.andykumeda.vox.plist` on normal app launch, then hands off to a launchd-managed instance using `--vox-launch-agent`. The LaunchAgent uses `KeepAlive` with `Crashed=true` and `SuccessfulExit=false`, so crashes / abnormal exits are restarted automatically while the normal **Quit Vox** path exits cleanly and stays quit.
+- `Sources/vox/App/AppDelegate.swift`: startup calls the auto-relaunch installer after the relocation check and before initializing app services.
+- `Tests/voxTests/AutoRelaunchTests.swift`: covers the generated LaunchAgent label, arguments, KeepAlive policy, session type, throttling, and launchd log paths.
+- `README.md`, `Resources/help.md`: document the auto-relaunch agent and where it lives.
+- `Resources/Info.plist`, `docs/appcast.xml`: 0.7.23 Sparkle metadata.
+
+**Verification:**
+- `swift test` passed: 333 tests, 0 failures.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced the signature and length above.
+
+**Remaining caveats / next steps:**
+- This has not been live-smoked on the remote Mac yet. After updating there through Sparkle, launch Vox once so the LaunchAgent is installed there. Then verify `~/Library/LaunchAgents/com.andykumeda.vox.plist` exists and that an abnormal termination relaunches Vox. Normal menu quit should not relaunch.
+- Complete release actions: commit, tag `v0.7.23`, create GitHub release with the exact signed `dist/Vox.dmg`, push `main`/tag, and verify the public appcast once GitHub Pages updates.
+
+---
+
 # Handoff — Vox state as of 2026-05-23 (Post-0.7.22 UI follow-ups)
 
 ## Session 2026-05-23 — Meeting panel selection + Settings fronting
