@@ -115,7 +115,7 @@ Settings → Hotkeys lets you rebind:
 - **Vox disappears after a crash** — launch it once from the app bundle. Vox
   installs a per-user LaunchAgent that restarts abnormal exits automatically.
   Choosing **Quit Vox** still exits normally and stays quit.
-- **Paste fails silently** — make sure Vox launched via `open dist/Vox.app`,
+- **Paste fails silently** — make sure Vox launched via `open /Applications/Vox.app`,
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
 - **Remote desktop paste fails** — Screen Sharing/VNC writes the exact processed

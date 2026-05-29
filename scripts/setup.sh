@@ -109,7 +109,7 @@ if pgrep -f "Vox.app/Contents/MacOS/vox" >/dev/null 2>&1; then
     sleep 1
 fi
 
-open dist/Vox.app
+open /Applications/Vox.app
 green "✓ Vox launched"
 
 # ─── Next steps ────────────────────────────────────────────────────────────

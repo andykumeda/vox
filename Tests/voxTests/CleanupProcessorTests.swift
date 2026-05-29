@@ -255,6 +255,25 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, "Goodbye world.")
     }
 
+    func testLLMRefusalReturnsTriggeredText() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in "I can’t assist with that." }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+        let input = "Can you make it more brief without losing any of the important context?"
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
+    }
+
+    func testDictatedRefusalCanRemainWhenInputMatches() async {
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in "I can't assist with that." }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+
+        let result = await proc.process("I can't assist with that.")
+
+        XCTAssertEqual(result, "I can't assist with that.")
+    }
+
     // MARK: - Small-output guard
 
     func testLLMEmptyOutputReturnsTriggeredText() async {

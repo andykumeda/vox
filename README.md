@@ -49,12 +49,12 @@ Vox ships in-app updates via **Sparkle**. Click the menu-bar icon → **Check fo
 ```sh
 ./scripts/create-dev-cert.sh   # ONE TIME — persistent self-signed identity
 ./scripts/build-app.sh
-open dist/Vox.app
+open /Applications/Vox.app
 ```
 
 `create-dev-cert.sh` creates a self-signed `vox-dev` identity in the login keychain. Signing every build with the same identity keeps macOS **TCC permissions sticky across rebuilds**. Skip it and the build falls back to ad-hoc signing — every rebuild revokes Accessibility / Input Monitoring / Microphone, forcing re-permit.
 
-`build-app.sh` probes for the `vox-dev` identity in two phases: (a) `find-identity -v -p codesigning` against the default search list, then (b) the login keychain alone (MDM-managed Macs where the cert can't reach System trust). Designated requirement is pinned to the cert SHA so Keychain ACLs don't re-prompt every rebuild.
+`build-app.sh` probes for the `vox-dev` identity in two phases: (a) `find-identity -v -p codesigning` against the default search list, then (b) the login keychain alone (MDM-managed Macs where the cert can't reach System trust). Designated requirement is pinned to the cert SHA so Keychain ACLs don't re-prompt every rebuild. By default it also installs the signed build to `/Applications/Vox.app`; set `INSTALL_TO_APPLICATIONS=0` to only write `dist/Vox.app`.
 
 On first app launch, Vox installs a per-user LaunchAgent at
 `~/Library/LaunchAgents/com.andykumeda.vox.plist` and hands off to that
@@ -64,7 +64,7 @@ it automatically. Choosing **Quit Vox** exits normally and does not relaunch.
 Always launch via `open`, not by running the binary directly:
 
 ```sh
-open dist/Vox.app
+open /Applications/Vox.app
 ```
 
 Running `./dist/Vox.app/Contents/MacOS/vox` from a shell makes the process a child of the terminal, and TCC attributes Accessibility grants to the terminal instead of Vox — paste silently fails.

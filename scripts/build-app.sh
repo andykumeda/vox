@@ -9,6 +9,8 @@ BINARY_NAME="vox"
 APP_NAME="Vox"
 BUILD_DIR=".build/arm64-apple-macosx/$CONFIG"
 APP_PATH="dist/${APP_NAME}.app"
+INSTALL_TO_APPLICATIONS="${INSTALL_TO_APPLICATIONS:-1}"
+INSTALL_PATH="${INSTALL_PATH:-/Applications/${APP_NAME}.app}"
 ICON_SRC="Resources/AppIcon.icns"
 
 echo "→ swift build -c $CONFIG"
@@ -116,7 +118,21 @@ codesign --force --sign "$SIGN_IDENTITY" \
     --timestamp=none \
     "$APP_PATH" >/dev/null
 
+if [ "$INSTALL_TO_APPLICATIONS" != "0" ]; then
+    echo "→ installing $INSTALL_PATH"
+    rm -rf "$INSTALL_PATH"
+    ditto "$APP_PATH" "$INSTALL_PATH"
+    codesign --verify --deep --strict "$INSTALL_PATH" >/dev/null
+fi
+
 echo "✓ built $APP_PATH"
+if [ "$INSTALL_TO_APPLICATIONS" != "0" ]; then
+    echo "✓ installed $INSTALL_PATH"
+fi
 echo
-echo "Launch: open $APP_PATH"
+if [ "$INSTALL_TO_APPLICATIONS" != "0" ]; then
+    echo "Launch: open $INSTALL_PATH"
+else
+    echo "Launch: open $APP_PATH"
+fi
 echo "Logs:   tail -f ~/Library/Logs/vox.log"

@@ -72,6 +72,11 @@ public struct CleanupProcessor {
                 FileHandle.standardError.write(Data("Cleanup malformed response (length \(trimmedCleaned.count) < 3 for input length \(triggered.count))\n".utf8))
                 return triggered
             }
+            if looksLikeAssistantMetaResponse(trimmedCleaned),
+               !looksLikeAssistantMetaResponse(triggered) {
+                FileHandle.standardError.write(Data("Cleanup assistant response discarded: \(trimmedCleaned)\n".utf8))
+                return triggered
+            }
             let restored = trimmedCleaned
                 .replacingOccurrences(of: paraToken, with: "\n\n")
                 .replacingOccurrences(of: lineToken, with: "\n")
@@ -221,5 +226,28 @@ public struct CleanupProcessor {
     private func isNewLineTrigger(_ trimmed: String) -> Bool {
         let pattern = "^(?i)new line[.,!?]?$"
         return trimmed.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private func looksLikeAssistantMetaResponse(_ text: String) -> Bool {
+        let normalized = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\u{2019}", with: "'")
+            .replacingOccurrences(of: "\u{2018}", with: "'")
+            .replacingOccurrences(of: "\u{201C}", with: "\"")
+            .replacingOccurrences(of: "\u{201D}", with: "\"")
+
+        guard !normalized.isEmpty else { return false }
+
+        let patterns = [
+            #"^i\s+(can't|cannot|can not|am unable to|won't|will not)\s+(assist|help|comply|provide|fulfill)\b"#,
+            #"^(i'm sorry|sorry)[,!]?\s+(but\s+)?i\s+(can't|cannot|can not|am unable to|won't|will not)\b"#,
+            #"^as an ai\b"#,
+            #"^(sure[,.]?\s+)?please provide (the )?(text|content|snippet)\b"#,
+        ]
+
+        return patterns.contains { pattern in
+            normalized.range(of: pattern, options: .regularExpression) != nil
+        }
     }
 }

@@ -1,3 +1,27 @@
+# Handoff — Vox state as of 2026-05-29 (Smart Cleanup refusal fail-open)
+
+**Status:** Local code/test changes on top of `main`; no version bump, no appcast edit, no Sparkle release. User reported dictating “can you make it more brief without losing any of the important context” pasted `I can’t assist with that.` The likely cause is the Smart Cleanup chat completion treating the dictated request as a request directed at itself despite the cleanup prompt.
+
+**Change:**
+- `Sources/vox/Text/CleanupProcessor.swift`: Smart Cleanup now detects generic assistant/meta responses such as refusal/help-request completions and fails open to the post-trigger dictated text instead of pasting the model response.
+- `Tests/voxTests/CleanupProcessorTests.swift`: added regression coverage for the exact refusal response and for leaving a dictated refusal alone when that is actually the input.
+- `scripts/build-app.sh`: local builds now install the signed bundle to `/Applications/Vox.app` by default after assembling `dist/Vox.app`; set `INSTALL_TO_APPLICATIONS=0` to skip install.
+- `scripts/setup.sh`, `README.md`, `Resources/help.md`: local launch instructions now use `/Applications/Vox.app`.
+
+**Verification:**
+- `swift build` passed.
+- `./scripts/build-app.sh` passed and rebuilt/signed `dist/Vox.app` with the persistent `vox-dev` identity.
+- `/Applications/Vox.app` is installed from the rebuilt bundle and verifies with `codesign --verify --deep --strict`; Info.plist reports version `0.7.27` / build `46`.
+- `git diff --check` passed.
+- Manual Swift harness against `CleanupProcessor` returned the original dictated sentence when the cleaner returned `I can’t assist with that.`
+- Developer-tool state is repaired: `xcode-select -p` points at `/Applications/Xcode.app/Contents/Developer`, `xcodebuild -sdk macosx -find swift` resolves Xcode's Swift toolchain, and `swift test --filter CleanupProcessorTests` passed: 44 tests, 0 failures.
+- `swift test` passed: 338 tests, 0 failures.
+
+**Remaining caveats / next steps:**
+- Launch `/Applications/Vox.app`, then manually smoke dictating the reported sentence with Smart Cleanup enabled before cutting any release.
+
+---
+
 # Handoff — Vox state as of 2026-05-26 (Release 0.7.27 Screen Sharing text-first)
 
 **Status:** Release 0.7.27 is cut from `main`. Release commit `08d7876` is tagged `v0.7.27` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.27`. `Resources/Info.plist` is bumped to `0.7.27` / build `46`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `7lYZQH5ur6CuYYwTij1iSCbRGlF223HnUDUr92BD86rspxDhmYXjRIu+aTnjiwIa20HZ1JTSLTvCqwXNMxysDQ==`; length `2620736`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.27/Vox.dmg`.
