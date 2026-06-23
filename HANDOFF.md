@@ -1,3 +1,68 @@
+# Handoff — Vox state as of 2026-06-23 (Release 0.7.28 Parsec remote paste)
+
+**Status:** Release 0.7.28 is cut from `main`. Release commit `105f3a2` is tagged `v0.7.28` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.28`. `Resources/Info.plist` is bumped to `0.7.28` / build `47`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `0EwtxTPXhBoYC7ofcT6/HL2fTw1F9LZOUaC98eFpuZvTwHwW1miMZ4KgMDaCOwJjPDPjMIjpM3wCCgalCBxeBw==`; length `2483448`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.28/Vox.dmg`.
+
+**Cause found:**
+- Local `/Applications/Parsec.app` reports bundle identifier `tv.parsec.www`.
+- `TextInjector.pasteTarget(bundleIdentifier: "tv.parsec.www", localizedName: "Parsec")` previously returned `.standard`, so Vox used immediate local `Cmd+V` plus normal clipboard-restore behavior instead of a remote-client insertion path.
+- A regression test first failed with `XCTAssertNotEqual failed: ("standard") is equal to ("standard")`, confirming the target-selection bug.
+
+**Change:**
+- `Sources/vox/Text/TextInjector.swift`: added a `.parsec` paste target selected by Parsec bundle/name. Parsec now tries System Events text insertion first, then delayed remote `Cmd+V` after a 1.25 s clipboard-sync wait, then Caps Lock-aware physical typing. Parsec also skips restoring the previous clipboard.
+- `Tests/voxTests/TextInjectorTests.swift`: covers Parsec target detection, no clipboard restore, text-first policy, remote `Cmd+V` fallback, fallback typing, delay, and remote prose capitalization.
+- `README.md`, `Resources/help.md`, `docs/remote-dictation-status.md`: document Parsec-specific remote paste behavior and the need for live validation.
+- Includes the previously local Paste Last menu timing fix: **Paste Last Transcription** waits `0.20s` before paste so menu focus/modifiers settle.
+- Includes the earlier Smart Cleanup refusal fail-open fix from `main`.
+- `Resources/Info.plist`, `docs/appcast.xml`: 0.7.28 Sparkle metadata.
+
+**Verification:**
+- Red check before fix: `swift test --filter TextInjectorTests` failed only on the new Parsec target test.
+- `swift test --filter TextInjectorTests` passed: 38 tests, 0 failures.
+- `swift test` passed: 342 tests, 0 failures.
+- `git diff --check` passed.
+- `xmllint --noout docs/appcast.xml` passed.
+- `./scripts/make-dmg.sh` succeeded and produced `dist/Vox.dmg`.
+- `codesign --verify --deep --strict dist/Vox.app` and `/Applications/Vox.app` passed; `/Applications/Vox.app` reports `0.7.28` / build `47`.
+- `.build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg` produced signature `0EwtxTPXhBoYC7ofcT6/HL2fTw1F9LZOUaC98eFpuZvTwHwW1miMZ4KgMDaCOwJjPDPjMIjpM3wCCgalCBxeBw==`, length `2483448`.
+- `dist/Vox.dmg` SHA-256: `bb9573db3f99fe46f5d2eaf784ccea6cc7097fa3a4f35ce5b957e9473527e0b8`.
+- GitHub release asset `Vox.dmg` uploaded with size `2483448`.
+- Direct DMG URL returns HTTP 302 to the release asset.
+- Public appcast at `https://andykumeda.github.io/vox/appcast.xml` advertises `Vox 0.7.28`, Sparkle version `47`, the matching EdDSA signature, and the GitHub DMG URL.
+- GitHub Actions **Dictation Regression** and **Release Gate** passed on the release commit.
+
+**Remaining caveats / next steps:**
+- Have the remote Mac update to 0.7.28 through Sparkle and test dictation with Parsec frontmost on the viewer Mac.
+- If Vox is running on the controlled Mac rather than the viewer Mac with Parsec frontmost, this `.parsec` target will not be selected; test with **Remote Control Mode** enabled on that Mac.
+- Live Parsec validation is still required. Unit tests cover route selection and helper policy, but cannot prove whether Parsec forwards AppleScript text events, clipboard sync, remote `Cmd+V`, or modifier keys in the user's session.
+
+---
+
+# Handoff — Vox state as of 2026-06-09 (Paste Last menu timing fix)
+
+**Status:** Local code/test changes on top of `main`; no version bump, no appcast edit, no Sparkle release. `/Applications/Vox.app` has been rebuilt/reinstalled locally from these changes and relaunched for smoke testing.
+
+**Cause found:**
+- The user's failed Paste Last attempt did reach the paste path: `~/Library/Logs/vox.log` showed `paste target: standard ... bundle=com.openai.codex name=Codex` at `2026-06-09T15:22:27Z`.
+- The stored paste-last global hotkey is disabled, so the observed attempt was from the status menu.
+- Paste Last had been changed to fire through an async `Task` immediately from the menu action. That can post the synthetic `Cmd+V` while the status menu is still unwinding, so the target app may not receive the paste even though Vox logs a paste target.
+
+**Change:**
+- `Sources/vox/App/MenuBarController.swift`: Paste Last now waits `0.20s` before calling `TextInjector.pasteAsync`, giving the status menu/focus and any hotkey modifiers time to settle. It also logs `paste last scheduled ...` and logs when no history is available.
+- `Tests/voxTests/MenuBarControllerTests.swift`: locks in the focus-settling delay.
+
+**Verification:**
+- `swift test --filter 'MenuBarControllerTests|TextInjectorTests|HotkeyMonitorTests|HotkeyTests'` passed: 55 tests, 0 failures.
+- `swift test` passed: 339 tests, 0 failures.
+- `./scripts/build-app.sh` passed and installed `/Applications/Vox.app`.
+- Relaunched `/Applications/Vox.app`.
+- Manual smoke through the real Vox status menu into a blank TextEdit document passed: **Paste Last Transcription** inserted the last stored dictation, `Determine why.`
+
+**Remaining caveats / next steps:**
+- Not committed. Do not commit until any desired additional paste smoke is complete.
+- No release artifacts were cut; remote Macs will not receive this until a future Sparkle release.
+
+---
+
 # Handoff — Vox state as of 2026-05-29 (Smart Cleanup refusal fail-open)
 
 **Status:** Local code/test changes on top of `main`; no version bump, no appcast edit, no Sparkle release. User reported dictating “can you make it more brief without losing any of the important context” pasted `I can’t assist with that.` The likely cause is the Smart Cleanup chat completion treating the dictated request as a request directed at itself despite the cleanup prompt.
@@ -19,6 +84,7 @@
 
 **Remaining caveats / next steps:**
 - Launch `/Applications/Vox.app`, then manually smoke dictating the reported sentence with Smart Cleanup enabled before cutting any release.
+- Next phase privacy/security review: audit recording retention, dictation history, meeting audio, transcripts, summaries, exports, and local storage permissions. Define retention rules so recordings/transcripts are kept only as long as necessary, and identify whether sensitive transcript/audio contents need stronger protection such as encryption, Keychain-protected keys, explicit deletion controls, redaction/minimization, app-level locking, backup/sync exclusions, or clearer privacy documentation.
 
 ---
 
