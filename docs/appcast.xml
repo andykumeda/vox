@@ -6,6 +6,26 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.28</title>
+            <pubDate>Tue, 23 Jun 2026 02:10:11 +0000</pubDate>
+            <sparkle:version>47</sparkle:version>
+            <sparkle:shortVersionString>0.7.28</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Parsec is now detected as a remote viewer, so Vox no longer uses the standard local paste path when Parsec is frontmost.</li>
+                    <li><strong>Behavior:</strong> Parsec insertion tries System Events text first, then delayed remote Cmd+V, then physical typing fallback. This avoids restoring the prior clipboard while Parsec may still be syncing.</li>
+                    <li><strong>Fix:</strong> Paste Last Transcription now waits briefly for menu focus to settle before pasting.</li>
+                    <li><strong>Fix:</strong> Smart Cleanup now fails open when the cleanup model returns a generic assistant refusal.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.28/Vox.dmg"
+                sparkle:edSignature="0EwtxTPXhBoYC7ofcT6/HL2fTw1F9LZOUaC98eFpuZvTwHwW1miMZ4KgMDaCOwJjPDPjMIjpM3wCCgalCBxeBw=="
+                length="2483448"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.27</title>
             <pubDate>Tue, 26 May 2026 17:53:59 +0000</pubDate>
             <sparkle:version>46</sparkle:version>

@@ -1,6 +1,6 @@
 # Remote Dictation Status
 
-Last updated: 2026-05-26 after reverting Screen Sharing/VNC to clipboard-first insertion.
+Last updated: 2026-06-23 after adding a Parsec remote-viewer paste target.
 
 ## Current Status
 
@@ -11,12 +11,14 @@ waits do not block the main actor or menu flow.
 
 Current behavior:
 
-- Screen Sharing/VNC writes the exact processed transcript to the local
-  clipboard, waits for remote clipboard sync, then sends remote Cmd+V. System
-  Events text typing and physical typing remain fallbacks.
+- Screen Sharing/VNC sends the exact processed transcript through System Events
+  text insertion first. Shared-clipboard remote Cmd+V and physical typing remain
+  fallbacks.
 - RustDesk writes the exact processed transcript to the local clipboard, waits
   for remote clipboard sync, then sends remote Cmd+V. Caps Lock-aware physical
   typing remains the fallback.
+- Parsec sends the exact processed transcript through System Events text
+  insertion first. Delayed remote Cmd+V and physical typing remain fallbacks.
 - Paste Last Transcription uses the same async target-specific path as fresh
   dictation.
 - If both the viewer Mac and controlled Mac have Vox running, turn on **Ignore
@@ -44,6 +46,9 @@ show that failing session.
 - Current issue: in Screen Sharing/VNC, iMessage insertion can look clean, but
   remote apps including Wave and Notepad can receive the previous recording
   after Vox writes a newer transcript to the local clipboard.
+- Current issue: Parsec was treated as `.standard`, so Vox used the immediate
+  local paste path and could restore the prior clipboard instead of using a
+  remote-client insertion path.
 - Earlier issue: Vox inserted current text but lowercased the first letter and
   produced `/` instead of `?`.
 - The user demonstrated the previous shifted-punctuation failure with dictated
@@ -272,7 +277,7 @@ clipboard paste remains only as fallback.
 
 ## Current Code Paths
 
-As of current main after the post-0.7.26 Screen Sharing stale-clipboard follow-up:
+As of current main after the Parsec remote-viewer follow-up:
 
 - `.standard` writes transcript to the pasteboard and sends `Cmd+V`.
 - `.screenSharing` sends the exact processed transcript through System Events
@@ -284,6 +289,9 @@ As of current main after the post-0.7.26 Screen Sharing stale-clipboard follow-u
   waits for shared clipboard sync, then sends remote `Cmd+V` through System
   Events. It falls back to Caps Lock-aware physical typing if that keystroke
   fails.
+- `.parsec` sends the exact processed transcript through System Events text
+  insertion first. Only if that fails does it wait for remote clipboard sync,
+  send remote `Cmd+V`, then fall back to Caps Lock-aware physical typing.
 - `.remoteControl` uses Shift-modified physical typing for every frontmost app.
 - `ignoreRecordHotkey` disables only the record hotkey on that Mac, leaving
   menu access, update checks, and Paste Last available.
@@ -294,6 +302,7 @@ Remote targets skip restoring the previous clipboard:
 
 - `.screenSharing`
 - `.rustDesk`
+- `.parsec`
 - `.remoteControl`
 
 Remote Control Mode is stored in `UserDefaults` under:
@@ -311,10 +320,12 @@ The implementation files are:
 
 ## What Is Still Broken
 
-Live validation is still needed in the user's remote Screen Sharing session.
-The active symptom before `v0.7.27` was stale remote clipboard delivery: remote
-apps including Wave and Notepad inserted the previous recording even though
-iMessage insertion looked clean.
+Live validation is still needed in the user's remote Screen Sharing and Parsec
+sessions. The active Screen Sharing symptom before `v0.7.27` was stale remote
+clipboard delivery: remote apps including Wave and Notepad inserted the previous
+recording even though iMessage insertion looked clean. The Parsec report before
+this change was that transcript paste from a remote client did not work because
+Parsec was not selected as a remote paste target.
 
 ## What Is Not Currently Broken
 
@@ -375,3 +386,16 @@ The priority is now exact enough remote text insertion for normal prose:
 - preserve first-letter capitalization;
 - preserve question marks;
 - avoid reintroducing the older previous-recording clipboard bug.
+
+### Post-Parsec target follow-up
+
+Parsec is detected by bundle identifier `tv.parsec.www` or by localized name.
+When Vox is running on the viewer Mac with Parsec frontmost, Vox now chooses a
+remote-viewer path instead of `.standard`: System Events text insertion first,
+then delayed remote `Cmd+V`, then physical typing fallback. This avoids restoring
+the previous local clipboard while Parsec may still be synchronizing clipboard
+state to the host.
+
+Live Parsec validation is still required because unit tests can cover target
+selection and route policy, but not whether Parsec forwards AppleScript text
+events, clipboard state, or modifier keys in the user's session.

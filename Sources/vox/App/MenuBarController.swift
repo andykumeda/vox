@@ -17,6 +17,8 @@ enum MenuIconState {
 }
 
 final class MenuBarController: NSObject {
+    static let pasteLastFocusSettleDelay: TimeInterval = 0.20
+
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let keychain = KeychainStore()
     private let contextDetector = ContextDetector()
@@ -293,13 +295,17 @@ final class MenuBarController: NSObject {
     /// Triggered by the menu item or by the optional pasteLast global hotkey.
     private func pasteLastTranscription() {
         guard let entry = DictationHistoryStore.shared.last(), !entry.text.isEmpty else {
+            dlog("paste last requested with no dictation history")
             sound.play(.error)
             return
         }
         let injector = self.injector
         let text = entry.text
         let keepOnClipboard = AppSettings.keepTranscriptionOnClipboard
+        let delay = Self.pasteLastFocusSettleDelay
+        dlog("paste last scheduled chars=\(text.count) delay=\(delay)s")
         Task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             await injector.pasteAsync(text, keepOnClipboard: keepOnClipboard)
         }
     }

@@ -42,6 +42,7 @@ public struct TextInjector {
         case standard
         case screenSharing
         case rustDesk
+        case parsec
         case remoteControl
     }
 
@@ -222,6 +223,15 @@ public struct TextInjector {
                 dlog("RustDesk exact clipboard Cmd+V failed; falling back to physical typing")
                 typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
             }
+        case .parsec:
+            dlog("paste remote fallback: Parsec System Events text first \(operation.textToInsert.count) chars")
+            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
+                dlog("Parsec System Events keystroke failed; trying exact clipboard Cmd+V")
+                if !pasteWithParsecSharedClipboard() {
+                    dlog("Parsec exact clipboard Cmd+V failed; falling back to physical typing")
+                    typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
+                }
+            }
         case .remoteControl:
             dlog("paste remote-control fallback: direct physical typing \(operation.textToInsert.count) chars")
             typePhysicalText(operation.textToInsert, mode: .withShiftModifiers)
@@ -246,6 +256,15 @@ public struct TextInjector {
             if !(await pasteWithRustDeskSharedClipboardAsync()) {
                 dlog("RustDesk exact clipboard Cmd+V failed; falling back to physical typing")
                 typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
+            }
+        case .parsec:
+            dlog("paste remote fallback: Parsec System Events text first \(operation.textToInsert.count) chars")
+            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
+                dlog("Parsec System Events keystroke failed; trying exact clipboard Cmd+V")
+                if !(await pasteWithParsecSharedClipboardAsync()) {
+                    dlog("Parsec exact clipboard Cmd+V failed; falling back to physical typing")
+                    typePhysicalText(operation.textToInsert, mode: .capsLockForUppercase)
+                }
             }
         case .remoteControl:
             dlog("paste remote-control fallback: direct physical typing \(operation.textToInsert.count) chars")
@@ -298,6 +317,11 @@ public struct TextInjector {
         if bundleID == "com.carriez.rustdesk" {
             return .rustDesk
         }
+        if bundleID == "tv.parsec.www"
+            || bundleID.contains("parsec")
+            || name.contains("parsec") {
+            return .parsec
+        }
         if bundleID == "com.apple.screensharing"
             || bundleID.contains("screensharing")
             || bundleID.contains("screen-sharing")
@@ -318,20 +342,22 @@ public struct TextInjector {
         // Remote-app pasteboard synchronization can lag
         // behind the local paste event. Restoring the prior clipboard causes
         // the remote side to paste that older value instead of the transcript.
-        if target == .screenSharing || target == .rustDesk || target == .remoteControl { return false }
+        if target == .screenSharing || target == .rustDesk || target == .parsec || target == .remoteControl {
+            return false
+        }
         return true
     }
 
     static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk, .remoteControl: true
+        case .screenSharing, .rustDesk, .parsec, .remoteControl: true
         case .standard: false
         }
     }
 
     static func requiresExactPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk: true
+        case .screenSharing, .rustDesk, .parsec: true
         case .remoteControl, .standard: false
         }
     }
@@ -339,20 +365,20 @@ public struct TextInjector {
     static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
         switch target {
         case .screenSharing: true
-        case .rustDesk, .remoteControl, .standard: false
+        case .rustDesk, .parsec, .remoteControl, .standard: false
         }
     }
 
     static func usesSystemEventsTextFirst(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing: true
+        case .screenSharing, .parsec: true
         case .rustDesk, .remoteControl, .standard: false
         }
     }
 
     static func usesRemoteCommandVPaste(for target: PasteTarget) -> Bool {
         switch target {
-        case .screenSharing, .rustDesk: true
+        case .screenSharing, .rustDesk, .parsec: true
         case .remoteControl, .standard: false
         }
     }
@@ -361,7 +387,7 @@ public struct TextInjector {
         switch target {
         case .standard, .remoteControl:
             return 0
-        case .rustDesk:
+        case .rustDesk, .parsec:
             return 1.25
         case .screenSharing:
             return 2.5
@@ -375,7 +401,7 @@ public struct TextInjector {
         switch target {
         case .screenSharing:
             return true
-        case .standard, .rustDesk, .remoteControl:
+        case .standard, .rustDesk, .parsec, .remoteControl:
             return false
         }
     }
@@ -384,13 +410,15 @@ public struct TextInjector {
         switch target {
         case .screenSharing:
             return true
-        case .standard, .rustDesk, .remoteControl:
+        case .standard, .rustDesk, .parsec, .remoteControl:
             return false
         }
     }
 
     static func textForPaste(_ text: String, target: PasteTarget) -> String {
-        guard target == .screenSharing || target == .rustDesk || target == .remoteControl else { return text }
+        guard target == .screenSharing || target == .rustDesk || target == .parsec || target == .remoteControl else {
+            return text
+        }
         guard looksLikeProseForRemoteCapitalization(text) else { return text }
         return capitalizeFirstAlphabeticCharacter(text)
     }
@@ -831,6 +859,18 @@ public struct TextInjector {
     private func pasteWithRustDeskSharedClipboardAsync() async -> Bool {
         dlog("RustDesk waiting \(Self.prePasteDelay(for: .rustDesk))s for shared clipboard sync")
         await waitForRemoteClipboardSync(target: .rustDesk)
+        return pasteWithSystemEventsKeyCode()
+    }
+
+    private func pasteWithParsecSharedClipboard() -> Bool {
+        dlog("Parsec waiting \(Self.prePasteDelay(for: .parsec))s for shared clipboard sync")
+        Thread.sleep(forTimeInterval: Self.prePasteDelay(for: .parsec))
+        return pasteWithSystemEventsKeyCode()
+    }
+
+    private func pasteWithParsecSharedClipboardAsync() async -> Bool {
+        dlog("Parsec waiting \(Self.prePasteDelay(for: .parsec))s for shared clipboard sync")
+        await waitForRemoteClipboardSync(target: .parsec)
         return pasteWithSystemEventsKeyCode()
     }
 
