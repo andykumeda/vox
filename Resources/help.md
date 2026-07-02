@@ -3,6 +3,7 @@
 ## Recording
 Hold **Fn** (default) and speak. Release to transcribe.
 Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-tap-start, one-tap-stop.
+Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes
 - **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps.
@@ -128,6 +129,19 @@ Settings → Hotkeys lets you rebind:
   Vox running, forwarded Fn presses can trigger both instances. On the
   controlled/remote Mac, open the Vox menu and enable **Ignore Record Hotkey on
   This Mac** so only the viewer-side Vox records.
+- **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for
+  `dictation timing`, `transcription request model=...`,
+  `transcription api key read elapsed=...`, and `transcription http attempt`
+  lines. A slow first dictation after relaunch can be Keychain warming; longer
+  waits after that usually mean the OpenAI transcription request or network path
+  is slow. Smart Cleanup can add a smaller second wait. Hold Option while
+  pressing Fn, or start with "verbatim", to skip Smart Cleanup for one recording.
+- **Wrong transcription plus delayed start/stop sounds** — check System
+  Settings → Sound. If macOS selected a Bluetooth speaker/headset as the default
+  input, Vox captures that low-bandwidth mic instead of your intended USB/studio
+  mic. In `vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` is a
+  strong sign of this route. Re-select the intended mic, ideally 48 kHz USB, and
+  move output/system output off Bluetooth if the audible cues lag.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
   must be **Do Nothing**.
 - **Wrong transcription on short phrases** — add a Dictionary entry to fix

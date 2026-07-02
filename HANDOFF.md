@@ -1,3 +1,121 @@
+# Handoff — Vox state as of 2026-07-02 (first-dictation delay follow-up)
+
+**Status:** Dictation latency/accuracy diagnostics and docs are ready to commit and push to `main`; no version bump, no release metadata, no appcast edit. Final full-suite/app-bundle validation is currently blocked by this Mac's missing Xcode app toolchain; see Verification.
+
+**Cause found:**
+- User reported the app still felt unusable after the model switch.
+- Latest post-switch dictation in `~/Library/Logs/vox.log` at `2026-07-02T22:38:22Z` transcribed correctly:
+  - `raw=Why did this delay the change?`
+  - `cleaned=` and `processed=` matched.
+- The delay remained: pipeline started at `22:38:29.762Z`, but the HTTP attempt did not start until `22:38:38.067Z`.
+- Added startup key warmup logging, rebuilt, relaunched, and confirmed the real local blocker:
+  - `2026-07-02T22:43:06.731Z [vox] dictation api key warmup elapsed=9.985s has_key=true`
+- So the "first dictation after relaunch" delay is Keychain read latency before the STT request starts. The previous latency instrumentation made this visible; it was not an OpenAI request delay for that first post-relaunch dictation.
+- Follow-up capture failure at `2026-07-02T22:45:15Z` showed another root cause:
+  - Vox logged `AudioRecorder.start inputFormat sampleRate=8000.0 channels=1`.
+  - `system_profiler SPAudioDataType` showed macOS default input and output were both `OontZ Angle solo 916` over Bluetooth at 8 kHz.
+  - Latest WAV replay confirmed `gpt-4o-transcribe` only returned the first sentence from that low-bandwidth Bluetooth capture, while other models could hear more of the phrase. So Vox was capturing, but from the wrong/low-quality input device.
+  - The delayed audible start cue also matches Bluetooth output latency.
+
+**Change:**
+- `Sources/vox/App/MenuBarController.swift`: starts a detached API-key warmup at app startup and exposes a small testable `warmDictationAPIKey` helper. This moves the slow first Keychain read out of the dictation hot path once startup warmup has completed.
+- `Sources/vox/STT/OpenAITranscriber.swift`: logs selected dictation model and API-key read elapsed time without logging any key material.
+- `Tests/voxTests/MenuBarControllerTests.swift`: regression coverage that warmup reads the provider and reports key availability.
+- Operational audio routing fix applied with CoreAudio:
+  - Default input set to `AT2020USB-X` (`48 kHz`, USB).
+  - Default output and system output set to `Mac mini Speakers` (`48 kHz`, built-in) to avoid Bluetooth beep latency.
+
+**Verification:**
+- Red check before helper implementation: `swift test --filter MenuBarControllerTests/testWarmDictationAPIKeyReadsProviderAndReportsAvailability` failed to compile because `MenuBarController.warmDictationAPIKey` did not exist.
+- Earlier in the fix cycle, `swift test --filter 'MenuBarControllerTests|AppSettingsTests|OpenAITranscriberTests'` passed: 6 tests, 0 failures.
+- Earlier in the fix cycle, `swift test` passed: 346 tests, 0 failures.
+- After the final OpenAITranscriber assertion update, `swift test --filter OpenAITranscriberTests/testDictationRequestUsesFastDefaultTimeout` passed.
+- `git diff --check` passed.
+- Earlier in the fix cycle, `./scripts/build-app.sh` succeeded, installed `/Applications/Vox.app`, and `codesign --verify --deep --strict /Applications/Vox.app` passed.
+- A final rerun of `swift test`, the filtered changed-test group, and `./scripts/build-app.sh` is blocked by the local toolchain: `xcode-select -p` points to missing `/Applications/Xcode.app/Contents/Developer`; using `DEVELOPER_DIR=/Library/Developer/CommandLineTools` fails before tests/build because the CLT toolchain lacks the SwiftUI macro plugin (`SwiftUIMacros.StateMacro`). No local `libSwiftUIMacros.dylib` was found under `/Applications`, `/Library/Developer`, or `/Library/Apple`.
+- Relaunched `/Applications/Vox.app` earlier in the fix cycle; current preference is `gpt-4o-transcribe`; one Vox process remains: `/Applications/Vox.app/Contents/MacOS/vox --vox-launch-agent`.
+- `system_profiler SPAudioDataType` now shows `AT2020USB-X` as `Default Input Device: Yes` and `Mac mini Speakers` as both default output devices. `OontZ Angle solo 916` remains connected but is no longer default input/output.
+
+**Remaining caveats / next steps:**
+- If the user starts dictating immediately after a relaunch, they can still race the ~10 s Keychain warmup. After warmup completes, the in-process cache should avoid the first-use stall.
+- Need one live manual dictation after the warmup line to confirm `transcription api key read elapsed=0.000s` and that the total delay is now dominated by the STT request and cleanup only.
+- User confirmed the Bluetooth route switch appears to have addressed the bad capture. Expected future `AudioRecorder.start inputFormat` is `sampleRate=48000.0`.
+- If a new wrong transcription appears after the route fix, compare that specific saved WAV against `raw=`, `cleaned=`, and replay outputs.
+- Restore/reinstall Xcode.app or switch `xcode-select` to a complete Xcode toolchain before the next full `swift test` or app bundle rebuild. Because the final `Resources/help.md` doc edit happened after the last successful bundle build, rebuild `/Applications/Vox.app` once Xcode is available if the in-app help must reflect this committed text immediately.
+
+---
+
+# Handoff — Vox state as of 2026-07-02 (dictation accuracy follow-up)
+
+**Status:** Local code/test/docs changes on top of `main`; no version bump, no appcast edit, no Sparkle release. User reported that a dictation was "nothing like" what was said immediately after the latency instrumentation build.
+
+**Cause found:**
+- Live `~/Library/Logs/vox.log` showed the bad dictation at `2026-07-02T22:31:09Z`. The `raw=`, `cleaned=`, and `processed=` lines were identical, so Smart Cleanup, post-processing, and paste did not rewrite the text.
+- The saved audio was `/Users/andy/Library/Application Support/Vox/Recordings/2026-07-02T22-31-09Z_prose_33A2488A.wav` (16 kHz mono, 13.31 s).
+- Replaying that exact WAV through OpenAI models showed the model-quality split:
+  - `gpt-4o-mini-transcribe`: "The latency change that I said is now completely revised, but I have specific instructions not to detail why this has changed."
+  - `gpt-4o-transcribe`: "The latency is better, but it is now completely desynced."
+  - `whisper-1`: poor/confabulated output.
+- User defaults had explicitly stored `transcriptionModel = gpt-4o-mini-transcribe`, so changing only the code default would not affect the running app.
+
+**Change:**
+- `Sources/vox/Util/AppSettings.swift`: default dictation model is now `gpt-4o-transcribe`; Settings labels call mini the lower-cost option.
+- `Sources/vox/STT/OpenAITranscriber.swift`: fallback/default model provider now matches `gpt-4o-transcribe`.
+- `Tests/voxTests/AppSettingsTests.swift`: regression test for the full-quality default model. It failed before the fix (`mini` vs `full`) and passes after.
+- `README.md`, `Resources/help.md`: updated model-default docs and retained the latency-log troubleshooting notes.
+- Local preference updated with `defaults write com.andykumeda.vox transcriptionModel gpt-4o-transcribe`.
+
+**Verification:**
+- Model replay of the exact bad WAV confirmed `gpt-4o-transcribe` captured the intended content while mini did not.
+- Red check before fix: `swift test --filter AppSettingsTests/testTranscriptionModelDefaultsToFullQualityModel` failed with `mini` vs `full`.
+- `swift test --filter 'AppSettingsTests|OpenAITranscriberTests'` passed: 4 tests, 0 failures.
+- `swift test` passed: 345 tests, 0 failures.
+- `git diff --check` passed.
+- `./scripts/build-app.sh` succeeded and installed `/Applications/Vox.app`.
+- `codesign --verify --deep --strict /Applications/Vox.app` passed.
+- Relaunched `/Applications/Vox.app`; only one Vox process remains: `/Applications/Vox.app/Contents/MacOS/vox --vox-launch-agent`.
+
+**Remaining caveats / next steps:**
+- This changes the default and the local setting to the higher-quality model; it roughly doubles dictation STT cost from mini pricing, but the replay showed mini was the source of this specific mismatch.
+- Manual smoke is still useful: dictate the problematic sentence again and check `~/Library/Logs/vox.log` for `raw=` plus `dictation timing`.
+- No release artifacts were cut. Do not update Sparkle/appcast without an explicit release request.
+
+---
+
+# Handoff — Vox state as of 2026-07-02 (dictation latency diagnosis)
+
+**Status:** Local code/test/docs changes on top of `main`; no version bump, no appcast edit, no Sparkle release. User reported a significant delay between releasing Fn and receiving dictated text.
+
+**Cause found:**
+- Live `~/Library/Logs/vox.log` showed the delay was primarily inside the OpenAI transcription call, not paste:
+  - `2026-07-02T14:25:06Z` release -> `raw=` at `14:25:42Z` (~36.4 s STT wait), then cleanup ~3.3 s, paste immediate.
+  - `2026-07-02T14:26:09Z` release -> `raw=` at `14:26:46Z` (~37.3 s STT wait), then cleanup ~2.3 s, paste immediate.
+- Audio payload size was not the bottleneck: current dictation WAVs are 16 kHz mono and only a few hundred KB.
+- Existing code gave dictation transcription up to three hidden 15 s attempts and only logged after the final raw transcript arrived, so a stalled request looked like Vox was just waiting.
+
+**Change:**
+- `Sources/vox/STT/OpenAITranscriber.swift`: default dictation STT request timeout reduced to 8 s; default STT attempts now use fresh ephemeral `URLSession`s instead of the shared session; retry attempts log start/success/retry/failure with elapsed time, timeout, and request body size.
+- `Sources/vox/App/MenuBarController.swift`: dictation pipeline logs stage timings for STT, post-processing, Smart Cleanup, paste, and total elapsed time.
+- `Tests/voxTests/OpenAITranscriberTests.swift`: covers the fast default timeout and timeout retry path.
+- `README.md`, `Resources/help.md`: document how to interpret transcription delay and where to check stage timings.
+
+**Verification:**
+- `swift test --filter OpenAITranscriberTests` passed: 2 tests, 0 failures.
+- `swift test --filter DictationRegressionTests` passed: 1 test, 0 failures; fixture latency ~4.96 ms on the direct run.
+- `swift test` passed: 344 tests, 0 failures.
+- `git diff --check` passed.
+- `./scripts/build-app.sh` succeeded and installed `/Applications/Vox.app` (version `0.7.28` / build `47`).
+- `codesign --verify --deep --strict /Applications/Vox.app` passed.
+- Relaunched `/Applications/Vox.app`; after killing the duplicate normal handoff process, only the `--vox-launch-agent` instance remained.
+
+**Remaining caveats / next steps:**
+- This reduces the maximum wait for a stalled dictation attempt and makes future latency visible, but it cannot eliminate genuine upstream OpenAI/API/network slowness.
+- Manual smoke is still useful after rebuilding/relaunching: dictate a short sentence with Smart Cleanup on and inspect `~/Library/Logs/vox.log` for `dictation timing stt=... cleanup=... paste=...`.
+- `./scripts/run-dictation-regression.sh` wedged once as an orphaned `/usr/bin/env` wrapper with no `swift` child in this tool session; the underlying `swift test --filter DictationRegressionTests` command passed immediately when run directly.
+- Do not cut a release without normal local smoke. No remote paste behavior was intentionally changed.
+
+---
+
 # Handoff — Vox state as of 2026-06-23 (Release 0.7.28 Parsec remote paste)
 
 **Status:** Release 0.7.28 is cut from `main`. Release commit `105f3a2` is tagged `v0.7.28` and pushed. GitHub release: `https://github.com/andykumeda/vox/releases/tag/v0.7.28`. `Resources/Info.plist` is bumped to `0.7.28` / build `47`. `dist/Vox.app` + `dist/Vox.dmg` rebuilt locally and signed with the persistent `vox-dev` identity. Sparkle EdDSA signature for the DMG: `0EwtxTPXhBoYC7ofcT6/HL2fTw1F9LZOUaC98eFpuZvTwHwW1miMZ4KgMDaCOwJjPDPjMIjpM3wCCgalCBxeBw==`; length `2483448`. `docs/appcast.xml` has a new top item pointing at `https://github.com/andykumeda/vox/releases/download/v0.7.28/Vox.dmg`.

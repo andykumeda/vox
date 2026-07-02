@@ -2,7 +2,13 @@
 
 Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn**, speak, release — Vox transcribes via OpenAI and pastes at the cursor in whichever app has focus. Also includes a meeting-transcription mode (system audio + your mic in parallel), a personal dictionary, and an opt-in LLM cleanup pass.
 
-Default transcription model is `gpt-4o-mini-transcribe`. Switchable to `gpt-4o-transcribe` (best quality) or `whisper-1`.
+Default transcription model is `gpt-4o-transcribe` for better dictation accuracy. Switchable to `gpt-4o-mini-transcribe` (lower cost) or `whisper-1`.
+
+If text appears slowly after you release Fn, check `~/Library/Logs/vox.log`.
+Vox logs `transcription http attempt` and `dictation timing` lines so you can
+tell whether the wait is the OpenAI transcription request, Smart Cleanup, or
+paste insertion. Holding Option while pressing Fn skips Smart Cleanup for that
+recording.
 
 ## Modes
 
@@ -96,7 +102,7 @@ Two ways to bypass Smart Cleanup for a single dictation:
 Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vox window raises above normal app windows so it does not get hidden behind a larger window:
 
 - **OpenAI API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `openai-api-key`). Click **Always Allow** on the keychain prompt the first time.
-- **Model** — `gpt-4o-mini-transcribe` (~$0.003/min, default), `gpt-4o-transcribe` (~$0.006/min, best quality), or `whisper-1` (~$0.006/min, no prompt-following).
+- **Model** — `gpt-4o-transcribe` (~$0.006/min, default and best quality), `gpt-4o-mini-transcribe` (~$0.003/min, lower cost), or `whisper-1` (~$0.006/min, no prompt-following).
 - **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`.
 - **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`.
 - **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes obvious false starts, fillers, and self-corrections in prose. The personal cleanup instructions editor is saved at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
@@ -106,6 +112,12 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 - **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC, RustDesk, Parsec, and Remote Control Mode skip restoring the prior clipboard because remote clipboard synchronization can lag behind the local paste event.
 - **Ignore Record Hotkey on This Mac** — menu-bar toggle for remote-control setups where both the viewer Mac and the controlled Mac have Vox running. Turn this on for the controlled/remote Mac so forwarded Fn presses do not make the remote Vox record and paste over the viewer-side dictation.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
+
+## Dictation troubleshooting
+
+- **Wrong transcription with delayed start/stop sounds** — check System Settings → Sound. If macOS has selected a Bluetooth speaker/headset as the default input, Vox will capture that low-bandwidth mic instead of your studio/USB mic. In `~/Library/Logs/vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` is a strong sign of this route. Re-select the intended mic, ideally a USB device at 48 kHz, and move output/system output off Bluetooth if the audible cues lag.
+- **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for `dictation timing`, `transcription request model=...`, `transcription api key read elapsed=...`, and `transcription http attempt` lines. A slow first dictation after relaunch can be Keychain warming; longer waits after that are usually the OpenAI transcription request, network path, or Smart Cleanup.
+- **Raw audio replay** — recent dictation WAVs are kept in `~/Library/Application Support/Vox/Recordings/` according to the configured audio-retention setting. Compare the saved WAV with the log's `raw=`, `cleaned=`, and `processed=` lines to separate capture problems from STT or cleanup problems.
 
 ## Dictionary
 

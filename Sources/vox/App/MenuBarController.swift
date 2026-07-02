@@ -54,9 +54,30 @@ final class MenuBarController: NSObject {
         didSet { refreshIcon() }
     }
 
+    private static func elapsedString(since startedAt: Date) -> String {
+        String(format: "%.3f", Date().timeIntervalSince(startedAt))
+    }
+
+    @discardableResult
+    static func warmDictationAPIKey(
+        apiKeyProvider: () -> String?,
+        log: (String) -> Void = { message in dlog(message) }
+    ) -> Bool {
+        let startedAt = Date()
+        let raw = apiKeyProvider()
+        let hasKey = raw?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        log("dictation api key warmup elapsed=\(elapsedString(since: startedAt))s has_key=\(hasKey)")
+        return hasKey
+    }
+
     func start() {
         configureMenu()
         refreshIcon()
+
+        let keychain = keychain
+        Task.detached(priority: .utility) {
+            _ = Self.warmDictationAPIKey(apiKeyProvider: { keychain.read() })
+        }
 
         hotkey.onRecordPress = { [weak self] verbatim in
             dlog("Fn press verbatim=\(verbatim)")
@@ -635,8 +656,12 @@ final class MenuBarController: NSObject {
 
         Task { [weak self] in
             guard let self else { return }
+            let pipelineStartedAt = Date()
+            dlog("dictation pipeline started duration=\(durationSec)s bytes=\(wav.count) mode=\(mode)")
             do {
+                let sttStartedAt = Date()
                 let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
+                dlog("dictation timing stt=\(Self.elapsedString(since: sttStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s raw_chars=\(raw.count)")
                 dlog("raw=\(raw)")
 
                 // Hallucination guard. gpt-4o-mini-transcribe occasionally loops on
@@ -657,9 +682,11 @@ final class MenuBarController: NSObject {
                     }
                     return
                 }
+                let postprocessStartedAt = Date()
                 let processed = await MainActor.run {
                     PostProcessor(mode: mode).process(raw)
                 }
+                dlog("dictation timing postprocess=\(Self.elapsedString(since: postprocessStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s")
 
                 // Verbatim modifier (Fn+Option) bypasses smart cleanup so the
                 // raw transcribed text is pasted as-is. Setting `enabled: false`
@@ -672,6 +699,7 @@ final class MenuBarController: NSObject {
                     enabled: cleanupEnabled,
                     llmCleaner: cleanupEnabled ? self.liveLLMCleaner : nil
                 )
+                let cleanupStartedAt = Date()
                 let cleanedText = await cleaner.process(processed.text)
                 let finalText = await MainActor.run {
                     guard cleanupEnabled else { return cleanedText }
@@ -681,6 +709,7 @@ final class MenuBarController: NSObject {
                         entries: DictionaryStore.shared.entries
                     )
                 }
+                dlog("dictation timing cleanup=\(Self.elapsedString(since: cleanupStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s cleanup_enabled=\(cleanupEnabled) final_chars=\(finalText.count)")
                 dlog("cleaned=\(finalText) verbatim=\(verbatimMode)")
 
                 let wordCount = finalText.split(whereSeparator: { $0.isWhitespace }).count
@@ -699,11 +728,14 @@ final class MenuBarController: NSObject {
                 let pasteDelay: Double
                 if finalText.isEmpty {
                     pasteDelay = 0
+                    dlog("dictation timing paste_skipped total=\(Self.elapsedString(since: pipelineStartedAt))s")
                 } else {
+                    let pasteStartedAt = Date()
                     await self.injector.pasteAsync(
                         finalText,
                         keepOnClipboard: AppSettings.keepTranscriptionOnClipboard
                     )
+                    dlog("dictation timing paste=\(Self.elapsedString(since: pasteStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s")
                     pasteDelay = 0.2
                 }
                 await MainActor.run {
@@ -714,8 +746,9 @@ final class MenuBarController: NSObject {
                     }
                     self.state = .idle
                 }
+                dlog("dictation timing complete total=\(Self.elapsedString(since: pipelineStartedAt))s")
             } catch {
-                dlog("transcription failed: \(error)")
+                dlog("transcription failed: \(error) total=\(Self.elapsedString(since: pipelineStartedAt))s")
                 await MainActor.run {
                     self.state = .error
                     self.sound.play(.error)

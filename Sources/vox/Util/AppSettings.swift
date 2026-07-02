@@ -5,10 +5,12 @@ enum TranscriptionModel: String, CaseIterable, Sendable {
     case full = "gpt-4o-transcribe"
     case whisper = "whisper-1"
 
+    static let defaultModel: TranscriptionModel = .full
+
     var displayName: String {
         switch self {
-        case .mini: return "gpt-4o-mini-transcribe (cheapest, follows prompts)"
-        case .full: return "gpt-4o-transcribe (best quality)"
+        case .mini: return "gpt-4o-mini-transcribe (lower cost)"
+        case .full: return "gpt-4o-transcribe (default, best quality)"
         case .whisper: return "whisper-1 (no prompt following)"
         }
     }
@@ -175,7 +177,7 @@ enum AppSettings {
                let m = TranscriptionModel(rawValue: raw) {
                 return m
             }
-            return .mini
+            return TranscriptionModel.defaultModel
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: modelKey) }
     }
