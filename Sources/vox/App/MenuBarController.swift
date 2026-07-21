@@ -75,7 +75,7 @@ final class MenuBarController: NSObject {
         refreshIcon()
 
         let keychain = keychain
-        Task.detached(priority: .utility) {
+        DispatchQueue.global(qos: .utility).async {
             _ = Self.warmDictationAPIKey(apiKeyProvider: { keychain.read() })
         }
 
@@ -661,8 +661,8 @@ final class MenuBarController: NSObject {
             do {
                 let sttStartedAt = Date()
                 let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
-                dlog("dictation timing stt=\(Self.elapsedString(since: sttStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s raw_chars=\(raw.count)")
-                dlog("raw=\(raw)")
+                let rawMetrics = textLogMetrics(label: "raw", text: raw)
+                dlog("dictation timing stt=\(Self.elapsedString(since: sttStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s \(rawMetrics)")
 
                 // Hallucination guard. gpt-4o-mini-transcribe occasionally loops on
                 // short / noisy audio and emits a runaway repetitive cascade
@@ -709,8 +709,8 @@ final class MenuBarController: NSObject {
                         entries: DictionaryStore.shared.entries
                     )
                 }
-                dlog("dictation timing cleanup=\(Self.elapsedString(since: cleanupStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s cleanup_enabled=\(cleanupEnabled) final_chars=\(finalText.count)")
-                dlog("cleaned=\(finalText) verbatim=\(verbatimMode)")
+                let cleanedMetrics = textLogMetrics(label: "cleaned", text: finalText)
+                dlog("dictation timing cleanup=\(Self.elapsedString(since: cleanupStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s cleanup_enabled=\(cleanupEnabled) \(cleanedMetrics) verbatim=\(verbatimMode)")
 
                 let wordCount = finalText.split(whereSeparator: { $0.isWhitespace }).count
                 let model = AppSettings.transcriptionModel
@@ -724,7 +724,7 @@ final class MenuBarController: NSObject {
                         text: finalText
                     ))
                 }
-                dlog("processed=\(processed.text) keys=\(processed.suffixKeys) words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
+                dlog("\(textLogMetrics(label: "processed", text: processed.text)) keys=\(processed.suffixKeys) final_words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
                 let pasteDelay: Double
                 if finalText.isEmpty {
                     pasteDelay = 0

@@ -16,6 +16,8 @@ public struct KeychainStore: Sendable {
     }
 
     public func save(_ value: String) throws {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         guard let data = value.data(using: .utf8) else { throw KeychainError.dataEncodingFailed }
         let baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -23,21 +25,35 @@ public struct KeychainStore: Sendable {
             kSecAttrAccount as String: account,
         ]
 
-        let deleteStatus = SecItemDelete(baseQuery as CFDictionary)
-        if deleteStatus != errSecSuccess && deleteStatus != errSecItemNotFound {
-            throw KeychainError.unexpectedStatus(deleteStatus)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        let updateStatus = SecItemUpdate(
+            baseQuery as CFDictionary,
+            attributes as CFDictionary
+        )
+        if updateStatus == errSecItemNotFound {
+            // A cached value may have been removed by another process. Do not
+            // return it if creating the replacement item fails.
+            Self.cache.removeValue(forKey: cacheKey)
+            var addQuery = baseQuery
+            addQuery.merge(attributes) { _, replacement in replacement }
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw KeychainError.unexpectedStatus(addStatus)
+            }
+        } else if updateStatus != errSecSuccess {
+            // Updating in place preserves the existing credential and cache if
+            // Security.framework rejects the replacement.
+            throw KeychainError.unexpectedStatus(updateStatus)
         }
-
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        guard addStatus == errSecSuccess else { throw KeychainError.unexpectedStatus(addStatus) }
         Self.cache[cacheKey] = value
     }
 
     public func read() -> String? {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         if let cached = Self.cache[cacheKey] { return cached }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -56,11 +72,15 @@ public struct KeychainStore: Sendable {
 
     /// Process-lifetime cache so we don't trigger a Keychain ACL prompt on every
     /// dictation/meeting transcribe call (transcriber + cleaner each call read()).
-    /// Invalidated by `save()` and `delete()`.
+    /// Invalidated by `save()` and `delete()`. Security.framework calls and cache
+    /// mutations share one lock so startup warmup cannot race Settings or STT.
+    private static let lock = NSLock()
     nonisolated(unsafe) private static var cache: [String: String] = [:]
     private var cacheKey: String { "\(service)|\(account)" }
 
     public func delete() throws {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

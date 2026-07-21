@@ -7,7 +7,6 @@ cd "$(dirname "$0")/.."
 CONFIG="${CONFIG:-release}"
 BINARY_NAME="vox"
 APP_NAME="Vox"
-BUILD_DIR=".build/arm64-apple-macosx/$CONFIG"
 APP_PATH="dist/${APP_NAME}.app"
 INSTALL_TO_APPLICATIONS="${INSTALL_TO_APPLICATIONS:-1}"
 INSTALL_PATH="${INSTALL_PATH:-/Applications/${APP_NAME}.app}"
@@ -15,6 +14,12 @@ ICON_SRC="Resources/AppIcon.icns"
 
 echo "→ swift build -c $CONFIG"
 swift build -c "$CONFIG"
+BUILD_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
+BUILT_BINARY="$BUILD_DIR/$BINARY_NAME"
+if [ ! -x "$BUILT_BINARY" ]; then
+    echo "✗ SwiftPM product missing or not executable: $BUILT_BINARY" >&2
+    exit 1
+fi
 
 if [ ! -f "$ICON_SRC" ]; then
     echo "→ generating AppIcon.icns (first build)"
@@ -26,7 +31,7 @@ rm -rf "$APP_PATH"
 mkdir -p "$APP_PATH/Contents/MacOS"
 mkdir -p "$APP_PATH/Contents/Resources"
 
-cp "$BUILD_DIR/$BINARY_NAME" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
+cp "$BUILT_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
 cp Resources/Info.plist "$APP_PATH/Contents/Info.plist"
 cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
 cp Resources/AppIcon-Command.png "$APP_PATH/Contents/Resources/"
@@ -117,6 +122,21 @@ codesign --force --sign "$SIGN_IDENTITY" \
     --options runtime \
     --timestamp=none \
     "$APP_PATH" >/dev/null
+
+# Catch stale or incorrectly located SwiftPM products before installing or
+# packaging them. Signing and rpath edits may change bytes, but not Mach-O UUIDs.
+BUILT_UUIDS="$(xcrun dwarfdump --uuid "$BUILT_BINARY" \
+    | awk '/^UUID:/ {print $2, $3}' \
+    | LC_ALL=C sort)"
+BUNDLED_UUIDS="$(xcrun dwarfdump --uuid "$APP_PATH/Contents/MacOS/$BINARY_NAME" \
+    | awk '/^UUID:/ {print $2, $3}' \
+    | LC_ALL=C sort)"
+if [ -z "$BUILT_UUIDS" ] || [ "$BUILT_UUIDS" != "$BUNDLED_UUIDS" ]; then
+    echo "✗ bundled executable does not match the SwiftPM product" >&2
+    echo "  built:   ${BUILT_UUIDS:-missing} ($BUILT_BINARY)" >&2
+    echo "  bundled: ${BUNDLED_UUIDS:-missing} ($APP_PATH/Contents/MacOS/$BINARY_NAME)" >&2
+    exit 1
+fi
 
 if [ "$INSTALL_TO_APPLICATIONS" != "0" ]; then
     echo "→ installing $INSTALL_PATH"

@@ -69,12 +69,13 @@ public struct CleanupProcessor {
             // legitimate aggressive cleanups (e.g. "Hi." -> "Hi.") while catching empty
             // or near-empty completions for normal-length input.
             if triggered.count >= 20 && trimmedCleaned.count < 3 {
-                FileHandle.standardError.write(Data("Cleanup malformed response (length \(trimmedCleaned.count) < 3 for input length \(triggered.count))\n".utf8))
+                dlog("Cleanup malformed response (length \(trimmedCleaned.count) < 3 for input length \(triggered.count))")
                 return triggered
             }
             if looksLikeAssistantMetaResponse(trimmedCleaned),
                !looksLikeAssistantMetaResponse(triggered) {
-                FileHandle.standardError.write(Data("Cleanup assistant response discarded: \(trimmedCleaned)\n".utf8))
+                let metrics = textLogMetrics(label: "response", text: trimmedCleaned)
+                dlog("Cleanup assistant response discarded (\(metrics))")
                 return triggered
             }
             let restored = trimmedCleaned
@@ -82,7 +83,7 @@ public struct CleanupProcessor {
                 .replacingOccurrences(of: lineToken, with: "\n")
             return restored
         } catch {
-            FileHandle.standardError.write(Data("Cleanup error: \(error)\n".utf8))
+            dlog("Cleanup error: \(error)")
             return triggered
         }
     }

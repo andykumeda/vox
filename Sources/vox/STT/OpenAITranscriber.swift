@@ -18,6 +18,8 @@ public enum TranscriptionError: Error, CustomStringConvertible {
 
 public struct OpenAITranscriber {
     public static let defaultDictationRequestTimeout: TimeInterval = 8.0
+    private static let maximumDictationRequestTimeout: TimeInterval = 24.0
+    private static let dictationResourceTimeoutPadding: TimeInterval = 5.0
 
     public let endpoint: URL
     public let modelProvider: () -> String
@@ -55,11 +57,15 @@ public struct OpenAITranscriber {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode, model: model)
-        request.timeoutInterval = requestTimeout
+        request.timeoutInterval = Self.dictationRequestTimeout(forWAV: wav, baseTimeout: requestTimeout)
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await Self.sendWithRetry(request, session: urlSession)
+            (data, response) = try await Self.sendWithRetry(
+                request,
+                session: urlSession,
+                totalTimeout: Self.resourceTimeout(forRequestTimeout: request.timeoutInterval)
+            )
         } catch {
             throw TranscriptionError.transportError(error)
         }
@@ -76,24 +82,56 @@ public struct OpenAITranscriber {
     static func sendWithRetry(
         _ request: URLRequest,
         session: URLSession? = nil,
+        totalTimeout: TimeInterval? = nil,
         retryDelayNanoseconds: (Int) -> UInt64 = { attempt in
             UInt64(300_000_000) * UInt64(attempt + 1)
         },
-        sleep: (UInt64) async -> Void = { nanoseconds in
-            try? await Task.sleep(nanoseconds: nanoseconds)
+        sleep: (UInt64) async throws -> Void = { nanoseconds in
+            try await Task.sleep(nanoseconds: nanoseconds)
+        },
+        monotonicNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        transport: @escaping @Sendable (URLSession, URLRequest) async throws -> (Data, URLResponse) = {
+            try await $0.data(for: $1)
+        },
+        deadlineSleep: @escaping @Sendable (UInt64) async throws -> Void = { nanoseconds in
+            try await Task.sleep(nanoseconds: nanoseconds)
         }
     ) async throws -> (Data, URLResponse) {
+        // `totalTimeout` is an operation-wide monotonic budget. A retry may use
+        // only what the prior attempt and its backoff left behind.
         let retriable: Set<URLError.Code> = [
             .timedOut, .networkConnectionLost, .dnsLookupFailed,
             .notConnectedToInternet, .cannotConnectToHost
         ]
         var lastError: Error?
         let maxAttempts = 3
+        let operationStartedAt = monotonicNow()
         for attempt in 0..<maxAttempts {
             let attemptNumber = attempt + 1
-            let startedAt = Date()
-            let bodyBytes = request.httpBody?.count ?? 0
-            dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) started timeout=\(String(format: "%.1f", request.timeoutInterval))s body_bytes=\(bodyBytes)")
+            let startedAt = monotonicNow()
+            let elapsedBeforeAttempt = max(0, startedAt - operationStartedAt)
+            var activeRequest = request
+            let activeResourceTimeout: TimeInterval
+            if let totalTimeout {
+                let remaining = totalTimeout - elapsedBeforeAttempt
+                guard remaining > 0 else { break }
+                let requestTimeout = request.timeoutInterval > 0
+                    ? request.timeoutInterval
+                    : Self.defaultDictationRequestTimeout
+                activeRequest.timeoutInterval = min(requestTimeout, remaining)
+                activeResourceTimeout = remaining
+            } else {
+                activeResourceTimeout = resourceTimeout(
+                    forRequestTimeout: activeRequest.timeoutInterval
+                )
+            }
+            let bodyBytes = activeRequest.httpBody?.count ?? 0
+            dlog(
+                "transcription http attempt=\(attemptNumber)/\(maxAttempts) started " +
+                "timeout=\(String(format: "%.1f", activeRequest.timeoutInterval))s " +
+                "resource_timeout=\(String(format: "%.1f", activeResourceTimeout))s " +
+                "body_bytes=\(bodyBytes)"
+            )
 
             let activeSession: URLSession
             let ownsSession: Bool
@@ -101,7 +139,10 @@ public struct OpenAITranscriber {
                 activeSession = session
                 ownsSession = false
             } else {
-                activeSession = makeEphemeralSession(timeout: request.timeoutInterval)
+                activeSession = makeEphemeralSession(
+                    requestTimeout: activeRequest.timeoutInterval,
+                    resourceTimeout: activeResourceTimeout
+                )
                 ownsSession = true
             }
             defer {
@@ -111,40 +152,154 @@ public struct OpenAITranscriber {
             }
 
             do {
-                let result = try await activeSession.data(for: request)
+                let result = try await data(
+                    for: activeRequest,
+                    using: activeSession,
+                    deadline: activeResourceTimeout,
+                    transport: transport,
+                    deadlineSleep: deadlineSleep
+                )
+                let elapsed = max(0, monotonicNow() - startedAt)
                 let status = (result.1 as? HTTPURLResponse)?.statusCode ?? -1
-                dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) completed status=\(status) elapsed=\(formatElapsed(since: startedAt))s")
+                dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) completed status=\(status) elapsed=\(formatElapsed(elapsed))s")
                 return result
             } catch let urlError as URLError where retriable.contains(urlError.code) {
                 lastError = urlError
+                let finishedAt = monotonicNow()
+                let attemptElapsed = max(0, finishedAt - startedAt)
+                let totalElapsed = max(0, finishedAt - operationStartedAt)
                 if attempt < maxAttempts - 1 {
                     let backoff = retryDelayNanoseconds(attempt)
-                    dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) retryable_error=\(urlError.code.rawValue) elapsed=\(formatElapsed(since: startedAt))s backoff=\(String(format: "%.3f", Double(backoff) / 1_000_000_000.0))s")
+                    let backoffSeconds = Double(backoff) / 1_000_000_000.0
+                    if let totalTimeout, totalElapsed + backoffSeconds >= totalTimeout {
+                        dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) deadline_exhausted retryable_error=\(urlError.code.rawValue) elapsed=\(formatElapsed(attemptElapsed))s total=\(formatElapsed(totalElapsed))s")
+                        break
+                    }
+                    dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) retryable_error=\(urlError.code.rawValue) elapsed=\(formatElapsed(attemptElapsed))s backoff=\(String(format: "%.3f", backoffSeconds))s")
                     if backoff > 0 {
-                        await sleep(backoff)
+                        try await sleep(backoff)
+                        try Task.checkCancellation()
                     }
                 } else {
-                    dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) exhausted retryable_error=\(urlError.code.rawValue) elapsed=\(formatElapsed(since: startedAt))s")
+                    dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) exhausted retryable_error=\(urlError.code.rawValue) elapsed=\(formatElapsed(attemptElapsed))s")
                 }
             } catch {
-                dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) failed error=\(error.localizedDescription) elapsed=\(formatElapsed(since: startedAt))s")
+                let elapsed = max(0, monotonicNow() - startedAt)
+                dlog("transcription http attempt=\(attemptNumber)/\(maxAttempts) failed error=\(error.localizedDescription) elapsed=\(formatElapsed(elapsed))s")
                 throw error
             }
         }
         throw lastError ?? URLError(.timedOut)
     }
 
-    private static func makeEphemeralSession(timeout: TimeInterval) -> URLSession {
+    private struct TransportResult: @unchecked Sendable {
+        let data: Data
+        let response: URLResponse
+    }
+
+    private static func data(
+        for request: URLRequest,
+        using session: URLSession,
+        deadline: TimeInterval,
+        transport: @escaping @Sendable (URLSession, URLRequest) async throws -> (Data, URLResponse),
+        deadlineSleep: @escaping @Sendable (UInt64) async throws -> Void
+    ) async throws -> (Data, URLResponse) {
+        guard deadline.isFinite, deadline > 0 else { throw URLError(.timedOut) }
+        // Keep the floating-point conversion comfortably within UInt64 even
+        // for a nonsensically large injected timeout.
+        let maximumSeconds = Double(Int64.max) / 1_000_000_000.0
+        let nanoseconds = UInt64(min(deadline, maximumSeconds) * 1_000_000_000.0)
+
+        return try await withThrowingTaskGroup(of: TransportResult.self) { group in
+            group.addTask {
+                let (data, response) = try await transport(session, request)
+                return TransportResult(data: data, response: response)
+            }
+            group.addTask {
+                try await deadlineSleep(nanoseconds)
+                try Task.checkCancellation()
+                throw URLError(.timedOut)
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw URLError(.timedOut) }
+            return (result.data, result.response)
+        }
+    }
+
+    private static func makeEphemeralSession(
+        requestTimeout: TimeInterval,
+        resourceTimeout: TimeInterval
+    ) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
-        let requestTimeout = timeout > 0 ? timeout : Self.defaultDictationRequestTimeout
+        let requestTimeout = requestTimeout > 0
+            ? requestTimeout
+            : Self.defaultDictationRequestTimeout
         config.waitsForConnectivity = false
         config.timeoutIntervalForRequest = requestTimeout
-        config.timeoutIntervalForResource = requestTimeout + 5.0
+        config.timeoutIntervalForResource = max(resourceTimeout, 0.001)
         return URLSession(configuration: config)
     }
 
+    private static func dictationRequestTimeout(
+        forWAV wav: Data,
+        baseTimeout: TimeInterval
+    ) -> TimeInterval {
+        let floor = baseTimeout > 0 ? baseTimeout : Self.defaultDictationRequestTimeout
+        guard let duration = wavDurationSeconds(wav) else {
+            return floor
+        }
+        let durationScaledTimeout = Self.defaultDictationRequestTimeout + duration * 0.25
+        return max(floor, min(Self.maximumDictationRequestTimeout, durationScaledTimeout))
+    }
+
+    private static func resourceTimeout(forRequestTimeout requestTimeout: TimeInterval) -> TimeInterval {
+        let requestTimeout = requestTimeout > 0 ? requestTimeout : Self.defaultDictationRequestTimeout
+        return requestTimeout + Self.dictationResourceTimeoutPadding
+    }
+
+    private static func wavDurationSeconds(_ wav: Data) -> Double? {
+        let headerSize = 44
+        guard wav.count >= headerSize else { return nil }
+        guard
+            wavMatchesASCII(wav, "RIFF", at: 0),
+            wavMatchesASCII(wav, "WAVE", at: 8),
+            let byteRate = littleEndianUInt32(wav, at: 28),
+            byteRate > 0,
+            let declaredDataBytes = littleEndianUInt32(wav, at: 40)
+        else { return nil }
+
+        let availableDataBytes = max(0, wav.count - headerSize)
+        let headerDataBytes = Int(declaredDataBytes)
+        let dataBytes = headerDataBytes > 0
+            ? min(headerDataBytes, availableDataBytes)
+            : availableDataBytes
+        guard dataBytes > 0 else { return nil }
+        return Double(dataBytes) / Double(byteRate)
+    }
+
+    private static func wavMatchesASCII(_ data: Data, _ value: String, at offset: Int) -> Bool {
+        let bytes = Array(value.utf8)
+        guard offset >= 0, offset + bytes.count <= data.count else { return false }
+        for (index, byte) in bytes.enumerated() where data[offset + index] != byte {
+            return false
+        }
+        return true
+    }
+
+    private static func littleEndianUInt32(_ data: Data, at offset: Int) -> UInt32? {
+        guard offset >= 0, offset + 4 <= data.count else { return nil }
+        return UInt32(data[offset])
+            | (UInt32(data[offset + 1]) << 8)
+            | (UInt32(data[offset + 2]) << 16)
+            | (UInt32(data[offset + 3]) << 24)
+    }
+
     private static func formatElapsed(since startedAt: Date) -> String {
-        String(format: "%.3f", Date().timeIntervalSince(startedAt))
+        formatElapsed(Date().timeIntervalSince(startedAt))
+    }
+
+    private static func formatElapsed(_ elapsed: TimeInterval) -> String {
+        String(format: "%.3f", max(0, elapsed))
     }
 
     private struct WhisperVerboseResponse: Decodable {
