@@ -36,12 +36,40 @@ public extension Notification.Name {
 public final class DictationHistoryStore {
     public static let shared = DictationHistoryStore()
 
+    private enum ReadResult {
+        case success([DictationEntry])
+        case failure
+    }
+
+    private struct ReadCache {
+        let data: Data
+        let result: ReadResult
+    }
+
     public let fileURL: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private let log: (String) -> Void
     private let queue = DispatchQueue(label: "vox.dictation-history")
+    /// Accessed only from `queue` so decoded entries and failure state stay
+    /// consistent with the exact file bytes that produced them.
+    private var readCache: ReadCache?
 
-    public init(fileURL: URL = DictationHistoryStore.defaultURL()) {
+    public convenience init(fileURL: URL = DictationHistoryStore.defaultURL()) {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.init(
+            fileURL: fileURL,
+            decoder: decoder,
+            log: { message in dlog(message) }
+        )
+    }
+
+    init(
+        fileURL: URL,
+        decoder: JSONDecoder,
+        log: @escaping (String) -> Void
+    ) {
         self.fileURL = fileURL
         try? FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
@@ -51,9 +79,8 @@ public final class DictationHistoryStore {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         self.encoder = encoder
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
         self.decoder = decoder
+        self.log = log
     }
 
     public static func defaultURL() -> URL {
@@ -66,20 +93,26 @@ public final class DictationHistoryStore {
     }
 
     public func list() -> [DictationEntry] {
-        queue.sync { readAll() }
+        queue.sync {
+            guard case .success(let entries) = readAll() else { return [] }
+            return entries
+        }
     }
 
     public func last() -> DictationEntry? {
-        queue.sync { readAll().last }
+        queue.sync {
+            guard case .success(let entries) = readAll() else { return nil }
+            return entries.last
+        }
     }
 
     public func record(_ entry: DictationEntry) {
         queue.async { [weak self] in
             guard let self else { return }
-            var entries = self.readAll()
+            guard case .success(var entries) = self.readAll() else { return }
             entries.append(entry)
             entries = self.applyRetention(entries)
-            self.writeAll(entries)
+            guard self.writeAll(entries) else { return }
             DispatchQueue.main.async {
                 NotificationCenter.default.post(
                     name: .dictationHistoryDidChange, object: nil
@@ -91,7 +124,7 @@ public final class DictationHistoryStore {
     public func clear() {
         queue.async { [weak self] in
             guard let self else { return }
-            self.writeAll([])
+            guard self.writeAll([]) else { return }
             DispatchQueue.main.async {
                 NotificationCenter.default.post(
                     name: .dictationHistoryDidChange, object: nil
@@ -103,19 +136,52 @@ public final class DictationHistoryStore {
     public func purgeOlderThan(_ date: Date) {
         queue.async { [weak self] in
             guard let self else { return }
-            let kept = self.readAll().filter { $0.timestamp >= date }
+            guard case .success(let entries) = self.readAll() else { return }
+            let kept = entries.filter { $0.timestamp >= date }
             self.writeAll(kept)
         }
     }
 
-    private func readAll() -> [DictationEntry] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
-        return (try? decoder.decode([DictationEntry].self, from: data)) ?? []
+    private func readAll() -> ReadResult {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            readCache = nil
+            return .success([])
+        }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            if let readCache, readCache.data == data {
+                return readCache.result
+            }
+            do {
+                let result = ReadResult.success(
+                    try decoder.decode([DictationEntry].self, from: data)
+                )
+                readCache = ReadCache(data: data, result: result)
+                return result
+            } catch {
+                log("DictationHistoryStore decode failed; preserving existing file: \(error)")
+                let result = ReadResult.failure
+                readCache = ReadCache(data: data, result: result)
+                return result
+            }
+        } catch {
+            readCache = nil
+            log("DictationHistoryStore read failed; preserving existing file: \(error)")
+            return .failure
+        }
     }
 
-    private func writeAll(_ entries: [DictationEntry]) {
-        guard let data = try? encoder.encode(entries) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+    @discardableResult
+    private func writeAll(_ entries: [DictationEntry]) -> Bool {
+        do {
+            let data = try encoder.encode(entries)
+            try data.write(to: fileURL, options: .atomic)
+            readCache = ReadCache(data: data, result: .success(entries))
+            return true
+        } catch {
+            log("DictationHistoryStore write failed: \(error)")
+            return false
+        }
     }
 
     private func applyRetention(_ entries: [DictationEntry]) -> [DictationEntry] {

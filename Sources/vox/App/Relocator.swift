@@ -45,7 +45,7 @@ enum Relocator {
         cfg.activates = true
         NSWorkspace.shared.openApplication(at: destURL, configuration: cfg) { _, _ in
             if isInDMG, let volumeRoot = dmgMountPoint(forBundlePath: currentPath) {
-                try? NSWorkspace.shared.unmountAndEjectDevice(atPath: volumeRoot)
+                NSWorkspace.shared.unmountAndEjectDevice(atPath: volumeRoot)
             }
             DispatchQueue.main.async { NSApp.terminate(nil) }
         }
@@ -73,11 +73,7 @@ enum Relocator {
     /// AppleScript-based copy with admin privileges. Triggers Touch ID / password prompt.
     /// Returns false if the user cancelled or the copy errored (alert is shown).
     private static func escalatedCopy(from src: String, to dst: String) -> Bool {
-        let escSrc = src.replacingOccurrences(of: "\"", with: "\\\"")
-        let escDst = dst.replacingOccurrences(of: "\"", with: "\\\"")
-        let script = """
-        do shell script "rm -rf \\"\(escDst)\\" && /bin/cp -R \\"\(escSrc)\\" \\"\(escDst)\\"" with administrator privileges
-        """
+        guard let script = escalatedCopyScript(from: src, to: dst) else { return false }
         var errorInfo: NSDictionary?
         let appleScript = NSAppleScript(source: script)
         _ = appleScript?.executeAndReturnError(&errorInfo)
@@ -93,6 +89,31 @@ enum Relocator {
             return false
         }
         return true
+    }
+
+    /// Builds the privileged AppleScript without ever interpolating an untrusted
+    /// path into the shell command. `quoted form of` performs the shell escaping;
+    /// this helper only escapes the surrounding AppleScript string literals.
+    static func escalatedCopyScript(from src: String, to dst: String) -> String? {
+        guard src.hasPrefix("/"), dst.hasPrefix("/") else { return nil }
+        guard src.rangeOfCharacter(from: .controlCharacters) == nil,
+              dst.rangeOfCharacter(from: .controlCharacters) == nil
+        else { return nil }
+
+        let sourceLiteral = appleScriptStringLiteral(src)
+        let destinationLiteral = appleScriptStringLiteral(dst)
+        return """
+        set sourcePath to \(sourceLiteral)
+        set destinationPath to \(destinationLiteral)
+        do shell script ("/bin/rm -rf " & quoted form of destinationPath & " && /bin/cp -R " & quoted form of sourcePath & " " & quoted form of destinationPath) with administrator privileges
+        """
+    }
+
+    private static func appleScriptStringLiteral(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     private static func dmgMountPoint(forBundlePath path: String) -> String? {

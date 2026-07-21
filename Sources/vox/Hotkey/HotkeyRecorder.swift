@@ -10,7 +10,11 @@ public final class HotkeyRecorder {
     /// reads this and suppresses normal hotkey dispatch so that pressing the existing
     /// meeting/record/modeToggle binding while configuring a new one in Settings doesn't
     /// trigger the bound action and steal the keystroke.
-    public private(set) static var isCapturing: Bool = false
+    public static var isCapturing: Bool {
+        captureLock.lock()
+        defer { captureLock.unlock() }
+        return captureState
+    }
 
     private var monitor: Any?
     private var completion: Completion?
@@ -25,14 +29,28 @@ public final class HotkeyRecorder {
     /// If true, we will not interpret a flag-empty event as "user released a single
     /// modifier" — only as "abandoned, wait for further input or timeout."
     private var everSawMultiMod = false
+    private static let captureLock = NSLock()
+    nonisolated(unsafe) private static var captureState = false
 
     public init(existingTriggerMode: TriggerMode) {
         self.existingTriggerMode = existingTriggerMode
     }
 
+    deinit {
+        timeoutTimer?.invalidate()
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if completion != nil {
+            Self.releaseCapture()
+        }
+    }
+
     public func start(completion: @escaping Completion) -> Bool {
+        guard self.completion == nil, monitor == nil, Self.claimCapture() else {
+            return false
+        }
         self.completion = completion
-        Self.isCapturing = true
         dlog("HotkeyRecorder start")
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self else { return event }
@@ -120,10 +138,24 @@ public final class HotkeyRecorder {
             NSEvent.removeMonitor(m)
         }
         monitor = nil
-        Self.isCapturing = false
+        Self.releaseCapture()
         let cb = completion
         completion = nil
         dlog("HotkeyRecorder finish -> \(hotkey.map { "\($0)" } ?? "nil")")
         cb?(hotkey)
+    }
+
+    private static func claimCapture() -> Bool {
+        captureLock.lock()
+        defer { captureLock.unlock() }
+        guard !captureState else { return false }
+        captureState = true
+        return true
+    }
+
+    private static func releaseCapture() {
+        captureLock.lock()
+        captureState = false
+        captureLock.unlock()
     }
 }

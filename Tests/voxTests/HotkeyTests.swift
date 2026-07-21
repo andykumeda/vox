@@ -62,7 +62,6 @@ final class HotkeyTests: XCTestCase {
     func testDefaultsAreValid() {
         XCTAssertTrue(Hotkey.defaultRecord.isValid)
         XCTAssertTrue(Hotkey.defaultModeToggle.isValid)
-        XCTAssertTrue(Hotkey.defaultPaste.isValid)
         XCTAssertTrue(Hotkey.defaultPasteLast.isValid)
     }
 

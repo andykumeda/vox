@@ -64,13 +64,6 @@ public extension Hotkey {
         enabled: true
     )
 
-    static let defaultPaste = Hotkey(
-        key: .keycode(UInt16(kVK_ANSI_V)),
-        modifiers: [.command],
-        triggerMode: .tapToggle,
-        enabled: true
-    )
-
     static let defaultMeeting = Hotkey(
         key: .keycode(UInt16(kVK_ANSI_M)),
         modifiers: [.command, .shift],
