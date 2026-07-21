@@ -13,7 +13,8 @@ Baseline metrics are emitted by the test at runtime in this format:
 
 ## Merge-blocking thresholds
 
-Meeting-feature pull requests are blocked when any of these are violated:
+All pull requests and pushes to `main` are blocked when any of these are
+violated:
 
 - Latency budget: `latency_ms <= 50.0`
 - Failure-rate budget: `failure_rate <= 0.0`
@@ -23,5 +24,6 @@ These thresholds are enforced directly in `DictationRegressionTests` so any regr
 
 ## CI and release gating
 
-- `.github/workflows/dictation-regression.yml` runs dictation regression on every PR (including meeting-feature PRs).
+- `.github/workflows/dictation-regression.yml` runs dictation regression on
+  every pull request and push to `main`.
 - `.github/workflows/release-gate.yml` reruns dictation regression for release tags (`v*`) and fails release quality gates when regressions are present, even if other meeting tests pass.

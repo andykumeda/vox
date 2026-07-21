@@ -1,6 +1,7 @@
 # Remote Dictation Status
 
-Last updated: 2026-06-23 after adding a Parsec remote-viewer paste target.
+Last reviewed: 2026-07-20. No remote insertion behavior changed in the July
+latency/audit work.
 
 ## Current Status
 
@@ -41,12 +42,12 @@ The user has completed the remote testing for this finalization. If a future
 failure is reported from a remote machine, local logs in this checkout may not
 show that failing session.
 
-## Known User Observations
+## Historical User Observations
 
-- Current issue: in Screen Sharing/VNC, iMessage insertion can look clean, but
+- Earlier issue: in Screen Sharing/VNC, iMessage insertion could look clean, but
   remote apps including Wave and Notepad can receive the previous recording
   after Vox writes a newer transcript to the local clipboard.
-- Current issue: Parsec was treated as `.standard`, so Vox used the immediate
+- Earlier issue: Parsec was treated as `.standard`, so Vox used the immediate
   local paste path and could restore the prior clipboard instead of using a
   remote-client insertion path.
 - Earlier issue: Vox inserted current text but lowercased the first letter and

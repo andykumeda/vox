@@ -10,7 +10,8 @@ will surface new releases. To check on demand:
 
 1. Click the menu-bar Vox icon → **Check for Updates…**.
 2. Follow the prompt to download + install. Vox quits and relaunches itself.
-3. **Re-grant permissions** in System Settings → Privacy & Security:
+3. If any integration stops working, **re-grant permissions** in System
+   Settings → Privacy & Security:
    - **Input Monitoring** → enable Vox
    - **Accessibility** → enable Vox
    - **Microphone** → enable Vox
@@ -20,27 +21,27 @@ Your API key, hotkeys, dictionary, and settings persist — they're stored
 in the Keychain and `~/Library/Preferences/com.andykumeda.vox.plist`,
 both keyed on bundle ID, not signature.
 
-## Why permissions break on every update
+## Why an update can require permissions again
 
-The release `Vox.dmg` is **ad-hoc signed** — there is no paid Apple
-Developer ID in the release pipeline yet. macOS TCC (the privacy
-database that gates Microphone, Accessibility, Input Monitoring, and
-Screen Recording) keys its grants on the bundle's `cdhash`, which
-changes on every rebuild for ad-hoc-signed apps.
+Vox is not yet signed and notarized with an Apple Developer ID. Development and
+release builds use the local self-signed `vox-dev` identity when it is available
+and fall back to ad-hoc signing when it is not. macOS can invalidate TCC grants
+when the installed bundle's signing requirement changes, when an ad-hoc build's
+code hash changes, or after an OS/security update.
 
-Result: each new release looks like a "different" app to TCC, so prior
-grants do not transfer. The app launches normally but hotkeys do not
-fire and no audio is captured until you re-grant.
+Result: permissions may survive an update, but callers must be prepared to
+re-grant them. Vox can still launch while hotkeys, audio, paste, or meeting
+capture remain unavailable.
 
-You can confirm a build is ad-hoc signed with:
+Inspect the installed requirement with:
 
 ```sh
-codesign -dv /Applications/Vox.app 2>&1 | grep TeamIdentifier
-# TeamIdentifier=not set    ← ad-hoc
+codesign -d -r- /Applications/Vox.app 2>&1
 ```
 
-A future release with a Developer ID certificate will keep `cdhash`
-stable and TCC grants will persist across updates.
+`TeamIdentifier=not set` alone does not distinguish an ad-hoc signature from
+Vox's self-signed development certificate. A future Developer ID-notarized
+release is the durable fix for update trust and permission churn.
 
 ## Manual fallback (if Sparkle fails)
 
@@ -57,7 +58,7 @@ If any of those break, fall back to manual install.
 1. Quit Vox (menu bar icon → **Quit Vox**).
 2. Download the latest `Vox.dmg` from
    [Releases](https://github.com/andykumeda/vox/releases/latest).
-3. Open the DMG, drag `Vox.app` into `/Applications` (or `~/Applications`),
+3. Open the DMG, drag `Vox.app` into `/Applications`,
    replacing the previous copy.
 4. Eject the DMG, launch Vox.
 5. Re-grant permissions (same list as above).
@@ -73,13 +74,13 @@ gh release download --repo andykumeda/vox --pattern Vox.dmg --dir ~/Downloads --
 
 # 3. Mount, replace, eject
 hdiutil attach ~/Downloads/Vox.dmg -nobrowse
-rm -rf ~/Applications/Vox.app           # or /Applications/Vox.app
-cp -R "/Volumes/Vox/Vox.app" ~/Applications/
+rm -rf /Applications/Vox.app
+ditto "/Volumes/Vox/Vox.app" /Applications/Vox.app
 hdiutil detach /Volumes/Vox
 
 # 4. Strip Gatekeeper quarantine and launch
-xattr -dr com.apple.quarantine ~/Applications/Vox.app
-open ~/Applications/Vox.app
+xattr -dr com.apple.quarantine /Applications/Vox.app
+open /Applications/Vox.app
 
 # 5. Re-grant permissions
 open "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"      # Input Monitoring
@@ -96,7 +97,8 @@ exists), adjust the path or eject the older one first with
 
 ```sh
 # Bundle version
-defaults read /Applications/Vox.app/Contents/Info.plist CFBundleShortVersionString
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+  /Applications/Vox.app/Contents/Info.plist
 
 # Process is the new bundle (not a stale one)
 pgrep -fl vox
@@ -145,7 +147,7 @@ a stale grant against an old `cdhash`.
 Keyboard → "Press 🌐 key to" → set to *Do Nothing*. Otherwise macOS
 intercepts Fn before Vox sees it.
 
-**You moved Vox.app to a new location.** TCC grants are keyed on
-`cdhash`, not path, so moving the bundle is fine. But LaunchServices may
-still launch the old path if it remembers it — use
-`open /full/path/to/Vox.app` to be explicit.
+**You moved Vox.app to a new location.** Keep the development and release
+installation at `/Applications/Vox.app`. LaunchServices and the per-user
+LaunchAgent can otherwise continue referring to the prior bundle. Relaunch with
+`open /Applications/Vox.app` or restart the LaunchAgent explicitly.

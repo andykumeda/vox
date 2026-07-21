@@ -17,7 +17,10 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
 
 - Default Swift check: `swift test`.
 - Dictation regression check: `./scripts/run-dictation-regression.sh`.
-- App bundle check for local use: `./scripts/build-app.sh`, then relaunch `dist/Vox.app`.
+- App bundle check for local use: `./scripts/build-app.sh`, then restart the
+  installed app with
+  `launchctl kickstart -k "gui/$(id -u)/com.andykumeda.vox"` (or use
+  `open /Applications/Vox.app` before its LaunchAgent exists).
 - Release build/signing: `./scripts/make-dmg.sh` plus Sparkle `sign_update`; update `docs/appcast.xml` only when cutting a release.
 
 ## Documentation
@@ -34,6 +37,9 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
 
 ## Release Notes
 
-- Sparkle release signing must happen on this Mac, where the EdDSA private key is installed.
-- Ad-hoc-signed updates can require re-granting Mic, Input Monitoring, Accessibility, and Screen Recording permissions.
+- Sparkle release signing must happen on the Mac mini (`AKsMini`), where the
+  EdDSA private key is installed. This remains true when an agent is running
+  from a MacBook clone or Codex Desktop is displaying a remote mini workspace.
+- Self-signed/non-notarized updates can require re-granting Mic, Input
+  Monitoring, Accessibility, and Screen Recording permissions.
 - Do not bump `Resources/Info.plist`, tag, edit `docs/appcast.xml`, or publish a DMG unless explicitly doing a release.

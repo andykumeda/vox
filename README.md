@@ -7,8 +7,11 @@ Default transcription model is `gpt-4o-transcribe` for better dictation accuracy
 If text appears slowly after you release Fn, check `~/Library/Logs/vox.log`.
 Vox logs `transcription http attempt` and `dictation timing` lines so you can
 tell whether the wait is the OpenAI transcription request, Smart Cleanup, or
-paste insertion. Holding Option while pressing Fn skips Smart Cleanup for that
-recording.
+paste insertion. Long dictations get a larger transcription timeout budget than
+short clips; the attempt log includes both the request timeout and the remaining
+hard deadline shared by all retry attempts. Holding Option while pressing Fn
+skips Smart Cleanup for that recording. Transcript text is not written to the
+log; only character and word counts are recorded.
 
 ## Modes
 
@@ -22,7 +25,8 @@ Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`,
 ## Requirements
 
 - macOS 13+ on Apple Silicon (M1/M2/M3/M4).
-- Xcode 16+ command-line tools (`xcode-select --install`) — ships with Swift 6.
+- Full Xcode 16+ selected with `xcode-select`. The standalone Command Line
+  Tools package is not sufficient because it omits the SwiftUI macro plugin.
 - An [OpenAI API key](https://platform.openai.com/api-keys).
 - `git` (preinstalled on macOS).
 - *Watch out:* if Homebrew OpenSSL 3 is on `PATH` ahead of `/usr/bin/openssl`, `create-dev-cert.sh` may fail with `MAC verification failed` during the PKCS#12 import. The script pins `/usr/bin/openssl` internally; if you still see it, run `which openssl`.
@@ -32,13 +36,18 @@ Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`,
 End-to-end from a fresh Mac:
 
 ```sh
-xcode-select --install                          # if not already installed
+# Install Xcode from the App Store, launch it once, then select it:
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 git clone https://github.com/andykumeda/vox.git
 cd vox
 ./scripts/setup.sh
 ```
 
-`setup.sh` is idempotent. Preflight checks (Xcode tools, Swift, `/usr/bin/openssl`, `security` CLI, arch), creates the `vox-dev` self-signed identity if missing (prompts for **login keychain password**), builds, kills any old running Vox, launches the new build, prints the permission-grant checklist.
+`setup.sh` is idempotent. It verifies a complete Xcode toolchain (including
+SwiftUI macros), Swift, `/usr/bin/openssl`, the `security` CLI, and architecture;
+creates the `vox-dev` self-signed identity if missing (prompts for **login
+keychain password**); builds, installs, launches, and prints the permission
+checklist.
 
 Then:
 
@@ -46,9 +55,49 @@ Then:
 2. Click the menu-bar Vox icon → **Settings** → paste OpenAI API key → **Save** → click **Always Allow** on the keychain prompt.
 3. Hold **Fn**, speak, release.
 
+## Developing on two Macs
+
+Keep an independent local clone on each Mac rather than placing a live Git
+working tree in iCloud Drive. SwiftPM's `.build` tree, Git metadata, symlinks,
+and code-signing artifacts should stay on a local filesystem. Use Git to hand
+work between machines, and edit a branch on only one Mac at a time:
+
+```sh
+# Before switching Macs
+git status
+swift test
+git push
+
+# On the other Mac
+git fetch origin
+git switch <branch>
+git pull --ff-only
+```
+
+Finish the required live smoke before committing paste, remote insertion, TCC,
+meeting-capture, or Sparkle changes. Avoid switching machines mid-change for
+those surfaces. If an unavoidable uncommitted handoff is needed, transfer only
+the source diff/untracked source files; never synchronize `.git`, `.build`,
+`dist`, logs, or credentials through a cloud drive.
+
+Run `./scripts/setup.sh` once on each Mac so each has its own persistent local
+`vox-dev` identity and TCC grants. Thereafter, each Mac should install builds it
+signed locally. Do not alternate differently signed development bundles on one
+Mac. Official DMGs and Sparkle signatures are produced only on the Mac mini
+(`AKsMini`), where the Sparkle EdDSA key is installed.
+
+Codex Desktop may run on one Mac while its project workspace executes on the
+other. Confirm the execution host with `hostname` before building, installing,
+or interpreting paths: commands affect the workspace host, not necessarily the
+Mac displaying the Codex window.
+
 ## Updating
 
-Vox ships in-app updates via **Sparkle**. Click the menu-bar icon → **Check for Updates…**, or wait for the daily auto-check. Releases are ad-hoc-signed, so each update drops Microphone / Input Monitoring / Accessibility grants — re-grant in System Settings → Privacy & Security after Sparkle reinstalls. See [docs/UPDATING.md](docs/UPDATING.md) for the manual fallback.
+Vox ships in-app updates via **Sparkle**. Click the menu-bar icon → **Check for
+Updates…**, or wait for the daily auto-check. Releases are self-signed rather
+than Developer ID-notarized, so an update can require re-granting Microphone,
+Input Monitoring, Accessibility, and Screen Recording. See
+[docs/UPDATING.md](docs/UPDATING.md) for the manual fallback.
 
 ## Manual build
 
@@ -116,8 +165,8 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 ## Dictation troubleshooting
 
 - **Wrong transcription with delayed start/stop sounds** — check System Settings → Sound. If macOS has selected a Bluetooth speaker/headset as the default input, Vox will capture that low-bandwidth mic instead of your studio/USB mic. In `~/Library/Logs/vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` is a strong sign of this route. Re-select the intended mic, ideally a USB device at 48 kHz, and move output/system output off Bluetooth if the audible cues lag.
-- **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for `dictation timing`, `transcription request model=...`, `transcription api key read elapsed=...`, and `transcription http attempt` lines. A slow first dictation after relaunch can be Keychain warming; longer waits after that are usually the OpenAI transcription request, network path, or Smart Cleanup.
-- **Raw audio replay** — recent dictation WAVs are kept in `~/Library/Application Support/Vox/Recordings/` according to the configured audio-retention setting. Compare the saved WAV with the log's `raw=`, `cleaned=`, and `processed=` lines to separate capture problems from STT or cleanup problems.
+- **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for `dictation timing`, `transcription request model=...`, `transcription api key read elapsed=...`, and `transcription http attempt` lines. A slow first dictation after relaunch can be Keychain warming; longer waits after that are usually the OpenAI transcription request, network path, or Smart Cleanup. The `timeout=...` value scales up for longer WAVs. `resource_timeout=...` is the remaining hard deadline shared by the request and any retry, so retries cannot multiply a stalled request into a much longer wait.
+- **Raw audio replay** — recent dictation WAVs are kept in `~/Library/Application Support/Vox/Recordings/` according to the configured audio-retention setting. Replay the saved WAV and compare its duration with the log's `raw_chars/raw_words`, `cleaned_chars/cleaned_words`, and `processed_chars/processed_words` metrics to separate capture problems from STT or cleanup problems without putting transcript content in logs.
 
 ## Dictionary
 
@@ -204,7 +253,10 @@ Remote desktop apps need special paste handling. When Vox is running on the Mac 
 tail -f ~/Library/Logs/vox.log
 ```
 
-Lines: Fn press/release, AVAudioEngine state, WAV byte counts + RMS + duration, raw API response, post-processor output (text + suffixKeys + word count + cost estimate), hallucination-guard hits, meeting session lifecycle.
+Lines include Fn press/release, AVAudioEngine state, WAV byte counts/RMS/duration,
+request timing, transcript character/word counts, suffix-key counts, cost
+estimate, hallucination-guard metrics, and meeting lifecycle. Dictated text and
+meeting window titles are deliberately excluded from new log entries.
 
 ## Project layout
 
@@ -224,8 +276,8 @@ Sources/vox/
   Audio/                 AudioRecorder — AVAudioEngine → 16 kHz mono 16-bit WAV (streamed to disk)
   Context/               ContextDetector — NSWorkspace frontmost → prose/command
   Hotkey/                Hotkey, HotkeyMonitor (CGEventTap), HotkeyRecorder (NSEvent capture for Settings UI)
-  Meeting/               MeetingTranscriptionSession, MeetingMicCapture, ScreenCaptureKit system-audio tap, SilenceTrim, MeetingChunker, MeetingTranscriptStore, MeetingPreflight
-  STT/                   OpenAITranscriber, TranscriptionMode (per-mode prompt), hallucination guards
+  Meeting/               MeetingMicCapture, ScreenCaptureKit system-audio tap, SilenceTrim, MeetingPreflight
+  STT/                   OpenAITranscriber, MeetingTranscriptionSession, MeetingChunker, TranscriptionMode, hallucination guards
   Text/                  PostProcessor, NumberNormalizer, CleanupProcessor (LLM + triggers + verbatim/literal prefix), CleanupDictionaryProtection, TextInjector (paste + sendKey)
   Util/                  KeychainStore, SoundPlayer, AppSettings, UsageTracker, DictationHistoryStore, RecordingArchive, CleanupProfileStore, DictionaryStore + DictionaryMatcher, Log
 docs/
@@ -233,7 +285,7 @@ docs/
   UPDATING.md            Update procedure (auto + manual fallback)
   dictation-regression.md  Regression-suite policy + thresholds
   index.html             Pages landing
-Tests/voxTests/          330 unit tests covering text pipeline, hotkey, meeting, retention, history
+Tests/voxTests/          380 unit tests covering text pipeline, hotkey, meeting, retention, history
 ```
 
 ## Testing
@@ -252,7 +304,9 @@ See [docs/dictation-regression.md](docs/dictation-regression.md) for thresholds 
 
 ## Releasing
 
-The Sparkle EdDSA private key for signing updates lives **on the kumedaa Dev workstation** (this Mac). Releases must be cut from there.
+The Sparkle EdDSA private key for signing updates lives only on the Mac mini
+(`AKsMini`). Releases must be cut there, even when development happened on the
+MacBook.
 
 ```sh
 # 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist
@@ -287,7 +341,6 @@ After the first launch, macOS remembers the exemption.
 
 ## Roadmap (not yet)
 
-- Meeting summarization (TL;DR via gpt-4o-mini after each meeting transcript completes)
 - SSH-vs-local detection inside a terminal
 - Streaming transcription
 - Separate mode for code editors

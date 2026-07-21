@@ -24,13 +24,22 @@ if [[ "$(uname -m)" != "arm64" ]]; then
     yellow "Build may succeed but Hotkey/CGEventTap behavior is untested on Intel."
 fi
 
-if ! xcode-select -p >/dev/null 2>&1; then
-    red "Xcode command-line tools missing."
-    red "Run:  xcode-select --install"
-    red "Then re-run this script."
+if ! SELECTED_DEVELOPER_DIR="$(xcode-select -p 2>/dev/null)"; then
+    red "Xcode is not selected."
+    red "Install full Xcode from the App Store, launch it once, then run:"
+    red "  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
     exit 1
 fi
-green "✓ Xcode command-line tools present"
+
+SWIFTUI_MACRO="$SELECTED_DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib"
+if [[ ! -f "$SWIFTUI_MACRO" ]]; then
+    red "The selected developer directory is incomplete: $SELECTED_DEVELOPER_DIR"
+    red "Vox requires full Xcode; standalone Command Line Tools omit SwiftUIMacros."
+    red "Install/launch Xcode, then run:"
+    red "  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
+    exit 1
+fi
+green "✓ full Xcode toolchain selected ($SELECTED_DEVELOPER_DIR)"
 
 if ! command -v swift >/dev/null 2>&1; then
     red "swift not found on PATH."

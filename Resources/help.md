@@ -134,8 +134,11 @@ Settings → Hotkeys lets you rebind:
   `transcription api key read elapsed=...`, and `transcription http attempt`
   lines. A slow first dictation after relaunch can be Keychain warming; longer
   waits after that usually mean the OpenAI transcription request or network path
-  is slow. Smart Cleanup can add a smaller second wait. Hold Option while
+  is slow. The `timeout=...` value scales up for longer WAVs, and
+  `resource_timeout=...` is the remaining hard deadline shared by the request
+  and any retry. Smart Cleanup can add a smaller second wait. Hold Option while
   pressing Fn, or start with "verbatim", to skip Smart Cleanup for one recording.
+  Vox logs only transcript character/word counts, not the dictated text itself.
 - **Wrong transcription plus delayed start/stop sounds** — check System
   Settings → Sound. If macOS selected a Bluetooth speaker/headset as the default
   input, Vox captures that low-bandwidth mic instead of your intended USB/studio
