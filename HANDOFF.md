@@ -1,13 +1,12 @@
 # Vox Handoff
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 ## Current state
 
 - Project root: `/Users/andy/Dev/vox` on Mac mini `AKsMini`.
-- Branch/base: `main`, with four focused audit/latency/documentation commits on
-  top of `7877d45`. The commits are ready to push; the interactive MacBook
-  bootstrap remains incomplete.
+- Branch/base: `main` at `e93221e`, synchronized with `origin/main` and the
+  independent MacBook clone.
 - No version bump, tag, DMG, appcast edit, or release was made.
 - Installed mini bundle: `/Applications/Vox.app`, version `0.7.28` build `47`,
   executable UUID `28CC379D-B5DA-324F-9A9F-5F28E9B9E3A7` (`arm64`). Its
@@ -16,6 +15,9 @@ Last updated: 2026-07-20
   clone exists at `/Users/andy/Dev/vox` on the MacBook, with repository-local
   Git author configuration. Codex Desktop is displayed on the MacBook while
   this task's remote workspace executes on the mini.
+- MacBook `/Applications/Vox.app` is version `0.7.28` build `47`, signed by its
+  machine-local `vox-dev` identity, and supervised by the running
+  `com.andykumeda.vox` LaunchAgent.
 
 ## Reviewed changes
 
@@ -53,15 +55,19 @@ Last updated: 2026-07-20
 
 ## Two-Mac setup status
 
-- The MacBook has only `/Library/Developer/CommandLineTools`; a clean `swift
-  test` correctly fails because `SwiftUIMacros.StateMacro` is absent.
-- Xcode redownload was initiated in the MacBook App Store and paused at the
-  Apple Account sign-in sheet. The user must complete that credential step.
-- After Xcode installs: launch it once, select it with `sudo xcode-select -s
-  /Applications/Xcode.app/Contents/Developer`, then run `./scripts/setup.sh`
-  locally on the MacBook. The login-keychain password and TCC prompts require
-  direct user interaction.
-- The MacBook currently has no `vox-dev` identity and no installed Vox bundle.
+- The MacBook has Xcode 27.0 selected at
+  `/Applications/Xcode.app/Contents/Developer` and a valid machine-local
+  `vox-dev` signing identity (`8D0712F49BB55EAD8508CD3C7A0166F0898C20F2`).
+- `codesign --verify --deep --strict /Applications/Vox.app` passes and its
+  designated requirement is pinned to the MacBook identity.
+- OpenAI and Deepgram credentials are stored as separate login-keychain entries
+  for service `com.andykumeda.vox`; no credential values are in the repository.
+- After restart, MacBook logs confirm hotkey monitoring, Accessibility,
+  Microphone, and OpenAI key warmup (`has_key=true`). The user reports the app
+  otherwise working correctly. A live Deepgram meeting request was not run as
+  part of credential transfer.
+- Continue using Git push/pull between independent local clones. Do not place a
+  live working tree in iCloud Drive or another file-sync service.
 
 ## Signing caveat
 
@@ -78,10 +84,9 @@ Last updated: 2026-07-20
 
 ## Next steps
 
-1. Complete the MacBook App Store sign-in and Xcode installation.
-2. Run the MacBook's interactive `setup.sh`, grant Microphone, Input Monitoring,
-   Accessibility, and Screen Recording as needed, then smoke dictation/paste.
-3. Recreate or restore a persistent mini `vox-dev` identity interactively before
+1. Optionally live-smoke a Deepgram-backed meeting on the MacBook when that
+   provider is next used; key presence is verified but no paid API request was
+   made during setup.
+2. Recreate or restore a persistent mini `vox-dev` identity interactively before
    its next app build; rebuild and re-grant permissions once if the identity
    changes.
-4. Pull the committed source/docs into the MacBook clone after they are pushed.
