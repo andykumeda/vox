@@ -2,7 +2,7 @@ import XCTest
 @testable import vox
 
 final class MeetingPreflightTests: XCTestCase {
-    private var savedProvider: (@Sendable (MeetingCaptureBackend) -> MeetingBackendStatus)!
+    private var savedProvider: (@Sendable () -> MeetingBackendStatus)!
 
     override func setUp() {
         super.setUp()
@@ -32,7 +32,6 @@ final class MeetingPreflightTests: XCTestCase {
         let result = MeetingPreflight.gate(
             modeEnabled: false,
             consentAcknowledged: true,
-            backend: .systemAudio,
             hasAPIKey: true
         )
         assertFailure(result, equals: .modeDisabled)
@@ -42,7 +41,6 @@ final class MeetingPreflightTests: XCTestCase {
         let result = MeetingPreflight.gate(
             modeEnabled: true,
             consentAcknowledged: false,
-            backend: .systemAudio,
             hasAPIKey: true
         )
         assertFailure(result, equals: .consentRequired)
@@ -52,33 +50,30 @@ final class MeetingPreflightTests: XCTestCase {
         let result = MeetingPreflight.gate(
             modeEnabled: true,
             consentAcknowledged: true,
-            backend: .systemAudio,
             hasAPIKey: false
         )
         assertFailure(result, equals: .missingAPIKey)
     }
 
     func testGateDeniesWhenBackendUnavailable() {
-        MeetingPreflight.backendStatusProvider = { _ in
+        MeetingPreflight.backendStatusProvider = {
             MeetingBackendStatus(available: false, detail: "missing entitlement")
         }
         let result = MeetingPreflight.gate(
             modeEnabled: true,
             consentAcknowledged: true,
-            backend: .systemAudio,
             hasAPIKey: true
         )
         assertFailure(result, equals: .backendUnavailable(reason: "missing entitlement"))
     }
 
     func testGatePassesWhenAllCriteriaMet() {
-        MeetingPreflight.backendStatusProvider = { _ in
+        MeetingPreflight.backendStatusProvider = {
             MeetingBackendStatus(available: true, detail: "ready")
         }
         let result = MeetingPreflight.gate(
             modeEnabled: true,
             consentAcknowledged: true,
-            backend: .systemAudio,
             hasAPIKey: true
         )
         switch result {
@@ -87,9 +82,4 @@ final class MeetingPreflightTests: XCTestCase {
         }
     }
 
-    func testDefaultBackendStatusIsPendingImplementation() {
-        let status = MeetingBackendStatus.pendingImplementation
-        XCTAssertFalse(status.available)
-        XCTAssertTrue(status.detail.contains("M2"))
-    }
 }

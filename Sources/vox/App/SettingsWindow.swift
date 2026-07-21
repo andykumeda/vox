@@ -3,6 +3,33 @@ import Carbon.HIToolbox
 import CoreGraphics
 import SwiftUI
 
+struct RecordingStorageUsage: Equatable, Sendable {
+    let dictationBytes: UInt64
+    let meetingBytes: UInt64
+
+    static func load() async -> RecordingStorageUsage {
+        await Task.detached(priority: .utility) {
+            RecordingStorageUsage(
+                dictationBytes: RecordingArchive.diskBytes(),
+                meetingBytes: MeetingTranscriptStore().audioDiskBytes()
+            )
+        }.value
+    }
+
+    func formatted() -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return formatted { formatter.string(fromByteCount: $0) }
+    }
+
+    func formatted(_ formatBytes: (Int64) -> String) -> String {
+        let dictation = formatBytes(Int64(clamping: dictationBytes))
+        let meetings = formatBytes(Int64(clamping: meetingBytes))
+        return "On disk now: \(dictation) dictation, \(meetings) meetings."
+    }
+}
+
 struct SettingsView: View {
     @State private var apiKey: String = ""
     @State private var showKey = false
@@ -21,12 +48,12 @@ struct SettingsView: View {
     @State private var meetingConsent: Bool = AppSettings.meetingConsentAcknowledged
     @State private var autoShowMeetingPanel: Bool = AppSettings.autoShowMeetingPanel
     @State private var meetingSummaryEnabled: Bool = AppSettings.meetingSummaryEnabled
-    @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider(
-        AppSettings.meetingCaptureBackend
-    )
+    @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider()
     @State private var audioRetention: AudioRetention = AppSettings.audioRetention
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
+    @State private var storageUsageLine = "Calculating disk usage…"
+    @State private var isRefreshingStorageUsage = false
     let keychain: KeychainStore
     private let deepgramKeychain = KeychainStore(account: "deepgram-api-key")
     private let cleanupProfileStore = CleanupProfileStore.shared
@@ -214,9 +241,7 @@ struct SettingsView: View {
                         if newValue && !CGPreflightScreenCaptureAccess() {
                             _ = CGRequestScreenCaptureAccess()
                         }
-                        meetingBackendStatus = MeetingPreflight.backendStatusProvider(
-                            AppSettings.meetingCaptureBackend
-                        )
+                        meetingBackendStatus = MeetingPreflight.backendStatusProvider()
                     }
                 ))
                 Text("Adds Start/Stop Meeting Transcript actions to the menu bar. Off by default. Does not affect dictation.")
@@ -247,7 +272,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Toggle("I acknowledge meeting audio will be captured and sent to OpenAI", isOn: Binding(
+                    Toggle("I acknowledge meeting audio will be captured and sent to the selected transcription provider", isOn: Binding(
                         get: { meetingConsent },
                         set: { newValue in
                             meetingConsent = newValue
@@ -317,9 +342,21 @@ struct SettingsView: View {
                         NSWorkspace.shared.activateFileViewerSelecting([MeetingTranscriptStore.defaultRoot()])
                     }
                 }
-                Text(storageUsageLine)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(storageUsageLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if isRefreshingStorageUsage {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Calculating recordings storage")
+                    }
+                    Button("Refresh") {
+                        Task { await refreshStorageUsage() }
+                    }
+                    .controlSize(.small)
+                    .disabled(isRefreshingStorageUsage)
+                }
             }
 
             Divider()
@@ -478,8 +515,11 @@ struct SettingsView: View {
             meetingMode = AppSettings.meetingModeEnabled
             meetingConsent = AppSettings.meetingConsentAcknowledged
             meetingProvider = AppSettings.meetingProvider
-            meetingBackendStatus = MeetingPreflight.backendStatusProvider(AppSettings.meetingCaptureBackend)
+            meetingBackendStatus = MeetingPreflight.backendStatusProvider()
             audioRetention = AppSettings.audioRetention
+        }
+        .task {
+            await refreshStorageUsage()
         }
     }
 
@@ -533,13 +573,15 @@ struct SettingsView: View {
         }
     }
 
-    private var storageUsageLine: String {
-        let dict = RecordingArchive.diskBytes()
-        let meeting = MeetingTranscriptStore().audioDiskBytes()
-        let fmt = ByteCountFormatter()
-        fmt.allowedUnits = [.useMB, .useGB]
-        fmt.countStyle = .file
-        return "On disk now: \(fmt.string(fromByteCount: Int64(dict))) dictation, \(fmt.string(fromByteCount: Int64(meeting))) meetings."
+    @MainActor
+    private func refreshStorageUsage() async {
+        guard !isRefreshingStorageUsage else { return }
+        isRefreshingStorageUsage = true
+        defer { isRefreshingStorageUsage = false }
+
+        let usage = await RecordingStorageUsage.load()
+        guard !Task.isCancelled else { return }
+        storageUsageLine = usage.formatted()
     }
 }
 
@@ -680,7 +722,7 @@ struct HotkeyRecorderField: View {
         hint = nil
         let r = HotkeyRecorder(existingTriggerMode: hotkey.triggerMode)
         recorder = r
-        _ = r.start { [hotkey] result in
+        let started = r.start { [hotkey] result in
             isRecording = false
             recorder = nil
             if let captured = result, captured.isValid {
@@ -693,6 +735,11 @@ struct HotkeyRecorderField: View {
             } else if result != nil {
                 hint = "Combo needs at least one modifier."
             } // nil = cancelled / timeout, leave existing binding
+        }
+        if !started {
+            isRecording = false
+            recorder = nil
+            hint = "Another hotkey field is already listening."
         }
     }
 }

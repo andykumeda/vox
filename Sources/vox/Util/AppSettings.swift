@@ -49,17 +49,6 @@ public enum MeetingProvider: String, CaseIterable, Sendable {
     }
 }
 
-enum MeetingCaptureBackend: String, CaseIterable, Sendable {
-    /// macOS 13+ ScreenCaptureKit system-audio tap. Implementation deferred to M2.
-    case systemAudio = "systemAudio"
-
-    var displayName: String {
-        switch self {
-        case .systemAudio: return "System audio (ScreenCaptureKit)"
-        }
-    }
-}
-
 public enum DictationHistoryRetention: String, CaseIterable, Sendable {
     case forever
     case year
@@ -139,8 +128,6 @@ enum AppSettings {
     private static let smartCleanupKey = "smartCleanupEnabled"
     private static let meetingModeKey = "meetingModeEnabled"
     private static let meetingConsentKey = "meetingConsentAcknowledged"
-    private static let meetingBackendKey = "meetingCaptureBackend"
-    private static let meetingRetainAudioKey = "meetingRetainAudio"
     private static let autoShowMeetingPanelKey = "autoShowMeetingPanel"
     private static let meetingSummaryEnabledKey = "meetingSummaryEnabled"
     private static let meetingProviderKey = "meetingProvider"
@@ -214,22 +201,6 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: meetingConsentKey) }
     }
 
-    static var meetingCaptureBackend: MeetingCaptureBackend {
-        get {
-            if let raw = UserDefaults.standard.string(forKey: meetingBackendKey),
-               let b = MeetingCaptureBackend(rawValue: raw) {
-                return b
-            }
-            return .systemAudio
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: meetingBackendKey) }
-    }
-
-    static var meetingRetainAudio: Bool {
-        get { UserDefaults.standard.bool(forKey: meetingRetainAudioKey) }
-        set { UserDefaults.standard.set(newValue, forKey: meetingRetainAudioKey) }
-    }
-
     /// Auto-show the floating Meeting panel when a known meeting app
     /// (Teams, Zoom, Meet, Webex, Slack huddle, etc.) starts a call.
     /// Default OFF — user opts in. Recording is never auto-started.
@@ -292,7 +263,6 @@ enum AppSettings {
 
     private static let recordHotkeyKey = "recordHotkey"
     private static let modeToggleHotkeyKey = "modeToggleHotkey"
-    private static let pasteHotkeyKey = "pasteHotkey"
     private static let meetingHotkeyKey = "meetingHotkey"
     private static let pasteLastHotkeyKey = "pasteLastHotkey"
 
@@ -310,11 +280,6 @@ enum AppSettings {
             writeHotkey(newValue, forKey: modeToggleHotkeyKey)
             NotificationCenter.default.post(name: .modeToggleHotkeyChanged, object: nil)
         }
-    }
-
-    static var pasteHotkey: Hotkey {
-        get { readHotkey(forKey: pasteHotkeyKey) ?? .defaultPaste }
-        set { writeHotkey(newValue, forKey: pasteHotkeyKey) }
     }
 
     static var meetingHotkey: Hotkey {

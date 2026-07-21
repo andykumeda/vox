@@ -40,7 +40,10 @@ public final class MeetingTranscriptionSession {
         },
         provider: { AppSettings.meetingProvider },
         apiKey: { KeychainStore().read() },
-        retainAudio: { AppSettings.meetingRetainAudio },
+        deepgramAPIKey: { KeychainStore(account: "deepgram-api-key").read() },
+        // The shared audio-retention picker owns deletion. Keep meeting audio
+        // after transcription so replay/re-transcribe works until that sweep.
+        retainAudio: { true },
         summarize: { segments in
             try await MeetingSummarizer(
                 apiKeyProvider: { KeychainStore().read() }
@@ -57,10 +60,10 @@ public final class MeetingTranscriptionSession {
     private let transcribe: Transcribe
     private let deepgramTranscribe: DeepgramTranscribe?
     private let providerProvider: () -> MeetingProvider
-    private let apiKeyProvider: () -> String?
     private let retainAudioProvider: () -> Bool
     private let summarize: Summarize?
     private let summarizeEnabledProvider: () -> Bool
+    private let saveSession: (TranscriptSession) throws -> Void
     /// Preflight gate. Default calls `MeetingPreflight.gate` with live
     /// AppSettings; tests pass `{ .success(()) }` to bypass.
     private let preflight: () -> Result<Void, MeetingGateError>
@@ -75,13 +78,11 @@ public final class MeetingTranscriptionSession {
     private var session: TranscriptSession?
 
     public var activeSessionID: UUID? {
-        lock.lock(); defer { lock.unlock() }
-        return session?.id
+        withSessionLock { session?.id }
     }
 
     public var statusSnapshot: TranscriptSession.Status? {
-        lock.lock(); defer { lock.unlock() }
-        return session?.status
+        withSessionLock { session?.status }
     }
 
     public var isRecording: Bool {
@@ -107,10 +108,14 @@ public final class MeetingTranscriptionSession {
         deepgramTranscribe: DeepgramTranscribe? = nil,
         provider: @escaping () -> MeetingProvider = { .openai },
         apiKey: @escaping () -> String?,
+        deepgramAPIKey: @escaping () -> String? = {
+            KeychainStore(account: "deepgram-api-key").read()
+        },
         retainAudio: @escaping () -> Bool,
         summarize: Summarize? = nil,
         summarizeEnabled: @escaping () -> Bool = { false },
         preflight: (() -> Result<Void, MeetingGateError>)? = nil,
+        saveSession: ((TranscriptSession) throws -> Void)? = nil,
         backoffSchedule: [Double] = [1, 2, 4, 8, 16, 30]
     ) {
         self.store = store
@@ -143,18 +148,27 @@ public final class MeetingTranscriptionSession {
         self.transcribe = transcribe
         self.deepgramTranscribe = deepgramTranscribe
         self.providerProvider = provider
-        self.apiKeyProvider = apiKey
         self.retainAudioProvider = retainAudio
         self.summarize = summarize
         self.summarizeEnabledProvider = summarizeEnabled
+        self.saveSession = saveSession ?? { try store.save($0) }
         if let preflight = preflight {
             self.preflight = preflight
         } else {
-            // Capture the apiKey closure for the default preflight so the
-            // gate sees the same key the recorder will use.
-            let keyProvider = apiKey
+            // Resolve the selected provider at start time so the default gate
+            // checks the same credential that transcription will use.
+            let selectedProvider = provider
+            let openAIKeyProvider = apiKey
+            let deepgramKeyProvider = deepgramAPIKey
             self.preflight = {
-                let hasKey = (keyProvider()?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                let key: String?
+                switch selectedProvider() {
+                case .deepgram:
+                    key = deepgramKeyProvider()
+                case .openai:
+                    key = openAIKeyProvider()
+                }
+                let hasKey = (key?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
                 return MeetingPreflight.gate(hasAPIKey: hasKey)
             }
         }
@@ -164,7 +178,6 @@ public final class MeetingTranscriptionSession {
     public enum SessionError: Error, CustomStringConvertible {
         case alreadyActive
         case notRecording
-        case missingAPIKey
         case preflight(MeetingGateError)
         case recorderStartFailed(String)
 
@@ -172,7 +185,6 @@ public final class MeetingTranscriptionSession {
             switch self {
             case .alreadyActive: return "A meeting session is already active."
             case .notRecording: return "No active meeting session to stop."
-            case .missingAPIKey: return "OpenAI API key missing."
             case .preflight(let g): return g.userMessage
             case .recorderStartFailed(let r): return "Could not start meeting recorder: \(r)"
             }
@@ -187,15 +199,6 @@ public final class MeetingTranscriptionSession {
             throw SessionError.preflight(err)
         }
 
-        lock.lock()
-        if let existing = session {
-            switch existing.status {
-            case .recording, .chunking, .transcribing:
-                lock.unlock(); throw SessionError.alreadyActive
-            case .completed, .cancelled, .failed:
-                session = nil
-            }
-        }
         let id = UUID()
         let now = Date()
         let title = "Meeting \(Self.titleFormatter.string(from: now))"
@@ -204,10 +207,24 @@ public final class MeetingTranscriptionSession {
             status: .recording, chunksTotal: 0, chunksCompleted: 0,
             segments: [], audioRetained: retainAudioProvider()
         )
-        self.session = initial
-        lock.unlock()
+        try withSessionLock {
+            if let existing = session {
+                switch existing.status {
+                case .recording, .chunking, .transcribing:
+                    throw SessionError.alreadyActive
+                case .completed, .cancelled, .failed:
+                    break
+                }
+            }
+            session = initial
+        }
 
-        try store.save(initial)
+        do {
+            try saveSession(initial)
+        } catch {
+            clearSession(ifMatching: id)
+            throw error
+        }
 
         // Recorder lifecycle is wrapped so any failure clears the in-memory
         // session and persists the disk record as `.failed`. Without this
@@ -224,7 +241,7 @@ public final class MeetingTranscriptionSession {
                 s.endedAt = Date()
                 s.failureReason = "Recorder start failed: \(error)"
             }
-            lock.lock(); session = nil; lock.unlock()
+            clearSession(ifMatching: id)
             throw SessionError.recorderStartFailed(String(describing: error))
         }
 
@@ -256,15 +273,22 @@ public final class MeetingTranscriptionSession {
     }
 
     public func stop() async throws {
-        lock.lock()
-        guard var current = session, current.status == .recording else {
-            lock.unlock(); throw SessionError.notRecording
+        let current: TranscriptSession = try withSessionLock {
+            guard var current = session, current.status == .recording else {
+                throw SessionError.notRecording
+            }
+            current.status = .chunking
+            current.endedAt = Date()
+            session = current
+            return current
         }
-        current.status = .chunking
-        current.endedAt = Date()
-        self.session = current
-        lock.unlock()
-        try store.save(current)
+        do {
+            try saveSession(current)
+        } catch {
+            // The in-memory transition still prevents duplicate stop calls, but
+            // persistence must never block shutdown of the live capture.
+            dlog("Meeting chunking transition save failed; continuing recorder shutdown: \(error)")
+        }
 
         guard let system = self.systemRecorder else { throw SessionError.notRecording }
         let systemURL: URL
@@ -288,7 +312,7 @@ public final class MeetingTranscriptionSession {
                 s.status = .failed
                 s.failureReason = "Recorder stop failed: \(error)"
             }
-            lock.lock(); session = nil; lock.unlock()
+            clearSession(ifMatching: current.id)
             throw error
         }
         let systemFailureReason = system.lastFailureReason
@@ -407,7 +431,7 @@ public final class MeetingTranscriptionSession {
             do {
                 let chunks = try await chunker(prepped.url, dir)
                 streams.append((.remote, chunks, dir, prepped.shift, prepped.audibleDuration))
-            } catch let MeetingChunkerError.zeroDurationAsset {
+            } catch MeetingChunkerError.zeroDurationAsset {
                 dlog("System audio chunking: zero-duration asset")
             } catch {
                 dlog("System audio chunking failed: \(error)")
@@ -419,7 +443,7 @@ public final class MeetingTranscriptionSession {
             do {
                 let chunks = try await chunker(prepped.url, dir)
                 streams.append((.local, chunks, dir, prepped.shift, prepped.audibleDuration))
-            } catch let MeetingChunkerError.zeroDurationAsset {
+            } catch MeetingChunkerError.zeroDurationAsset {
                 dlog("Mic chunking: zero-duration asset")
             } catch {
                 dlog("Mic chunking failed: \(error)")
@@ -476,7 +500,14 @@ public final class MeetingTranscriptionSession {
                 let shifted: [TranscriptSegment] = deCascaded.compactMap { seg in
                     if seg.startTime > hallucinationCap { return nil }
                     if isHallucinated(seg) {
-                        dlog("Meeting hallucination dropped [\(source.rawValue)] \(seg.startTime)-\(seg.endTime)s: \(seg.text.prefix(80))")
+                        dlog(Self.redactedDropDiagnostic(
+                            reason: .hallucination,
+                            source: source,
+                            startTime: seg.startTime,
+                            endTime: seg.endTime,
+                            runLength: 1,
+                            text: seg.text
+                        ))
                         return nil
                     }
                     return TranscriptSegment(
@@ -514,23 +545,34 @@ public final class MeetingTranscriptionSession {
             try? store.purgeAudio(for: sessionID)
         }
 
-        await runSummarizationIfEnabled()
+        await runSummarizationIfEnabled(sessionID: sessionID)
     }
 
     /// Calls `summarize` on the completed session's segments and persists
     /// the result. Failures are logged and swallowed — a missing summary
     /// is non-fatal.
-    private func runSummarizationIfEnabled() async {
+    private func runSummarizationIfEnabled(sessionID: UUID) async {
         guard summarizeEnabledProvider(), let summarize = summarize else { return }
-        let snapshot: TranscriptSession? = {
-            lock.lock(); defer { lock.unlock() }
-            return session
-        }()
-        guard let s = snapshot, s.status == .completed, !s.segments.isEmpty else { return }
+        guard
+            let s = store.load(id: sessionID),
+            s.status == .completed,
+            !s.segments.isEmpty
+        else { return }
+        let summarizedSegments = s.segments
         do {
             let summary = try await summarize(s.segments)
-            updateSession { $0.summary = summary }
-            dlog("Meeting summary generated (\(summary.count) chars)")
+            let stillMatchesSnapshot: (TranscriptSession) -> Bool = {
+                $0.status == .completed && $0.segments == summarizedSegments
+            }
+            if updatePersistedSessionIfPresent(
+                id: sessionID,
+                matching: stillMatchesSnapshot,
+                { $0.summary = summary }
+            ) {
+                dlog("Meeting summary generated (\(summary.count) chars)")
+            } else {
+                dlog("Meeting summary discarded because session \(sessionID) changed or was deleted")
+            }
         } catch {
             dlog("Meeting summary failed: \(error)")
         }
@@ -596,13 +638,40 @@ public final class MeetingTranscriptionSession {
             while j < segments.count, normaliseForRunDetection(segments[j].text) == key { j += 1 }
             let runLength = j - start
             if runLength >= minRun, !key.isEmpty {
-                dlog("Meeting cascade dropped [\(source.rawValue)] ×\(runLength) of \"\(segments[start].text.prefix(40))\"")
+                dlog(redactedDropDiagnostic(
+                    reason: .cascade,
+                    source: source,
+                    startTime: segments[start].startTime,
+                    endTime: segments[j - 1].endTime,
+                    runLength: runLength,
+                    text: segments[start].text
+                ))
             } else {
                 result.append(contentsOf: segments[start..<j])
             }
             i = j
         }
         return result
+    }
+
+    enum TranscriptDropReason: String {
+        case hallucination
+        case cascade
+    }
+
+    /// Formats drop diagnostics without placing transcript content in logs.
+    static func redactedDropDiagnostic(
+        reason: TranscriptDropReason,
+        source: SegmentSource,
+        startTime: Double,
+        endTime: Double,
+        runLength: Int,
+        text: String
+    ) -> String {
+        let wordCount = text.split(whereSeparator: { $0.isWhitespace }).count
+        return "Meeting \(reason.rawValue) dropped [\(source.rawValue)] "
+            + "\(startTime)-\(endTime)s run=\(runLength) "
+            + "chars=\(text.count) words=\(wordCount)"
     }
 
     private static func normaliseForRunDetection(_ s: String) -> String {
@@ -788,6 +857,7 @@ public final class MeetingTranscriptionSession {
 
         updateSession { s in
             s.segments = allSegments.sorted(by: TranscriptSegment.byStartTime)
+            s.summary = nil
             s.status = .completed
         }
 
@@ -795,7 +865,7 @@ public final class MeetingTranscriptionSession {
             try? store.purgeAudio(for: sessionID)
         }
 
-        await runSummarizationIfEnabled()
+        await runSummarizationIfEnabled(sessionID: sessionID)
     }
 
     /// Re-run an existing meeting through the Deepgram pipeline using the
@@ -824,22 +894,26 @@ public final class MeetingTranscriptionSession {
 
         // Fail loudly if another session is mid-run; we'd otherwise fight
         // over the lock-managed `session` field.
-        lock.lock()
-        if let existing = self.session, existing.id != sessionID,
-           [TranscriptSession.Status.recording, .chunking, .transcribing].contains(existing.status) {
-            lock.unlock()
+        let claimedSession = withSessionLock { () -> Bool in
+            if let existing = session, existing.id != sessionID,
+               [TranscriptSession.Status.recording, .chunking, .transcribing]
+                .contains(existing.status) {
+                return false
+            }
+            // Keep the existing transcript and summary durable until every
+            // Deepgram job succeeds and the pipeline commits their replacement.
+            s.status = .transcribing
+            s.failureReason = nil
+            s.chunksTotal = 1
+            s.chunksCompleted = 0
+            session = s
+            return true
+        }
+        guard claimedSession else {
             dlog("reTranscribeWithDeepgram: another session is active")
             return
         }
-        s.status = .transcribing
-        s.segments = []
-        s.summary = nil
-        s.failureReason = nil
-        s.chunksTotal = 1
-        s.chunksCompleted = 0
-        self.session = s
-        lock.unlock()
-        try? store.save(s)
+        try? saveSession(s)
 
         await runDeepgramPipeline(
             systemURL: systemExists ? systemURL : nil,
@@ -858,7 +932,7 @@ public final class MeetingTranscriptionSession {
             try Task.checkCancellation()
             do {
                 return try await transcribe(url, offset, source)
-            } catch let TranscriptionError.transportError(_) {
+            } catch TranscriptionError.transportError {
                 let delay = backoffSchedule[min(attempt, backoffSchedule.count - 1)]
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 attempt += 1
@@ -869,12 +943,58 @@ public final class MeetingTranscriptionSession {
     }
 
     private func updateSession(_ mutate: (inout TranscriptSession) -> Void) {
+        guard let s: TranscriptSession = withSessionLock({
+            guard var current = session else { return nil }
+            mutate(&current)
+            session = current
+            return current
+        }) else { return }
+        try? saveSession(s)
+    }
+
+    private func clearSession(ifMatching id: UUID) {
+        withSessionLock {
+            if session?.id == id {
+                session = nil
+            }
+        }
+    }
+
+    /// Applies a post-processing result to the session that produced it, rather
+    /// than whichever session happens to be active when the async work returns.
+    /// The store checks existence and transcript identity under one lock so a
+    /// deleted or re-transcribed session cannot receive a stale result.
+    @discardableResult
+    private func updatePersistedSessionIfPresent(
+        id: UUID,
+        matching predicate: (TranscriptSession) -> Bool,
+        _ mutate: (inout TranscriptSession) -> Void
+    ) -> Bool {
+        let persisted: TranscriptSession
+        do {
+            guard let updated = try store.updateIfPresent(
+                id: id,
+                matching: predicate,
+                mutate: mutate
+            ) else { return false }
+            persisted = updated
+        } catch {
+            dlog("Meeting session \(id) update failed: \(error)")
+            return false
+        }
+
+        withSessionLock {
+            if let current = session, current.id == id, predicate(current) {
+                session = persisted
+            }
+        }
+        return true
+    }
+
+    private func withSessionLock<T>(_ body: () throws -> T) rethrows -> T {
         lock.lock()
-        guard var s = session else { lock.unlock(); return }
-        mutate(&s)
-        session = s
-        lock.unlock()
-        try? store.save(s)
+        defer { lock.unlock() }
+        return try body()
     }
 
     private static let titleFormatter: DateFormatter = {

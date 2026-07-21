@@ -119,6 +119,10 @@ public extension Notification.Name {
 }
 
 public final class MeetingTranscriptStore {
+    /// Transcript mutations are process-wide because the app creates several
+    /// store instances that all point at the same on-disk root.
+    private static let operationLock = NSRecursiveLock()
+
     public let rootDirectory: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -179,16 +183,55 @@ public final class MeetingTranscriptStore {
     }
 
     public func save(_ session: TranscriptSession) throws {
+        try withOperationLock {
+            try saveWithoutNotification(session)
+        }
+        NotificationCenter.default.post(name: .meetingTranscriptStoreDidChange, object: nil)
+    }
+
+    private func saveWithoutNotification(_ session: TranscriptSession) throws {
         let dir = sessionDirectory(id: session.id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let data = try encoder.encode(session)
         try data.write(to: transcriptFile(id: session.id), options: .atomic)
-        NotificationCenter.default.post(name: .meetingTranscriptStoreDidChange, object: nil)
     }
 
     public func load(id: UUID) -> TranscriptSession? {
-        guard let data = try? Data(contentsOf: transcriptFile(id: id)) else { return nil }
+        withOperationLock {
+            loadWithoutLock(id: id)
+        }
+    }
+
+    private func loadWithoutLock(id: UUID) -> TranscriptSession? {
+        guard let data = try? Data(contentsOf: transcriptFile(id: id)) else {
+            return nil
+        }
         return try? decoder.decode(TranscriptSession.self, from: data)
+    }
+
+    /// Atomically checks and updates an existing transcript. `delete(id:)`
+    /// uses the same process-wide lock, so a delete cannot land between the
+    /// existence check and save and then be accidentally resurrected.
+    func updateIfPresent(
+        id: UUID,
+        matching predicate: (TranscriptSession) -> Bool,
+        mutate: (inout TranscriptSession) -> Void
+    ) throws -> TranscriptSession? {
+        let updated: TranscriptSession? = try withOperationLock {
+            guard var session = loadWithoutLock(id: id), predicate(session) else {
+                return nil
+            }
+            mutate(&session)
+            try saveWithoutNotification(session)
+            return session
+        }
+        if updated != nil {
+            NotificationCenter.default.post(
+                name: .meetingTranscriptStoreDidChange,
+                object: nil
+            )
+        }
+        return updated
     }
 
     public func list() -> [TranscriptSession] {
@@ -203,75 +246,131 @@ public final class MeetingTranscriptStore {
     }
 
     public func delete(id: UUID) throws {
-        try FileManager.default.removeItem(at: sessionDirectory(id: id))
+        try withOperationLock {
+            try FileManager.default.removeItem(at: sessionDirectory(id: id))
+        }
         NotificationCenter.default.post(name: .meetingTranscriptStoreDidChange, object: nil)
     }
 
     public func purgeAudio(for id: UUID) throws {
-        for url in [audioFile(id: id), micFile(id: id), phoneFile(id: id)] {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-            }
+        let fileManager = FileManager.default
+        for url in m4aFiles(in: sessionDirectory(id: id)) {
+            try fileManager.removeItem(at: url)
         }
         // chunk dirs are also raw audio; drop them along with the source files.
         for dir in [chunksDirectory(id: id),
                     chunksDirectory(id: id, source: .local),
                     chunksDirectory(id: id, source: .remote)] {
-            if FileManager.default.fileExists(atPath: dir.path) {
-                try? FileManager.default.removeItem(at: dir)
+            if fileManager.fileExists(atPath: dir.path) {
+                try fileManager.removeItem(at: dir)
             }
         }
-        if var session = load(id: id) {
-            session.audioRetained = false
-            try save(session)
-        }
+        _ = try updateIfPresent(
+            id: id,
+            matching: { _ in true },
+            mutate: { $0.audioRetained = false }
+        )
     }
 
-    /// Deletes raw audio (system + mic + chunk dirs) for every completed session
+    /// Deletes all m4a artifacts and chunk directories for every completed session
     /// whose `endedAt` is older than `cutoff`. Transcript JSON is preserved.
     /// Returns the number of sessions whose audio was purged.
     @discardableResult
     public func purgeAudioOlderThan(_ cutoff: Date) -> Int {
         var purged = 0
         for session in list() {
-            guard session.audioRetained else { continue }
             guard let endedAt = session.endedAt, endedAt < cutoff else { continue }
             // Only purge terminal-state sessions.
             switch session.status {
             case .completed, .cancelled, .failed:
-                if (try? purgeAudio(for: session.id)) != nil { purged += 1 }
+                break
             case .recording, .chunking, .transcribing:
                 continue
             }
+            // Older Vox builds sometimes flipped this flag after deleting only
+            // the three primary files, leaving trimmed/mixed/chunk artifacts.
+            // Inspect disk when the flag is false so the retention sweep repairs
+            // those historical partial purges instead of skipping them forever.
+            guard session.audioRetained || hasAudioArtifacts(for: session.id) else {
+                continue
+            }
+            if (try? purgeAudio(for: session.id)) != nil { purged += 1 }
         }
         return purged
     }
 
-    /// Total bytes of audio.m4a + mic.m4a + phone.m4a across all sessions.
+    /// Total bytes of all meeting audio artifacts under the transcript root.
     public func audioDiskBytes() -> UInt64 {
         var total: UInt64 = 0
-        for session in list() {
-            for url in [audioFile(id: session.id), micFile(id: session.id), phoneFile(id: session.id)] {
-                let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
-                total += UInt64(size)
-            }
+        for url in m4aFiles(in: rootDirectory) {
+            guard
+                let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+                let size = values.fileSize,
+                size > 0
+            else { continue }
+            total += UInt64(size)
         }
         return total
+    }
+
+    private func hasAudioArtifacts(for id: UUID) -> Bool {
+        if !m4aFiles(in: sessionDirectory(id: id)).isEmpty {
+            return true
+        }
+        return [
+            chunksDirectory(id: id),
+            chunksDirectory(id: id, source: .local),
+            chunksDirectory(id: id, source: .remote),
+        ].contains { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    private func m4aFiles(in directory: URL) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: []
+        ) else { return [] }
+
+        var files: [URL] = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension.caseInsensitiveCompare("m4a") == .orderedSame else {
+                continue
+            }
+            guard
+                let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+                values.isRegularFile == true
+            else { continue }
+            files.append(url)
+        }
+        return files
     }
 
     /// Cold-recovery sweep: any session left in an in-flight state from a prior process
     /// (recording, chunking, transcribing) is reset to `.failed` so the UI shows a clean
     /// terminal state rather than a stuck spinner. Idempotent.
     public func recoverInFlightSessions() {
-        for var session in list() {
+        for session in list() {
             switch session.status {
             case .recording, .chunking, .transcribing:
-                session.status = .failed
-                if session.endedAt == nil { session.endedAt = Date() }
-                try? save(session)
+                _ = try? updateIfPresent(
+                    id: session.id,
+                    matching: {
+                        [.recording, .chunking, .transcribing].contains($0.status)
+                    },
+                    mutate: {
+                        $0.status = .failed
+                        if $0.endedAt == nil { $0.endedAt = Date() }
+                    }
+                )
             case .completed, .cancelled, .failed:
                 break
             }
         }
+    }
+
+    private func withOperationLock<T>(_ body: () throws -> T) rethrows -> T {
+        Self.operationLock.lock()
+        defer { Self.operationLock.unlock() }
+        return try body()
     }
 }

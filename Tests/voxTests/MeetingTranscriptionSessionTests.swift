@@ -20,7 +20,10 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
 
     final class MockRecorder: MeetingAudioRecording {
         var output: URL?
+        private(set) var startCallCount = 0
+        private(set) var stopCallCount = 0
         func start(outputURL: URL) async throws {
+            startCallCount += 1
             try FileManager.default.createDirectory(
                 at: outputURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
@@ -29,6 +32,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             self.output = outputURL
         }
         func stop() async throws -> URL {
+            stopCallCount += 1
             guard let out = output else {
                 throw MeetingAudioCaptureError.notRecording
             }
@@ -183,6 +187,185 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         try await session.stop()
         await session.waitForCompletion()
         XCTAssertEqual(session.statusSnapshot, .completed)
+    }
+
+    func testDelayedSummaryUpdatesOriginalSessionWithoutMutatingNewSession() async throws {
+        let recorder = MockRecorder()
+        let url = tempRoot.appendingPathComponent("summary-race.m4a")
+        try Data([0]).write(to: url)
+        let summaryStarted = AsyncSemaphore(initial: 0)
+        let releaseSummary = AsyncSemaphore(initial: 0)
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [url] },
+            transcribe: { _, _, _ in
+                [TranscriptSegment(startTime: 0, endTime: 1, text: "session A")]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            summarize: { _ in
+                await summaryStarted.signal()
+                await releaseSummary.wait()
+                return "Summary for A"
+            },
+            summarizeEnabled: { true },
+            preflight: { .success(()) }
+        )
+
+        try await session.start()
+        let sessionAID = try XCTUnwrap(session.activeSessionID)
+        try await session.stop()
+        await summaryStarted.wait()
+        XCTAssertEqual(store.load(id: sessionAID)?.status, .completed)
+
+        try await session.start()
+        let sessionBID = try XCTUnwrap(session.activeSessionID)
+        XCTAssertNotEqual(sessionAID, sessionBID)
+        XCTAssertEqual(session.statusSnapshot, .recording)
+
+        await releaseSummary.signal()
+        await session.waitForCompletion()
+
+        XCTAssertEqual(store.load(id: sessionAID)?.summary, "Summary for A")
+        XCTAssertNil(store.load(id: sessionBID)?.summary)
+        XCTAssertEqual(store.load(id: sessionBID)?.status, .recording)
+        XCTAssertEqual(session.activeSessionID, sessionBID)
+        XCTAssertEqual(session.statusSnapshot, .recording)
+    }
+
+    func testDelayedSummaryDoesNotResurrectDeletedSession() async throws {
+        let recorder = MockRecorder()
+        let url = tempRoot.appendingPathComponent("deleted-summary-race.m4a")
+        try Data([0]).write(to: url)
+        let summaryStarted = AsyncSemaphore(initial: 0)
+        let releaseSummary = AsyncSemaphore(initial: 0)
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [url] },
+            transcribe: { _, _, _ in
+                [TranscriptSegment(startTime: 0, endTime: 1, text: "deleted session")]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            summarize: { _ in
+                await summaryStarted.signal()
+                await releaseSummary.wait()
+                return "Too late"
+            },
+            summarizeEnabled: { true },
+            preflight: { .success(()) }
+        )
+
+        try await session.start()
+        let sessionID = try XCTUnwrap(session.activeSessionID)
+        try await session.stop()
+        await summaryStarted.wait()
+        try store.delete(id: sessionID)
+        XCTAssertNil(store.load(id: sessionID))
+
+        await releaseSummary.signal()
+        await session.waitForCompletion()
+
+        XCTAssertNil(store.load(id: sessionID))
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: store.sessionDirectory(id: sessionID).path)
+        )
+    }
+
+    func testDelayedSummaryDoesNotAttachToAChangedTranscript() async throws {
+        let recorder = MockRecorder()
+        let chunkURL = tempRoot.appendingPathComponent("summary-revision.m4a")
+        try Data([0]).write(to: chunkURL)
+        let summaryStarted = AsyncSemaphore(initial: 0)
+        let releaseSummary = AsyncSemaphore(initial: 0)
+        let originalSegments = [
+            TranscriptSegment(startTime: 0, endTime: 1, text: "original transcript"),
+        ]
+        let replacementSegments = [
+            TranscriptSegment(startTime: 0, endTime: 1, text: "replacement transcript"),
+        ]
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: recorder,
+            chunker: { _, _ in [chunkURL] },
+            transcribe: { _, _, _ in originalSegments },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            summarize: { segments in
+                XCTAssertEqual(segments, originalSegments)
+                await summaryStarted.signal()
+                await releaseSummary.wait()
+                return "Summary of the original transcript"
+            },
+            summarizeEnabled: { true },
+            preflight: { .success(()) }
+        )
+
+        try await session.start()
+        let sessionID = try XCTUnwrap(session.activeSessionID)
+        try await session.stop()
+        await summaryStarted.wait()
+
+        var persisted = try XCTUnwrap(store.load(id: sessionID))
+        persisted.segments = replacementSegments
+        persisted.summary = nil
+        try store.save(persisted)
+
+        await releaseSummary.signal()
+        await session.waitForCompletion()
+
+        let reloaded = try XCTUnwrap(store.load(id: sessionID))
+        XCTAssertEqual(reloaded.segments, replacementSegments)
+        XCTAssertNil(reloaded.summary)
+    }
+
+    func testFailedDeepgramRetranscriptionPreservesExistingTranscript() async throws {
+        let sessionID = UUID()
+        let originalSegments = [
+            TranscriptSegment(
+                startTime: 0,
+                endTime: 2,
+                text: "Original transcript",
+                source: .remote
+            ),
+        ]
+        let original = TranscriptSession(
+            id: sessionID,
+            title: "Existing meeting",
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_100),
+            status: .completed,
+            chunksTotal: 1,
+            chunksCompleted: 1,
+            segments: originalSegments,
+            audioRetained: true,
+            summary: "Original summary"
+        )
+        try store.save(original)
+        try Data([0xFA, 0xCE]).write(to: store.audioFile(id: sessionID))
+
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: MockRecorder(),
+            chunker: { _, _ in [] },
+            transcribe: { _, _, _ in [] },
+            deepgramTranscribe: { _ in
+                throw TranscriptionError.transportError(URLError(.timedOut))
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { true },
+            preflight: { .success(()) }
+        )
+
+        await session.reTranscribeWithDeepgram(sessionID: sessionID)
+
+        let stored = try XCTUnwrap(store.load(id: sessionID))
+        XCTAssertEqual(stored.status, .failed)
+        XCTAssertEqual(stored.segments, originalSegments)
+        XCTAssertEqual(stored.summary, "Original summary")
+        XCTAssertTrue(stored.failureReason?.contains("Deepgram transcription failed") == true)
     }
 
     func testCanStartAfterPriorFailure() async throws {
@@ -367,7 +550,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         // start() threw .alreadyActive until app relaunch.
         let url = tempRoot.appendingPathComponent("c.m4a")
         try Data([0]).write(to: url)
-        let goodRecorder = MockRecorder()
         let session = MeetingTranscriptionSession(
             store: store,
             recorder: StartFailRecorder(),
@@ -388,6 +570,66 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                      "After a failed start, no in-memory session should remain.")
         XCTAssertFalse(session.isActive,
                        "isActive must report false so the next start() isn't blocked.")
+    }
+
+    func testInitialPersistenceFailureClearsSessionAndAllowsRetry() async throws {
+        struct PersistenceFailure: Error {}
+
+        let recorder = MockRecorder()
+        let transcriptStore = try XCTUnwrap(store)
+        var failNextSave = true
+        let session = MeetingTranscriptionSession(
+            store: transcriptStore,
+            recorder: recorder,
+            chunker: { _, _ in [] },
+            transcribe: { _, _, _ in [] },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            preflight: { .success(()) },
+            saveSession: { candidate in
+                if failNextSave {
+                    failNextSave = false
+                    throw PersistenceFailure()
+                }
+                try transcriptStore.save(candidate)
+            }
+        )
+
+        do {
+            try await session.start()
+            XCTFail("Expected the initial persistence write to fail")
+        } catch is PersistenceFailure {
+            // Expected.
+        }
+        XCTAssertNil(session.activeSessionID)
+        XCTAssertFalse(session.isActive)
+        XCTAssertEqual(recorder.startCallCount, 0)
+
+        try await session.start()
+        XCTAssertEqual(session.statusSnapshot, .recording)
+        XCTAssertEqual(recorder.startCallCount, 1)
+    }
+
+    func testTranscriptDropDiagnosticReportsMetricsWithoutContent() {
+        let transcript = "Project Nightingale launches Friday"
+
+        let diagnostic = MeetingTranscriptionSession.redactedDropDiagnostic(
+            reason: .cascade,
+            source: .local,
+            startTime: 12.5,
+            endTime: 19.25,
+            runLength: 7,
+            text: transcript
+        )
+
+        XCTAssertTrue(diagnostic.contains("cascade"))
+        XCTAssertTrue(diagnostic.contains("local"))
+        XCTAssertTrue(diagnostic.contains("12.5-19.25s"))
+        XCTAssertTrue(diagnostic.contains("run=7"))
+        XCTAssertTrue(diagnostic.contains("chars=\(transcript.count)"))
+        XCTAssertTrue(diagnostic.contains("words=4"))
+        XCTAssertFalse(diagnostic.contains(transcript))
+        XCTAssertFalse(diagnostic.contains("Nightingale"))
     }
 
     func testFailedStopClearsSessionAndAllowsRetry() async throws {
@@ -415,6 +657,44 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertFalse(session.isActive)
     }
 
+    func testChunkingPersistenceFailureStillStopsRecorderAndRecovers() async throws {
+        struct PersistenceFailure: Error {}
+
+        let recorder = MockRecorder()
+        let chunkURL = tempRoot.appendingPathComponent("chunk-after-save-failure.m4a")
+        try Data([0]).write(to: chunkURL)
+        let transcriptStore = try XCTUnwrap(store)
+        let session = MeetingTranscriptionSession(
+            store: transcriptStore,
+            recorder: recorder,
+            chunker: { _, _ in [chunkURL] },
+            transcribe: { _, _, _ in
+                [TranscriptSegment(startTime: 0, endTime: 1, text: "recovered")]
+            },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            preflight: { .success(()) },
+            saveSession: { candidate in
+                if candidate.status == .chunking {
+                    throw PersistenceFailure()
+                }
+                try transcriptStore.save(candidate)
+            }
+        )
+
+        try await session.start()
+        try await session.stop()
+
+        XCTAssertEqual(recorder.stopCallCount, 1)
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let completedID = try XCTUnwrap(session.activeSessionID)
+        XCTAssertEqual(transcriptStore.load(id: completedID)?.segments.map(\.text), ["recovered"])
+
+        try await session.start()
+        XCTAssertEqual(session.statusSnapshot, .recording)
+    }
+
     func testPreflightFailureBlocksStart() async throws {
         // P1.1 regression: any entry point — including the floating HUD —
         // must run the preflight gate. A blocked preflight throws and
@@ -439,9 +719,59 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testDefaultPreflightUsesOnlyDeepgramKeyForDeepgramProvider() async throws {
+        let savedMode = AppSettings.meetingModeEnabled
+        let savedConsent = AppSettings.meetingConsentAcknowledged
+        let savedBackendStatus = MeetingPreflight.backendStatusProvider
+        defer {
+            AppSettings.meetingModeEnabled = savedMode
+            AppSettings.meetingConsentAcknowledged = savedConsent
+            MeetingPreflight.backendStatusProvider = savedBackendStatus
+        }
+        AppSettings.meetingModeEnabled = true
+        AppSettings.meetingConsentAcknowledged = true
+        MeetingPreflight.backendStatusProvider = {
+            MeetingBackendStatus(available: true, detail: "ready")
+        }
+
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: MockRecorder(),
+            chunker: { _, _ in [] },
+            transcribe: { _, _, _ in [] },
+            provider: { .deepgram },
+            apiKey: { nil },
+            deepgramAPIKey: { "dg-test" },
+            retainAudio: { false }
+        )
+
+        try await session.start()
+
+        XCTAssertEqual(session.statusSnapshot, .recording)
+
+        let missingDeepgramKey = MeetingTranscriptionSession(
+            store: store,
+            recorder: MockRecorder(),
+            chunker: { _, _ in [] },
+            transcribe: { _, _, _ in [] },
+            provider: { .deepgram },
+            apiKey: { "sk-openai-only" },
+            deepgramAPIKey: { nil },
+            retainAudio: { false }
+        )
+        do {
+            try await missingDeepgramKey.start()
+            XCTFail("An OpenAI key must not satisfy Deepgram preflight")
+        } catch let MeetingTranscriptionSession.SessionError.preflight(error) {
+            XCTAssertEqual(error, .missingAPIKey)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 
-/// Minimal async semaphore for cancellation tests.
+/// Minimal async semaphore for deterministic interleaving tests.
 actor AsyncSemaphore {
     private var value: Int
     private var waiters: [CheckedContinuation<Void, Never>] = []

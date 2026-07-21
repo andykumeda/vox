@@ -23,7 +23,7 @@ public enum MeetingGateError: Error, Equatable, Sendable {
         case .backendUnavailable(let reason):
             return "Meeting capture is unavailable: \(reason)"
         case .missingAPIKey:
-            return "OpenAI API key is required. Add one in Settings."
+            return "An API key for the selected transcription provider is required. Add it in Settings."
         case .permissionDenied(let perm):
             switch perm {
             case .screenRecording:
@@ -41,10 +41,6 @@ struct MeetingBackendStatus: Equatable, Sendable {
     let available: Bool
     let detail: String
 
-    static let pendingImplementation = MeetingBackendStatus(
-        available: false,
-        detail: "System-audio capture backend lands in M2."
-    )
 }
 
 /// Reads settings, runs a backend availability check, and returns either a green light or
@@ -52,37 +48,33 @@ struct MeetingBackendStatus: Equatable, Sendable {
 /// before showing menu state, and safe to call again right before starting a session.
 public enum MeetingPreflight {
     /// Backend availability hook injected for tests; production resolves to the live status check.
-    static var backendStatusProvider: @Sendable (MeetingCaptureBackend) -> MeetingBackendStatus = { backend in
-        liveStatus(for: backend)
+    static var backendStatusProvider: @Sendable () -> MeetingBackendStatus = {
+        liveStatus()
     }
 
-    static func liveStatus(for backend: MeetingCaptureBackend) -> MeetingBackendStatus {
-        switch backend {
-        case .systemAudio:
-            if CGPreflightScreenCaptureAccess() {
-                return MeetingBackendStatus(
-                    available: true,
-                    detail: "ScreenCaptureKit ready."
-                )
-            } else {
-                return MeetingBackendStatus(
-                    available: false,
-                    detail: "Screen Recording permission not granted."
-                )
-            }
+    static func liveStatus() -> MeetingBackendStatus {
+        if CGPreflightScreenCaptureAccess() {
+            return MeetingBackendStatus(
+                available: true,
+                detail: "ScreenCaptureKit ready."
+            )
+        } else {
+            return MeetingBackendStatus(
+                available: false,
+                detail: "Screen Recording permission not granted."
+            )
         }
     }
 
     static func gate(
         modeEnabled: Bool = AppSettings.meetingModeEnabled,
         consentAcknowledged: Bool = AppSettings.meetingConsentAcknowledged,
-        backend: MeetingCaptureBackend = AppSettings.meetingCaptureBackend,
         hasAPIKey: Bool
     ) -> Result<Void, MeetingGateError> {
         guard modeEnabled else { return .failure(.modeDisabled) }
         guard consentAcknowledged else { return .failure(.consentRequired) }
         guard hasAPIKey else { return .failure(.missingAPIKey) }
-        let status = backendStatusProvider(backend)
+        let status = backendStatusProvider()
         guard status.available else {
             return .failure(.backendUnavailable(reason: status.detail))
         }

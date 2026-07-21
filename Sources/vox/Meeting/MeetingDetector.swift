@@ -69,7 +69,7 @@ public final class MeetingDetector {
             missCount = 0
             if !inMeeting {
                 inMeeting = true
-                dlog("MeetingDetector: started — owner=\"\(m.owner)\" title=\"\(m.title)\"")
+                dlog("MeetingDetector: started — owner=\"\(m.owner)\" windows=\(windows.count) matched_title_chars=\(m.title.count)")
                 onMeetingStarted?()
             }
         } else if inMeeting {
@@ -179,8 +179,8 @@ public final class MeetingDetector {
     }
 
     /// Returns the first window whose owner is a known meeting app and
-    /// whose title matches a meeting pattern, or nil. Public so the
-    /// caller can log which window triggered detection.
+    /// whose title matches a meeting pattern, or nil. Window titles may
+    /// contain sensitive meeting details and must not be written to logs.
     static func firstMatchingWindow(
         runningApps: [NSRunningApplication],
         windows: [(owner: String, title: String)]

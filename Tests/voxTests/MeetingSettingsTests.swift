@@ -4,7 +4,6 @@ import XCTest
 final class MeetingSettingsTests: XCTestCase {
     private let modeKey = "meetingModeEnabled"
     private let consentKey = "meetingConsentAcknowledged"
-    private let backendKey = "meetingCaptureBackend"
     private let remoteControlModeKey = "remoteControlModeEnabled"
 
     override func setUp() {
@@ -21,7 +20,6 @@ final class MeetingSettingsTests: XCTestCase {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: modeKey)
         defaults.removeObject(forKey: consentKey)
-        defaults.removeObject(forKey: backendKey)
         defaults.removeObject(forKey: remoteControlModeKey)
     }
 
@@ -31,10 +29,6 @@ final class MeetingSettingsTests: XCTestCase {
 
     func testMeetingConsentDefaultsFalse() {
         XCTAssertFalse(AppSettings.meetingConsentAcknowledged)
-    }
-
-    func testMeetingBackendDefaultsToSystemAudio() {
-        XCTAssertEqual(AppSettings.meetingCaptureBackend, .systemAudio)
     }
 
     func testRemoteControlModeDefaultsOff() {
@@ -63,8 +57,6 @@ final class MeetingSettingsTests: XCTestCase {
 
         _ = AppSettings.meetingModeEnabled
         _ = AppSettings.meetingConsentAcknowledged
-        _ = AppSettings.meetingCaptureBackend
-
         XCTAssertEqual(AppSettings.keepTranscriptionOnClipboard, initialKeep)
         XCTAssertEqual(AppSettings.modeOverride, initialMode)
         XCTAssertEqual(AppSettings.transcriptionModel, initialModel)
