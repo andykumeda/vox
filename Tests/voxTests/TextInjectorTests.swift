@@ -73,7 +73,7 @@ final class TextInjectorTests: XCTestCase {
         )
     }
 
-    func testRemoteControlModeOverridesFrontmostTarget() {
+    func testRemoteControlModeOverridesLocalAppsOnly() {
         XCTAssertEqual(
             TextInjector.pasteTarget(
                 bundleIdentifier: "com.apple.TextEdit",
@@ -81,6 +81,33 @@ final class TextInjectorTests: XCTestCase {
                 remoteControlModeEnabled: true
             ),
             .remoteControl
+        )
+    }
+
+    func testRemoteControlModeDoesNotOverrideRemoteViewers() {
+        XCTAssertEqual(
+            TextInjector.pasteTarget(
+                bundleIdentifier: "com.carriez.rustdesk",
+                localizedName: "RustDesk",
+                remoteControlModeEnabled: true
+            ),
+            .rustDesk
+        )
+        XCTAssertEqual(
+            TextInjector.pasteTarget(
+                bundleIdentifier: "com.apple.ScreenSharing",
+                localizedName: "Screen Sharing",
+                remoteControlModeEnabled: true
+            ),
+            .screenSharing
+        )
+        XCTAssertEqual(
+            TextInjector.pasteTarget(
+                bundleIdentifier: "tv.parsec.www",
+                localizedName: "Parsec",
+                remoteControlModeEnabled: true
+            ),
+            .parsec
         )
     }
 
@@ -272,6 +299,32 @@ final class TextInjectorTests: XCTestCase {
         XCTAssertEqual(
             TextInjector.textForPaste("hello there.", target: .standard),
             "hello there."
+        )
+    }
+
+    func testRemotePhysicalFallbackUsesUnicodeBackedShiftedCharacters() {
+        XCTAssertEqual(
+            TextInjector.physicalTypingFallbackMode(for: .screenSharing),
+            .unicodeBackedShiftedCharacters
+        )
+        XCTAssertEqual(
+            TextInjector.physicalTypingFallbackMode(for: .rustDesk),
+            .unicodeBackedShiftedCharacters
+        )
+        XCTAssertEqual(
+            TextInjector.physicalTypingFallbackMode(for: .parsec),
+            .unicodeBackedShiftedCharacters
+        )
+        XCTAssertEqual(
+            TextInjector.physicalTypingFallbackMode(for: .remoteControl),
+            .withShiftModifiers
+        )
+    }
+
+    func testAppleScriptProcessSpecifierUsesUnixId() {
+        XCTAssertEqual(
+            TextInjector.appleScriptProcessSpecifier(processID: 42_424),
+            "(first process whose unix id is 42424)"
         )
     }
 

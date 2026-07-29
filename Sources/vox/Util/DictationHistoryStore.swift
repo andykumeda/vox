@@ -106,18 +106,22 @@ public final class DictationHistoryStore {
         }
     }
 
-    public func record(_ entry: DictationEntry) {
-        queue.async { [weak self] in
-            guard let self else { return }
-            guard case .success(var entries) = self.readAll() else { return }
+    /// Appends an entry and waits for the write to finish.
+    /// Returns `false` when the existing file is unreadable/corrupt or the write fails;
+    /// the on-disk file is left untouched in those cases.
+    @discardableResult
+    public func record(_ entry: DictationEntry) -> Bool {
+        queue.sync {
+            guard case .success(var entries) = self.readAll() else { return false }
             entries.append(entry)
             entries = self.applyRetention(entries)
-            guard self.writeAll(entries) else { return }
+            guard self.writeAll(entries) else { return false }
             DispatchQueue.main.async {
                 NotificationCenter.default.post(
                     name: .dictationHistoryDidChange, object: nil
                 )
             }
+            return true
         }
     }
 

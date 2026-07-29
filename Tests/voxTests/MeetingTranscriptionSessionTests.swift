@@ -657,6 +657,66 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertFalse(session.isActive)
     }
 
+    func testStopDuringRecorderCreateFailsCleanlyAndAllowsRetry() async throws {
+        let releaseFactory = DispatchSemaphore(value: 0)
+        let enteredFactory = expectation(description: "factory entered")
+        let recorder = MockRecorder()
+        let blockLock = NSLock()
+        var shouldBlockFactory = true
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: nil,
+            chunker: { _, _ in [] },
+            transcribe: { _, _, _ in [] },
+            apiKey: { "sk-test" },
+            retainAudio: { false },
+            preflight: { .success(()) },
+            systemRecorderFactory: {
+                let block: Bool = {
+                    blockLock.lock()
+                    defer { blockLock.unlock() }
+                    return shouldBlockFactory
+                }()
+                if block {
+                    enteredFactory.fulfill()
+                    releaseFactory.wait()
+                }
+                return recorder
+            }
+        )
+
+        let startTask = Task {
+            try await session.start()
+        }
+        await fulfillment(of: [enteredFactory], timeout: 2)
+        XCTAssertTrue(session.isActive)
+
+        do {
+            try await session.stop()
+            XCTFail("Expected stop to throw while recorder is missing")
+        } catch {
+            // Expected — nil systemRecorder path.
+        }
+        XCTAssertFalse(session.isActive)
+        XCTAssertNil(session.activeSessionID)
+
+        blockLock.lock()
+        shouldBlockFactory = false
+        blockLock.unlock()
+        releaseFactory.signal()
+        do {
+            try await startTask.value
+            XCTFail("Expected start to abort after stop cleared the session")
+        } catch {
+            // Expected.
+        }
+
+        try await session.start()
+        XCTAssertEqual(session.statusSnapshot, .recording)
+        try await session.stop()
+        await session.waitForCompletion()
+    }
+
     func testChunkingPersistenceFailureStillStopsRecorderAndRecovers() async throws {
         struct PersistenceFailure: Error {}
 

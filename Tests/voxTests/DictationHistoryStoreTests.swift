@@ -33,6 +33,7 @@ final class DictationHistoryStoreTests: XCTestCase {
         store.record(makeEntry(text: "Must not replace the damaged file"))
 
         XCTAssertEqual(store.list(), [])
+        XCTAssertFalse(store.record(makeEntry(text: "Still blocked")))
         XCTAssertEqual(try Data(contentsOf: historyURL), malformed)
         XCTAssertEqual(decoder.decodeCount, 1)
         XCTAssertTrue(messages.values.contains { $0.contains("decode failed") })

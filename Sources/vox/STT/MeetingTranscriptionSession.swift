@@ -116,10 +116,13 @@ public final class MeetingTranscriptionSession {
         summarizeEnabled: @escaping () -> Bool = { false },
         preflight: (() -> Result<Void, MeetingGateError>)? = nil,
         saveSession: ((TranscriptSession) throws -> Void)? = nil,
-        backoffSchedule: [Double] = [1, 2, 4, 8, 16, 30]
+        backoffSchedule: [Double] = [1, 2, 4, 8, 16, 30],
+        systemRecorderFactory: (() -> MeetingAudioRecording)? = nil
     ) {
         self.store = store
-        if let recorder = recorder {
+        if let systemRecorderFactory {
+            self.systemRecorderFactory = systemRecorderFactory
+        } else if let recorder {
             self.systemRecorderFactory = { recorder }
         } else {
             self.systemRecorderFactory = {
@@ -230,6 +233,13 @@ public final class MeetingTranscriptionSession {
         // session and persists the disk record as `.failed`. Without this
         // the next start() throws .alreadyActive until the app is relaunched.
         let system = systemRecorderFactory()
+        let stillStarting = withSessionLock {
+            session?.id == id && session?.status == .recording
+        }
+        guard stillStarting else {
+            dlog("MeetingTranscriptionSession start aborted; session cleared during recorder create")
+            throw SessionError.notRecording
+        }
         self.systemRecorder = system
         do {
             try await system.start(outputURL: store.audioFile(id: id))
@@ -290,7 +300,19 @@ public final class MeetingTranscriptionSession {
             dlog("Meeting chunking transition save failed; continuing recorder shutdown: \(error)")
         }
 
-        guard let system = self.systemRecorder else { throw SessionError.notRecording }
+        guard let system = self.systemRecorder else {
+            // Race: stop() arrived after status flipped to .recording but before
+            // the recorder reference was assigned (or after a prior clear).
+            // Persist .failed and clear in-memory state so .chunking cannot
+            // permanently block start() via alreadyActive.
+            dlog("MeetingTranscriptionSession stop with nil systemRecorder; failing session")
+            updateSession { s in
+                s.status = .failed
+                s.failureReason = "Recorder missing during stop"
+            }
+            clearSession(ifMatching: current.id)
+            throw SessionError.notRecording
+        }
         let systemURL: URL
         do {
             systemURL = try await system.stop()
@@ -913,7 +935,13 @@ public final class MeetingTranscriptionSession {
             dlog("reTranscribeWithDeepgram: another session is active")
             return
         }
-        try? saveSession(s)
+        do {
+            try saveSession(s)
+        } catch {
+            dlog("reTranscribeWithDeepgram: session save failed: \(error)")
+            clearSession(ifMatching: sessionID)
+            return
+        }
 
         await runDeepgramPipeline(
             systemURL: systemExists ? systemURL : nil,
@@ -924,15 +952,25 @@ public final class MeetingTranscriptionSession {
         )
     }
 
+    /// Caps transport retries so a prolonged outage cannot block new meetings
+    /// via `.alreadyActive` forever. Matches the last backoff step (30s) for
+    /// roughly twenty minutes of attempts before failing the chunk.
+    private static let maxTransportRetryDuration: TimeInterval = 20 * 60
+
     private func transcribeWithInfiniteRetry(
         url: URL, offset: Double, source: SegmentSource
     ) async throws -> [TranscriptSegment] {
         var attempt = 0
+        let deadline = Date().addingTimeInterval(Self.maxTransportRetryDuration)
         while true {
             try Task.checkCancellation()
             do {
                 return try await transcribe(url, offset, source)
-            } catch TranscriptionError.transportError {
+            } catch TranscriptionError.transportError(let underlying) {
+                if Date() >= deadline {
+                    dlog("Meeting transport retry budget exhausted after \(attempt) attempts")
+                    throw TranscriptionError.transportError(underlying)
+                }
                 let delay = backoffSchedule[min(attempt, backoffSchedule.count - 1)]
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 attempt += 1
@@ -949,7 +987,11 @@ public final class MeetingTranscriptionSession {
             session = current
             return current
         }) else { return }
-        try? saveSession(s)
+        do {
+            try saveSession(s)
+        } catch {
+            dlog("Meeting session save failed id=\(s.id) status=\(s.status): \(error)")
+        }
     }
 
     private func clearSession(ifMatching id: UUID) {

@@ -381,7 +381,7 @@ struct SettingsView: View {
                         AppSettings.remoteControlModeEnabled = newValue
                     }
                 ))
-                Text("Use this when controlling this Mac through VNC, Screen Sharing, or RustDesk. Vox types the transcript directly instead of using the clipboard, avoiding remote clipboard sync pasting an older recording.")
+                Text("Use this when controlling this Mac through VNC, Screen Sharing, or RustDesk from another machine. Vox types the transcript directly into the frontmost local app instead of using the clipboard. Outbound remote viewers (Screen Sharing, RustDesk, Parsec) keep their specialized paste paths even when this is on.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

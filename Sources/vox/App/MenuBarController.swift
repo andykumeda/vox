@@ -19,12 +19,20 @@ enum MenuIconState {
 final class MenuBarController: NSObject {
     static let pasteLastFocusSettleDelay: TimeInterval = 0.20
 
+    /// Serializes dictation paste and Paste Last so clipboard/remote waits cannot interleave.
+    private actor PasteGate {
+        func run(_ body: @Sendable () async -> Void) async {
+            await body()
+        }
+    }
+
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let keychain = KeychainStore()
     private let contextDetector = ContextDetector()
     private let recorder = AudioRecorder()
     private let hotkey = HotkeyMonitor()
     private let injector = TextInjector()
+    private let pasteGate = PasteGate()
     private let sound = SoundPlayer()
     private lazy var transcriber = OpenAITranscriber(
         modelProvider: { AppSettings.transcriptionModel.rawValue },
@@ -315,19 +323,27 @@ final class MenuBarController: NSObject {
     /// Pastes the most recent dictation entry's text into the focused app.
     /// Triggered by the menu item or by the optional pasteLast global hotkey.
     private func pasteLastTranscription() {
+        guard state == .idle else {
+            dlog("paste last ignored — dictation busy state=\(state)")
+            sound.play(.error)
+            return
+        }
         guard let entry = DictationHistoryStore.shared.last(), !entry.text.isEmpty else {
             dlog("paste last requested with no dictation history")
             sound.play(.error)
             return
         }
         let injector = self.injector
+        let pasteGate = self.pasteGate
         let text = entry.text
         let keepOnClipboard = AppSettings.keepTranscriptionOnClipboard
         let delay = Self.pasteLastFocusSettleDelay
         dlog("paste last scheduled chars=\(text.count) delay=\(delay)s")
         Task {
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await injector.pasteAsync(text, keepOnClipboard: keepOnClipboard)
+            await pasteGate.run {
+                await injector.pasteAsync(text, keepOnClipboard: keepOnClipboard)
+            }
         }
     }
 
@@ -717,12 +733,15 @@ final class MenuBarController: NSObject {
                 let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
                 UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model)
                 if !finalText.isEmpty {
-                    DictationHistoryStore.shared.record(DictationEntry(
+                    let recorded = DictationHistoryStore.shared.record(DictationEntry(
                         mode: mode == .prose ? "prose" : "command",
                         durationSec: durationSec,
                         wordCount: wordCount,
                         text: finalText
                     ))
+                    if !recorded {
+                        dlog("dictation history record failed; paste will still proceed")
+                    }
                 }
                 dlog("\(textLogMetrics(label: "processed", text: processed.text)) keys=\(processed.suffixKeys) final_words=\(wordCount) cost=$\(String(format: "%.4f", cost))")
                 let pasteDelay: Double
@@ -731,10 +750,12 @@ final class MenuBarController: NSObject {
                     dlog("dictation timing paste_skipped total=\(Self.elapsedString(since: pipelineStartedAt))s")
                 } else {
                     let pasteStartedAt = Date()
-                    await self.injector.pasteAsync(
-                        finalText,
-                        keepOnClipboard: AppSettings.keepTranscriptionOnClipboard
-                    )
+                    await self.pasteGate.run {
+                        await self.injector.pasteAsync(
+                            finalText,
+                            keepOnClipboard: AppSettings.keepTranscriptionOnClipboard
+                        )
+                    }
                     dlog("dictation timing paste=\(Self.elapsedString(since: pasteStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s")
                     pasteDelay = 0.2
                 }
