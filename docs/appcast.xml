@@ -6,6 +6,26 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.29</title>
+            <pubDate>Wed, 29 Jul 2026 00:18:20 +0000</pubDate>
+            <sparkle:version>48</sparkle:version>
+            <sparkle:shortVersionString>0.7.29</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Remote paste locks the frontmost process at start and aborts if focus drifts, leaving the transcript on the clipboard instead of injecting into the wrong app.</li>
+                    <li><strong>Fix:</strong> Screen Sharing / RustDesk / Parsec physical fallbacks now use Unicode-backed shifted characters instead of Caps Lock mangling (better <code>?</code> and capitalization).</li>
+                    <li><strong>Behavior:</strong> Remote Control Mode no longer overrides outbound viewer paste paths; it only applies to ordinary local apps.</li>
+                    <li><strong>Fix:</strong> Meeting stop no longer gets stuck when the recorder is missing mid-start; transport retries are capped; dictation history writes are synchronous.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.29/Vox.dmg"
+                sparkle:edSignature="95lGAlvktOC219oz+ZuNvUQHqmQA9qWEMdC3d1Be2albUx3OGkMuFI2eipWaDXqE2WvvImzeeDxXIcQXd58YDw=="
+                length="2536964"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.28</title>
             <pubDate>Tue, 23 Jun 2026 02:10:11 +0000</pubDate>
             <sparkle:version>47</sparkle:version>
