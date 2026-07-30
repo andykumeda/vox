@@ -24,10 +24,18 @@ both keyed on bundle ID, not signature.
 ## Why an update can require permissions again
 
 Vox is not yet signed and notarized with an Apple Developer ID. Development and
-release builds use the local self-signed `vox-dev` identity when it is available
-and fall back to ad-hoc signing when it is not. macOS can invalidate TCC grants
-when the installed bundle's signing requirement changes, when an ad-hoc build's
-code hash changes, or after an OS/security update.
+release builds use the persistent self-signed `vox-dev` identity when it is
+available and fall back to ad-hoc signing when it is not. Official releases pin
+the canonical `vox-dev` fingerprint documented in
+[RELEASING.md](RELEASING.md). macOS can invalidate TCC grants when the installed
+bundle's signing requirement changes, when an ad-hoc build's code hash changes,
+or after an OS/security update.
+
+On a two-Mac development setup, two independently generated certificates named
+`vox-dev` are not interchangeable. If a locally built app and a Mini-built
+Sparkle release use different certificate fingerprints, macOS correctly treats
+them as different identities. Both Macs must use the same exported certificate
+and private key if local builds and release builds will replace one another.
 
 Result: permissions may survive an update, but callers must be prepared to
 re-grant them. Vox can still launch while hotkeys, audio, paste, or meeting
@@ -40,8 +48,11 @@ codesign -d -r- /Applications/Vox.app 2>&1
 ```
 
 `TeamIdentifier=not set` alone does not distinguish an ad-hoc signature from
-Vox's self-signed development certificate. A future Developer ID-notarized
-release is the durable fix for update trust and permission churn.
+Vox's self-signed development certificate. The `certificate leaf` hash in the
+designated requirement is the relevant local identity. Stable self-signing
+reduces permission churn on the Macs that trust and reuse that identity;
+Developer ID signing and notarization remain the durable option for public
+distribution.
 
 ## Manual fallback (if Sparkle fails)
 
@@ -140,8 +151,17 @@ is already running from a different location. Run `pgrep -fl vox` and
 `killall vox`, then relaunch.
 
 **App appears in Input Monitoring but events still don't fire.** Toggle
-it off and back on, then quit and relaunch Vox. macOS sometimes caches
-a stale grant against an old `cdhash`.
+it off and back on, then quit and relaunch Vox. If the pane remains stale,
+reset only Vox's Input Monitoring record:
+
+```sh
+tccutil reset ListenEvent com.andykumeda.vox
+```
+
+Add `/Applications/Vox.app` back under Input Monitoring, then quit and relaunch
+Vox. This targeted reset fixed the July 2026 MacBook case where Accessibility
+and Input Monitoring both appeared enabled, `hotkey.start() -> true` was logged,
+but no local `Fn press` events arrived.
 
 **Fn key opens emoji picker instead of recording.** System Settings →
 Keyboard → "Press 🌐 key to" → set to *Do Nothing*. Otherwise macOS

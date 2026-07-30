@@ -1,6 +1,6 @@
 # Vox Handoff
 
-Last updated: 2026-07-28
+Last updated: 2026-07-30
 
 ## Current state
 
@@ -37,4 +37,15 @@ macOS prompts after the self-signed update.
 
 - Sparkle EdDSA private key and `vox-dev` codesign identity were available on
   `AKsMini` for this cut.
+- Canonical release `vox-dev` SHA-1:
+  `406E1921DF57A0FC9CFE620F5FBC0524D1BB201E`.
+- Both Macs must use the same exported identity if local and Sparkle builds
+  replace one another. A same-named certificate with another fingerprint is a
+  different signer and can invalidate TCC grants.
+- Release preflight, signature verification, and targeted Input Monitoring
+  recovery are documented in `docs/RELEASING.md`.
+- On 2026-07-30, the MacBook showed Accessibility and Input Monitoring enabled
+  but received no local Fn events after the 0.7.29 update. Resetting only
+  `ListenEvent` for `com.andykumeda.vox`, re-adding Vox to Input Monitoring, and
+  relaunching fixed it.
 - Prefer Git push/pull between clones; do not put a live tree in iCloud Drive.
