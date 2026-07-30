@@ -80,11 +80,17 @@ those surfaces. If an unavoidable uncommitted handoff is needed, transfer only
 the source diff/untracked source files; never synchronize `.git`, `.build`,
 `dist`, logs, or credentials through a cloud drive.
 
-Run `./scripts/setup.sh` once on each Mac so each has its own persistent local
-`vox-dev` identity and TCC grants. Thereafter, each Mac should install builds it
-signed locally. Do not alternate differently signed development bundles on one
-Mac. Official DMGs and Sparkle signatures are produced only on the Mac mini
-(`AKsMini`), where the Sparkle EdDSA key is installed.
+Use one persistent `vox-dev` identity across both Macs if both will install
+local builds. Create it once on the Mac mini, export the certificate and private
+key securely, and import that exact identity on the MacBook. Certificates with
+the same name but different fingerprints are different signers; alternating
+them can invalidate TCC permissions. The canonical release identity and its
+fingerprint are pinned in [docs/RELEASING.md](docs/RELEASING.md).
+
+Official DMGs and Sparkle signatures are produced only on the Mac mini
+(`AKsMini`), where the Sparkle EdDSA key is installed. If a Mac should keep an
+independent development identity instead, do not install its local builds over
+the Sparkle release build and expect permissions to carry across the switch.
 
 Codex Desktop may run on one Mac while its project workspace executes on the
 other. Confirm the execution host with `hostname` before building, installing,
@@ -306,24 +312,16 @@ See [docs/dictation-regression.md](docs/dictation-regression.md) for thresholds 
 
 The Sparkle EdDSA private key for signing updates lives only on the Mac mini
 (`AKsMini`). Releases must be cut there, even when development happened on the
-MacBook.
+MacBook. Follow the complete signing preflight, fingerprint verification, test,
+and publication checklist in [docs/RELEASING.md](docs/RELEASING.md).
 
 ```sh
-# 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist
-# 2. Build + sign DMG
+# The canonical vox-dev identity must be present before this command.
 ./scripts/make-dmg.sh
+codesign --verify --deep --strict --verbose=2 dist/Vox.app
+codesign -d -r- dist/Vox.app 2>&1
 .build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg
 # → prints sparkle:edSignature="…" length="…"
-
-# 3. Add a new <item> to docs/appcast.xml at the top, with the signature/length above
-# 4. Commit, tag, push
-git add Resources/Info.plist docs/appcast.xml
-git commit --no-gpg-sign -m "release: 0.X.Y — …"
-git tag v0.X.Y
-git push origin main && git push origin v0.X.Y
-
-# 5. Publish GitHub release with the DMG attached
-gh release create v0.X.Y --title "Vox 0.X.Y" --notes "…" dist/Vox.dmg
 ```
 
 GitHub Pages serves `docs/appcast.xml` at `https://andykumeda.github.io/vox/appcast.xml` (the `SUFeedURL` in `Info.plist`). Pages must remain enabled — disabling it breaks Sparkle for every existing install.
