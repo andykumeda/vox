@@ -30,6 +30,21 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(p.apply("i have three apples"), "I have three apples.")
     }
 
+    func testProseCurrencyUsesSymbolAndDigits() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("it costs five dollars"), "It costs $5.")
+    }
+
+    func testProseTimeUsesDigits() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("wait three hours"), "Wait 3 hours.")
+    }
+
+    func testProseDataSizeUsesAbbreviation() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("one terabyte of storage"), "1 TB of storage.")
+    }
+
     func testProseMultiSentenceCombined() {
         let p = PostProcessor(mode: .prose)
         XCTAssertEqual(

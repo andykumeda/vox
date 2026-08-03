@@ -6,7 +6,7 @@ Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-ta
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes
-- **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps.
+- **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps. Uses digits for times, money, and measurements (`$5`, `3 hours`, `1 TB`); keeps small ordinary counts as words (`three apples`).
 - **Command** — verbatim shell commands, no capitalization, no trailing punctuation. Auto-selected when the focused app is a terminal (Terminal, iTerm, Wave, etc.).
 Press your **Mode toggle** hotkey (default `⌃⌥M`) to force prose regardless of focus. The menu-bar icon shows a lock when prose is forced.
 

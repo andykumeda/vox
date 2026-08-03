@@ -15,12 +15,68 @@ public struct NumberNormalizer {
         "hundred": 100, "thousand": 1_000, "million": 1_000_000, "billion": 1_000_000_000,
     ]
 
+    /// Spoken currency words → symbol placed before the digits ("five dollars" → "$5").
+    private static let currencyPrefix: [String: String] = [
+        "dollar": "$", "dollars": "$",
+        "buck": "$", "bucks": "$",
+        "euro": "€", "euros": "€",
+    ]
+
+    /// Spoken currency words → symbol placed after the digits ("fifty cents" → "50¢").
+    private static let currencySuffix: [String: String] = [
+        "cent": "¢", "cents": "¢",
+    ]
+
+    /// Spoken data-size units → standard abbreviation ("one terabyte" → "1 TB").
+    private static let dataUnits: [String: String] = [
+        "kilobyte": "KB", "kilobytes": "KB",
+        "megabyte": "MB", "megabytes": "MB",
+        "gigabyte": "GB", "gigabytes": "GB",
+        "terabyte": "TB", "terabytes": "TB",
+        "petabyte": "PB", "petabytes": "PB",
+    ]
+
+    /// Units that force digit form for small numbers but keep the spoken unit word
+    /// ("three hours" → "3 hours").
+    private static let forceDigitUnits: Set<String> = [
+        "hour", "hours", "minute", "minutes", "second", "seconds",
+        "am", "pm",
+        "percent", "percentage",
+        "degree", "degrees",
+        "mile", "miles", "kilometer", "kilometers", "kilometre", "kilometres",
+        "meter", "meters", "metre", "metres",
+        "centimeter", "centimeters", "centimetre", "centimetres",
+        "millimeter", "millimeters", "millimetre", "millimetres",
+        "inch", "inches", "foot", "feet",
+        "kilogram", "kilograms", "gram", "grams",
+        "pound", "pounds", "ounce", "ounces",
+        "liter", "liters", "litre", "litres",
+        "gallon", "gallons",
+        "watt", "watts", "kilowatt", "kilowatts",
+        "volt", "volts",
+    ]
+
+    private enum FollowingUnit {
+        /// Replace number + unit with prefix+digits ("$5").
+        case currencyPrefix(String)
+        /// Replace number + unit with digits+suffix ("50¢").
+        case currencySuffix(String)
+        /// Replace number + unit with digits + abbreviation ("1 TB").
+        case abbreviated(String)
+        /// Force digits; leave the spoken unit in place ("3 hours").
+        case forceDigit
+        /// Force digits and consume a multi-token unit like "o'clock" / "a.m.".
+        case forceDigitConsuming(tokenCount: Int)
+        /// "five percent" → "5%".
+        case percent
+    }
+
     public init() {}
 
     /// Convert spelled-out numbers to digits.
     /// - Parameter aggressive: when true, convert *every* number word including
     ///   bare singles ("three" → "3"). When false (prose default), keep bare
-    ///   singles < 10 as words because "I have three apples" reads better.
+    ///   singles < 10 as words unless a currency/time/measurement unit follows.
     public func normalize(_ input: String, aggressive: Bool = false) -> String {
         let tokens = tokenize(input)
         var output: [String] = []
@@ -49,15 +105,28 @@ public struct NumberNormalizer {
                 }
             }
             if let start = runStart {
-                output.append(contentsOf: collapseRun(tokens: Array(tokens[start..<i]), aggressive: aggressive))
+                let following = Array(tokens[i..<tokens.count])
+                let result = collapseRun(
+                    tokens: Array(tokens[start..<i]),
+                    following: following,
+                    aggressive: aggressive
+                )
+                output.append(contentsOf: result.parts)
+                i += result.consumedFollowing
                 runStart = nil
                 lastNumberWordInRun = nil
+                continue
             }
             output.append(tok.original)
             i += 1
         }
         if let start = runStart {
-            output.append(contentsOf: collapseRun(tokens: Array(tokens[start..<tokens.count]), aggressive: aggressive))
+            let result = collapseRun(
+                tokens: Array(tokens[start..<tokens.count]),
+                following: [],
+                aggressive: aggressive
+            )
+            output.append(contentsOf: result.parts)
         }
         return output.joined()
     }
@@ -66,7 +135,11 @@ public struct NumberNormalizer {
         Self.units[w] != nil || Self.tens[w] != nil || Self.scales[w] != nil
     }
 
-    private func collapseRun(tokens: [Token], aggressive: Bool) -> [String] {
+    private func collapseRun(
+        tokens: [Token],
+        following: [Token],
+        aggressive: Bool
+    ) -> (parts: [String], consumedFollowing: Int) {
         // Strip connectors/whitespace; keep only number words.
         let words = tokens.compactMap { t -> String? in
             let w = t.word.lowercased()
@@ -74,19 +147,131 @@ public struct NumberNormalizer {
         }
         guard let n = parseWords(words) else {
             // Not a parseable number run — keep originals.
-            return tokens.map { $0.original }
+            return (tokens.map { $0.original }, 0)
         }
+
+        let unit = peekUnit(following)
+        let leading = tokens.first.map { String($0.leadingWhitespace) } ?? ""
+
+        // Currency / abbreviated measurements / percent rewrite the unit too.
+        if let unit {
+            switch unit {
+            case .currencyPrefix(let symbol):
+                return ([leading + symbol + String(n)], unitTokenCount(following, matching: unit))
+            case .currencySuffix(let symbol):
+                return ([leading + String(n) + symbol], unitTokenCount(following, matching: unit))
+            case .abbreviated(let abbr):
+                return ([leading + String(n) + " " + abbr], unitTokenCount(following, matching: unit))
+            case .percent:
+                return ([leading + String(n) + "%"], unitTokenCount(following, matching: unit))
+            case .forceDigit, .forceDigitConsuming:
+                let consumed = unitTokenCount(following, matching: unit)
+                if case .forceDigitConsuming = unit {
+                    // Preserve the multi-token unit spelling ("o'clock", "a.m.").
+                    let unitParts = following.prefix(consumed).map { $0.original }
+                    return ([leading + String(n)] + Array(unitParts), consumed)
+                }
+                return ([leading + String(n)], 0)
+            }
+        }
+
         // In prose, single spelled-out word < 10 reads better as a word ("I have
         // three apples"). In command/terminal mode the user almost always means
         // a literal digit ("head -n three" → "head -n 3"), so aggressive=true
         // converts bare singles too.
         if !aggressive && words.count == 1 && n < 10 {
-            return tokens.map { $0.original }
+            return (tokens.map { $0.original }, 0)
         }
-        // Preserve leading whitespace of first token, trailing of last token.
-        let leading = tokens.first.map { String($0.leadingWhitespace) } ?? ""
         let trailing = tokens.last.map { String($0.trailingWhitespace) } ?? ""
-        return [leading + String(n) + trailing]
+        return ([leading + String(n) + trailing], 0)
+    }
+
+    private func peekUnit(_ following: [Token]) -> FollowingUnit? {
+        guard let first = following.first(where: { !$0.word.isEmpty }) else { return nil }
+        let w = first.word.lowercased()
+
+        if let symbol = Self.currencyPrefix[w] { return .currencyPrefix(symbol) }
+        if let symbol = Self.currencySuffix[w] { return .currencySuffix(symbol) }
+        if let abbr = Self.dataUnits[w] { return .abbreviated(abbr) }
+        if w == "percent" || w == "percentage" { return .percent }
+        if Self.forceDigitUnits.contains(w) { return .forceDigit }
+
+        // "o'clock" tokenizes as o + ' + clock
+        if w == "o", matchesOClock(following) {
+            return .forceDigitConsuming(tokenCount: oClockTokenCount(following))
+        }
+        // "a.m." / "p.m." tokenizes as letter + . + letter + optional .
+        if (w == "a" || w == "p"), matchesMeridiem(following) {
+            return .forceDigitConsuming(tokenCount: meridiemTokenCount(following))
+        }
+        return nil
+    }
+
+    private func unitTokenCount(_ following: [Token], matching unit: FollowingUnit) -> Int {
+        switch unit {
+        case .forceDigit:
+            return 0
+        case .forceDigitConsuming(let count):
+            return count
+        case .currencyPrefix, .currencySuffix, .abbreviated, .percent:
+            // Skip leading empty/whitespace-only tokens, then the unit word.
+            var count = 0
+            for t in following {
+                count += 1
+                if !t.word.isEmpty { break }
+            }
+            return count
+        }
+    }
+
+    private func matchesOClock(_ following: [Token]) -> Bool {
+        let words = following.map { $0.word.lowercased() }.filter { !$0.isEmpty }
+        guard words.count >= 3 else { return false }
+        return words[0] == "o" && words[1] == "'" && words[2] == "clock"
+    }
+
+    private func oClockTokenCount(_ following: [Token]) -> Int {
+        var seen = 0
+        var count = 0
+        for t in following {
+            count += 1
+            if t.word.isEmpty { continue }
+            seen += 1
+            if seen == 3 { return count }
+        }
+        return count
+    }
+
+    private func matchesMeridiem(_ following: [Token]) -> Bool {
+        let words = following.map { $0.word.lowercased() }.filter { !$0.isEmpty }
+        // a . m  or  a . m .
+        guard words.count >= 3 else { return false }
+        let letter = words[0]
+        guard letter == "a" || letter == "p" else { return false }
+        guard words[1] == "." else { return false }
+        return words[2] == "m"
+    }
+
+    private func meridiemTokenCount(_ following: [Token]) -> Int {
+        // Consume a/p + . + m, plus an optional trailing "." ("a.m.").
+        var seen = 0
+        var count = 0
+        for t in following {
+            count += 1
+            if t.word.isEmpty { continue }
+            seen += 1
+            if seen < 3 { continue }
+            if seen == 3 {
+                // Peek whether a trailing "." follows; if so, keep looping once more.
+                let rest = following.dropFirst(count)
+                if let next = rest.first(where: { !$0.word.isEmpty }), next.word == "." {
+                    continue
+                }
+                return count
+            }
+            return count
+        }
+        return count
     }
 
     private func parseWords(_ words: [String]) -> Int? {

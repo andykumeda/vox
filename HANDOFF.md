@@ -1,40 +1,36 @@
 # Vox Handoff
 
-Last updated: 2026-07-28
+Last updated: 2026-08-03
 
 ## Current state
 
 - Project root: `/Users/andy/Dev/vox` on Mac mini `AKsMini`.
-- Release: `0.7.29` build `48`, tag `v0.7.29`, Sparkle appcast + GitHub
-  Release DMG published (or publishing in this session).
+- Release: `0.7.29` build `48` is the last published cut; working tree has
+  unreleased prose number-normalization improvements (not tagged/released).
 - Branch: `main`.
 
-## Changes in 0.7.29
+## Unreleased: prose number contexts
 
-- Remote paste locks frontmost pid/bundle; Screen Sharing AppleScript targets
-  that unix id; focus drift aborts injection (transcript stays on clipboard).
-- Remote physical fallbacks use Unicode-backed shifted characters; Remote
-  Control Mode no longer overrides Screen Sharing / RustDesk / Parsec.
-- Clipboard waits poll focus; paste vs Paste Last serialized; history `record`
-  is synchronous.
-- Meeting stop with nil recorder fails/clears; start aborts if session cleared
-  mid-create; save failures logged; transport retry capped at 20 minutes.
-- Removed obsolete `docs/superpowers/` docs; refreshed remote-dictation status.
+- `NumberNormalizer` now converts small spelled-out numbers in quantitative
+  contexts instead of leaving 1–9 as words:
+  - currency: `five dollars` → `$5`, `fifty cents` → `50¢`
+  - time: `three hours` → `3 hours`, `five o'clock` → `5 o'clock`
+  - data sizes: `one terabyte` → `1 TB`
+  - percent: `five percent` → `5%`
+- Ordinary prose still keeps small counts as words (`three apples`).
+- Whisper prose prompt tightened to prefer digits/symbols for these cases.
+- `swift test`: 406 tests, 0 failures.
 
 ## Verification
 
-- `swift test`: 384 tests, 0 failures (pre-release).
-- DMG codesigned with `vox-dev`; Sparkle `sign_update` signature in appcast.
-- Live smoke on MacBook after Sparkle update still recommended (paste + TCC).
-
-## MacBook update (Sparkle)
-
-On the MacBook: menu bar → **Check for Updates…**, or wait for the daily check.
-Re-grant Input Monitoring / Accessibility / Microphone / Screen Recording if
-macOS prompts after the self-signed update.
+- Local app refreshed 2026-08-03: `./scripts/build-app.sh` →
+  `/Applications/Vox.app`, LaunchAgent restarted
+  (`com.andykumeda.vox`). Still reports Info.plist `0.7.29` / build `48`
+  (version not bumped; binary includes unreleased changes).
+- Live smoke confirmed: prose currency / time / measurement number forms.
 
 ## Signing notes
 
-- Sparkle EdDSA private key and `vox-dev` codesign identity were available on
-  `AKsMini` for this cut.
+- Sparkle EdDSA private key and `vox-dev` codesign identity live on `AKsMini`.
 - Prefer Git push/pull between clones; do not put a live tree in iCloud Drive.
+- Do not bump Info.plist / appcast / DMG unless cutting a release.

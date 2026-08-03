@@ -652,17 +652,12 @@ final class MenuBarController: NSObject {
         dlog("recording saved: \(url.path) bytes=\(wav.count)")
 
         // Silence gate: skip the transcription API on clearly empty clips.
-        // Whisper hallucinates / echoes the system prompt when fed silence.
-        // Tiered by duration so quiet-but-real long recordings still transcribe.
+        // Whisper / gpt-4o-transcribe hallucinate or echo the prompt on silence
+        // (e.g. prose pangram, command-mode "ls -l"). Tiered by duration so
+        // quiet-but-real longer recordings still transcribe.
         let (durationSec, rms) = wavStats(wav)
         dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) mode=\(mode)")
-        let silenceGated: Bool = {
-            if durationSec < 0.35 { return true }
-            if durationSec < 2.0 && rms < 150 { return true }
-            if rms < 40 { return true }
-            return false
-        }()
-        if silenceGated {
+        if DictationSilenceGate.shouldSkip(durationSec: durationSec, rms: rms) {
             dlog("silence gate tripped — skipping transcription")
             state = .idle
             return
@@ -679,6 +674,16 @@ final class MenuBarController: NSObject {
                 let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
                 let rawMetrics = textLogMetrics(label: "raw", text: raw)
                 dlog("dictation timing stt=\(Self.elapsedString(since: sttStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s \(rawMetrics)")
+
+                // Filler / prompt-echo guard for near-silent clips that slipped
+                // past the RMS gate (pangrams, "ls -l" from the command prompt).
+                if DictationHallucinationGuard.shouldSuppress(
+                    raw, mode: mode, durationSec: durationSec, rms: rms
+                ) {
+                    dlog("hallucination guard: suppressed filler/prompt-echo \(rawMetrics) duration=\(durationSec)s rms=\(rms)")
+                    await MainActor.run { self.state = .idle }
+                    return
+                }
 
                 // Hallucination guard. gpt-4o-mini-transcribe occasionally loops on
                 // short / noisy audio and emits a runaway repetitive cascade

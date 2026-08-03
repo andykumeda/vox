@@ -17,7 +17,7 @@ log; only character and word counts are recorded.
 
 Vox runs in one of two text-shaping modes:
 
-- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation.
+- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation. Spelled-out quantities become digits in quantitative contexts (`five dollars` → `$5`, `three hours` → `3 hours`, `one terabyte` → `1 TB`); ordinary small counts stay words (`three apples`).
 - **Command** — no auto-capitalize, no trailing period, aggressive number-to-digit conversion, spoken-punctuation expansion (`dash`, `dot`, `pipe`), NATO phonetic letters after dashes, and trailing-keyword key-event synthesis (`tab`, `return`, `escape`, `control X`).
 
 Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`, `Warp`, `Ghostty`, `Alacritty`, `kitty`, `WezTerm`, `Hyper`, `Wave`, `Tabby`) → command; everything else → prose. Override via Settings → Mode (`auto` / `always prose` / `always command`) or the **mode-toggle hotkey** (default `⌃⌥M`).

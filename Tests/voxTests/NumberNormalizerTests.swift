@@ -75,4 +75,50 @@ final class NumberNormalizerTests: XCTestCase {
     func testProseModeUnchangedWithoutAggressive() {
         XCTAssertEqual(n.normalize("I have three apples"), "I have three apples")
     }
+
+    // MARK: - Context-aware prose (currency / time / measurements)
+
+    func testCurrencyDollarsToSymbol() {
+        XCTAssertEqual(n.normalize("five dollars"), "$5")
+        XCTAssertEqual(n.normalize("costs five dollars today"), "costs $5 today")
+        XCTAssertEqual(n.normalize("twenty three dollars"), "$23")
+    }
+
+    func testCurrencyCentsToSymbol() {
+        XCTAssertEqual(n.normalize("fifty cents"), "50¢")
+        XCTAssertEqual(n.normalize("five cents"), "5¢")
+    }
+
+    func testCurrencyEuros() {
+        XCTAssertEqual(n.normalize("nine euros"), "€9")
+    }
+
+    func testTimeHoursToDigits() {
+        XCTAssertEqual(n.normalize("three hours"), "3 hours")
+        XCTAssertEqual(n.normalize("wait five minutes"), "wait 5 minutes")
+    }
+
+    func testTimeOClock() {
+        XCTAssertEqual(n.normalize("meet at five o'clock"), "meet at 5 o'clock")
+    }
+
+    func testTimeMeridiem() {
+        XCTAssertEqual(n.normalize("leave at nine a.m."), "leave at 9 a.m.")
+        XCTAssertEqual(n.normalize("done by five pm"), "done by 5 pm")
+    }
+
+    func testDataSizeAbbreviation() {
+        XCTAssertEqual(n.normalize("one terabyte"), "1 TB")
+        XCTAssertEqual(n.normalize("two gigabytes of ram"), "2 GB of ram")
+        XCTAssertEqual(n.normalize("five megabytes"), "5 MB")
+    }
+
+    func testPercent() {
+        XCTAssertEqual(n.normalize("five percent"), "5%")
+    }
+
+    func testOrdinaryProseStillSpellsSmallNumbers() {
+        XCTAssertEqual(n.normalize("I have three apples"), "I have three apples")
+        XCTAssertEqual(n.normalize("one more thing"), "one more thing")
+    }
 }
