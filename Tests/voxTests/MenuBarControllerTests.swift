@@ -2,6 +2,20 @@ import XCTest
 @testable import vox
 
 final class MenuBarControllerTests: XCTestCase {
+    func testMenuContainsOnlyRequestedCommandsInOrder() {
+        XCTAssertEqual(
+            MenuBarCommand.allCases.map(\.title),
+            [
+                "Dashboard",
+                "Meeting",
+                "Paste Last Transcription",
+                "Settings",
+                "Check for Updates…",
+                "Help",
+            ]
+        )
+    }
+
     func testPasteLastWaitsForMenuAndModifierFocusToSettle() {
         XCTAssertGreaterThanOrEqual(MenuBarController.pasteLastFocusSettleDelay, 0.15)
     }

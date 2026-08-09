@@ -1,6 +1,6 @@
 # Remote Dictation Status
 
-Last reviewed: 2026-07-28.
+Last reviewed: 2026-08-09.
 
 ## Current Status
 
@@ -25,13 +25,12 @@ Current behavior:
   remain fallbacks.
 - **Remote Control Mode** applies only when the frontmost app is not a known
   outbound viewer. Screen Sharing, RustDesk, and Parsec keep their specialized
-  paths even when the mode is enabled. Use Remote Control Mode when this Mac is
-  being controlled and the frontmost target is a normal local app.
+  paths even when the mode is enabled. The persisted compatibility preference
+  remains supported but is no longer exposed in the compact status menu.
 - Paste Last Transcription uses the same async target-specific path as fresh
   dictation, and is ignored while a dictation cycle is already busy.
-- If both the viewer Mac and controlled Mac have Vox running, turn on **Ignore
-  Record Hotkey on This Mac** on the controlled/remote Mac. Otherwise one Fn
-  press can start two Vox recordings.
+- The persisted `ignoreRecordHotkey` compatibility preference remains honored,
+  but is no longer exposed in the compact status menu.
 
 Do not assume a future regression is only "pasting the previous recording."
 Historical failures also included lost capitalization and `?` becoming `/` when

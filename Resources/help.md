@@ -116,7 +116,6 @@ Settings → Hotkeys lets you rebind:
 ## Troubleshooting
 - **Vox disappears after a crash** — launch it once from the app bundle. Vox
   installs a per-user LaunchAgent that restarts abnormal exits automatically.
-  Choosing **Quit Vox** still exits normally and stays quit.
 - **Paste fails silently** — make sure Vox launched via `open /Applications/Vox.app`,
   not the binary directly. TCC attributes Accessibility permissions to the
   launching process.
@@ -125,13 +124,7 @@ Settings → Hotkeys lets you rebind:
   remote Cmd+V and Unicode-backed physical typing. RustDesk uses delayed
   clipboard sync plus remote Cmd+V first, with the same physical typing
   fallback. Paste locks the target process and aborts if focus drifts (text
-  stays on the clipboard). If you are remote-controlling the Mac that runs Vox,
-  enable **Remote Control Mode** from the menu bar;
-  outbound viewers keep their specialized paths even when that mode is on.
-- **Both Macs record at once** — if the viewer Mac and controlled Mac both have
-  Vox running, forwarded Fn presses can trigger both instances. On the
-  controlled/remote Mac, open the Vox menu and enable **Ignore Record Hotkey on
-  This Mac** so only the viewer-side Vox records.
+  stays on the clipboard).
 - **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for
   `dictation timing`, `transcription request model=...`,
   `transcription api key read elapsed=...`, and `transcription http attempt`

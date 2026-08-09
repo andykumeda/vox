@@ -16,6 +16,37 @@ enum MenuIconState {
     case idle, recording, transcribing, error
 }
 
+enum MenuBarCommand: CaseIterable {
+    case dashboard
+    case meeting
+    case pasteLastTranscription
+    case settings
+    case checkForUpdates
+    case help
+
+    var title: String {
+        switch self {
+        case .dashboard:              return "Dashboard"
+        case .meeting:                return "Meeting"
+        case .pasteLastTranscription: return "Paste Last Transcription"
+        case .settings:               return "Settings"
+        case .checkForUpdates:        return "Check for Updates…"
+        case .help:                   return "Help"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .dashboard:              return "house"
+        case .meeting:                return "person.2.wave.2"
+        case .pasteLastTranscription: return "doc.on.clipboard"
+        case .settings:               return "gearshape"
+        case .checkForUpdates:        return "arrow.triangle.2.circlepath"
+        case .help:                   return "questionmark.circle"
+        }
+    }
+}
+
 final class MenuBarController: NSObject {
     static let pasteLastFocusSettleDelay: TimeInterval = 0.20
 
@@ -214,67 +245,29 @@ final class MenuBarController: NSObject {
         _ = updaterController
 
         let menu = NSMenu()
-        let version = NSMenuItem(title: "Vox \(Self.appVersion)", action: nil, keyEquivalent: "")
-        version.isEnabled = false
-        menu.addItem(version)
-        menu.addItem(.separator())
-        menu.addItem(makeMenuItem(
-            title: "Home", symbol: "house",
-            action: #selector(openMainWindow)
-        ))
-        menu.addItem(makeMenuItem(
-            title: "Meeting", symbol: "person.2.wave.2",
-            action: #selector(openMeetingPanel)
-        ))
-        menu.addItem(makeMenuItem(
-            title: "Dictionary", symbol: "character.book.closed",
-            action: #selector(openDictionary)
-        ))
-        menu.addItem(.separator())
-        let pasteLastItem = makeMenuItem(
-            title: "Paste Last Transcription",
-            symbol: "doc.on.clipboard",
-            action: #selector(pasteLastTranscriptionMenuAction)
-        )
-        pasteLastItem.isEnabled = (DictationHistoryStore.shared.last() != nil)
-        menu.addItem(pasteLastItem)
-        let remoteControlItem = makeMenuItem(
-            title: "Remote Control Mode",
-            symbol: "display",
-            action: #selector(toggleRemoteControlMode)
-        )
-        remoteControlItem.state = AppSettings.remoteControlModeEnabled ? .on : .off
-        menu.addItem(remoteControlItem)
-        let ignoreRecordHotkeyItem = makeMenuItem(
-            title: "Ignore Record Hotkey on This Mac",
-            symbol: "keyboard",
-            action: #selector(toggleIgnoreRecordHotkey)
-        )
-        ignoreRecordHotkeyItem.state = AppSettings.ignoreRecordHotkey ? .on : .off
-        menu.addItem(ignoreRecordHotkeyItem)
-        menu.addItem(.separator())
-        menu.addItem(makeMenuItem(
-            title: "Settings", symbol: "gearshape",
-            action: #selector(openSettings)
-        ))
-        menu.addItem(.separator())
-        menu.addItem(makeMenuItem(
-            title: "Check for Updates…", symbol: "arrow.triangle.2.circlepath",
-            action: #selector(checkForUpdatesAction)
-        ))
-        menu.addItem(makeMenuItem(
-            title: "Help", symbol: "questionmark.circle",
-            action: #selector(openHelp)
-        ))
-        menu.addItem(.separator())
-        let quit = NSMenuItem(
-            title: "Quit Vox",
-            action: #selector(NSApp.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
-        menu.addItem(quit)
+        for command in MenuBarCommand.allCases {
+            let item = makeMenuItem(
+                title: command.title,
+                symbol: command.symbol,
+                action: action(for: command)
+            )
+            if command == .pasteLastTranscription {
+                item.isEnabled = (DictationHistoryStore.shared.last() != nil)
+            }
+            menu.addItem(item)
+        }
         statusItem.menu = menu
+    }
+
+    private func action(for command: MenuBarCommand) -> Selector {
+        switch command {
+        case .dashboard:              return #selector(openMainWindow)
+        case .meeting:                return #selector(openMeetingPanel)
+        case .pasteLastTranscription: return #selector(pasteLastTranscriptionMenuAction)
+        case .settings:               return #selector(openSettings)
+        case .checkForUpdates:        return #selector(checkForUpdatesAction)
+        case .help:                   return #selector(openHelp)
+        }
     }
 
     private func makeMenuItem(title: String, symbol: String, action: Selector) -> NSMenuItem {
@@ -292,10 +285,6 @@ final class MenuBarController: NSObject {
         Task { @MainActor in MainWindowController.shared.showMeeting() }
     }
 
-    @objc private func openDictionary() {
-        Task { @MainActor in MainWindowController.shared.showDictionary() }
-    }
-
     @objc private func openSettings() {
         Task { @MainActor in MainWindowController.shared.showSettings() }
     }
@@ -306,18 +295,6 @@ final class MenuBarController: NSObject {
 
     @objc private func pasteLastTranscriptionMenuAction() {
         pasteLastTranscription()
-    }
-
-    @objc private func toggleRemoteControlMode() {
-        AppSettings.remoteControlModeEnabled.toggle()
-        dlog("remote control mode -> \(AppSettings.remoteControlModeEnabled)")
-        configureMenu()
-    }
-
-    @objc private func toggleIgnoreRecordHotkey() {
-        AppSettings.ignoreRecordHotkey.toggle()
-        dlog("ignore record hotkey -> \(AppSettings.ignoreRecordHotkey)")
-        configureMenu()
     }
 
     /// Pastes the most recent dictation entry's text into the focused app.
@@ -345,10 +322,6 @@ final class MenuBarController: NSObject {
                 await injector.pasteAsync(text, keepOnClipboard: keepOnClipboard)
             }
         }
-    }
-
-    static var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     }
 
     @objc private func checkForUpdatesAction() {

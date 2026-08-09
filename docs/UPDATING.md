@@ -55,7 +55,7 @@ If any of those break, fall back to manual install.
 
 ### TL;DR (manual)
 
-1. Quit Vox (menu bar icon → **Quit Vox**).
+1. Quit Vox from Activity Monitor, or run `killall vox` in Terminal.
 2. Download the latest `Vox.dmg` from
    [Releases](https://github.com/andykumeda/vox/releases/latest).
 3. Open the DMG, drag `Vox.app` into `/Applications`,

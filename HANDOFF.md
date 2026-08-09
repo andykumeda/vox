@@ -10,6 +10,18 @@ Last updated: 2026-08-09
   lower-overhead meeting auto-detection.
 - Branch: `main`.
 
+## Unreleased: compact status menu
+
+- The menu-bar dropdown now contains exactly Dashboard, Meeting, Paste Last
+  Transcription, Settings, Check for Updates, and Help.
+- The version header, Dictionary shortcut, Remote Control Mode toggle, Ignore
+  Record Hotkey toggle, separators, and Quit command were removed from the
+  dropdown. Dictionary remains under Personalization; the two persisted remote
+  compatibility preferences and their underlying behavior remain unchanged.
+- `swift test`: 413 tests, 0 failures.
+- `./scripts/build-app.sh`: release build, signing, and installation succeeded;
+  known pre-existing Swift 6 Sendable warnings remain.
+
 ## Released in 0.7.30: prose number contexts
 
 - `NumberNormalizer` now converts small spelled-out numbers in quantitative

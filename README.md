@@ -114,7 +114,7 @@ open /Applications/Vox.app
 On first app launch, Vox installs a per-user LaunchAgent at
 `~/Library/LaunchAgents/com.andykumeda.vox.plist` and hands off to that
 supervised process. If Vox crashes or exits abnormally later, launchd restarts
-it automatically. Choosing **Quit Vox** exits normally and does not relaunch.
+it automatically.
 
 Always launch via `open`, not by running the binary directly:
 
@@ -158,8 +158,7 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
 - **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
-- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Screen Sharing/VNC, RustDesk, Parsec, and Remote Control Mode skip restoring the prior clipboard because remote clipboard synchronization can lag behind the local paste event.
-- **Ignore Record Hotkey on This Mac** — menu-bar toggle for remote-control setups where both the viewer Mac and the controlled Mac have Vox running. Turn this on for the controlled/remote Mac so forwarded Fn presses do not make the remote Vox record and paste over the viewer-side dictation.
+- **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Remote insertion paths skip restoring the prior clipboard because remote clipboard synchronization can lag behind the local paste event.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
 ## Dictation troubleshooting
@@ -234,9 +233,9 @@ Settings → Meeting → **Generate meeting summary after transcription** (defau
 
 The orange macOS recording indicator dot also appears whenever Vox holds the mic — that's a system privacy feature.
 
-The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
+The status menu contains exactly **Dashboard**, Meeting, **Paste Last Transcription**, Settings, Check for Updates, and Help. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/Parsec/RustDesk viewer frontmost, Screen Sharing/VNC and Parsec try System Events text insertion first, then fall back to delayed clipboard sync plus remote Cmd+V and Unicode-backed physical typing. RustDesk uses delayed clipboard sync plus remote Cmd+V first, with the same physical typing fallback. Paste locks the frontmost process at start and aborts if focus drifts (transcript stays on the clipboard). When you are remote-controlling the Mac that runs Vox, enable **Remote Control Mode** from the menu bar — it applies only to ordinary local apps and does not override outbound viewer paths. If both Macs have Vox running, turn on **Ignore Record Hotkey on This Mac** on the controlled/remote Mac so one Fn press does not trigger both Vox instances. Paste Last Transcription uses the same async target-specific path and is serialized with fresh dictation paste. Remote-dictation history and caveats are tracked in [docs/remote-dictation-status.md](docs/remote-dictation-status.md).
+Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/Parsec/RustDesk viewer frontmost, Screen Sharing/VNC and Parsec try System Events text insertion first, then fall back to delayed clipboard sync plus remote Cmd+V and Unicode-backed physical typing. RustDesk uses delayed clipboard sync plus remote Cmd+V first, with the same physical typing fallback. Paste locks the frontmost process at start and aborts if focus drifts (transcript stays on the clipboard). Paste Last Transcription uses the same async target-specific path and is serialized with fresh dictation paste. Remote-dictation history and caveats are tracked in [docs/remote-dictation-status.md](docs/remote-dictation-status.md).
 
 ## Files
 
