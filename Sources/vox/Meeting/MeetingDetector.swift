@@ -54,6 +54,20 @@ public final class MeetingDetector {
 
     private func tick() {
         let runningApps = NSWorkspace.shared.runningApplications
+        let frontmostOwner = NSWorkspace.shared.frontmostApplication?.localizedName
+
+        // CGWindowListCopyWindowInfo crosses into WindowServer and is much more
+        // expensive than inspecting the frontmost application. When auto-show is
+        // enabled, do not query every on-screen window on every poll while the user
+        // is working in an unrelated app. Keep polling after a match so a meeting
+        // can still end cleanly when the user switches apps.
+        guard Self.shouldInspectWindows(
+            frontmostOwner: frontmostOwner,
+            inMeeting: inMeeting
+        ) else {
+            return
+        }
+
         let windows = Self.snapshotWindows()
         let match = Self.firstMatchingWindow(runningApps: runningApps, windows: windows)
         let active = (match != nil)
@@ -84,6 +98,12 @@ public final class MeetingDetector {
     }
 
     // MARK: - Window snapshot
+
+    static func shouldInspectWindows(frontmostOwner: String?, inMeeting: Bool) -> Bool {
+        guard !inMeeting else { return true }
+        guard let frontmostOwner else { return false }
+        return meetingApps.contains(frontmostOwner) || browserApps.contains(frontmostOwner)
+    }
 
     /// (ownerName, windowTitle) for every on-screen regular window.
     static func snapshotWindows() -> [(owner: String, title: String)] {

@@ -57,8 +57,9 @@ Grant both in System Settings → Privacy & Security.
 
 ### Auto-show meeting panel
 Settings → Meeting → **Auto-show meeting panel when a call starts**. When
-on, Vox polls window titles every few seconds and pops the floating
-panel as soon as a known meeting is detected:
+on, Vox checks window titles every few seconds only when a supported meeting
+app or browser is frontmost, and keeps watching after a meeting is detected.
+It pops the floating panel as soon as a known meeting is detected:
 - Teams (desktop + new "work or school" variant)
 - Zoom desktop
 - Webex desktop

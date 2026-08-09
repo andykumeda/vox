@@ -82,6 +82,29 @@ final class MeetingDetectorTests: XCTestCase {
         ))
     }
 
+    // MARK: - Window-server load shedding
+
+    func testSkipsWindowSnapshotForUnrelatedFrontmostApp() {
+        XCTAssertFalse(MeetingDetector.shouldInspectWindows(
+            frontmostOwner: "Xcode",
+            inMeeting: false
+        ))
+    }
+
+    func testInspectsWindowsForSupportedFrontmostApp() {
+        XCTAssertTrue(MeetingDetector.shouldInspectWindows(
+            frontmostOwner: "Google Chrome",
+            inMeeting: false
+        ))
+    }
+
+    func testKeepsInspectingAfterMeetingWasDetected() {
+        XCTAssertTrue(MeetingDetector.shouldInspectWindows(
+            frontmostOwner: "Xcode",
+            inMeeting: true
+        ))
+    }
+
     // MARK: - Pattern coverage
 
     func testDesktopPatternsCoverKnownProducts() {

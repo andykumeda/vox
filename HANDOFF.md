@@ -29,6 +29,24 @@ Last updated: 2026-08-03
   (version not bumped; binary includes unreleased changes).
 - Live smoke confirmed: prose currency / time / measurement number forms.
 
+## CPU investigation (2026-08-08)
+
+- The linked live investigation found `WindowServer` at ~140–148% CPU and
+  Control Center at ~12–23%; Vox itself was ~7% before the fix and 0% after
+  settling. The load persisted with Vox stopped, so Vox was not the sustained
+  system-wide CPU consumer.
+- The affected install had `autoShowMeetingPanel = 1`. Vox's sample showed
+  the opt-in `MeetingDetector` repeatedly calling
+  `CGWindowListCopyWindowInfo` / `SLWindowListCopyWindowInfo` while the user
+  was in unrelated apps. The detector now skips that WindowServer query unless
+  a supported meeting app/browser is frontmost, while continuing to inspect
+  windows after a meeting has been detected.
+- Installed and restarted `/Applications/Vox.app` with this fix. Full
+  `swift test`: 409 tests, 0 failures. WindowServer remained high after Vox
+  was stopped and after Control Center was restarted; this remaining issue is
+  an OS/display compositor problem and may require logging out/rebooting,
+  disconnecting the Brio/external display, or disabling display/video effects.
+
 ## Signing notes
 
 - Sparkle EdDSA private key and `vox-dev` codesign identity live on `AKsMini`.
