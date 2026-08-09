@@ -1,15 +1,16 @@
 # Vox Handoff
 
-Last updated: 2026-08-03
+Last updated: 2026-08-09
 
 ## Current state
 
 - Project root: `/Users/andy/Dev/vox` on Mac mini `AKsMini`.
-- Release: `0.7.29` build `48` is the last published cut; working tree has
-  unreleased prose number-normalization improvements (not tagged/released).
+- Release: `0.7.30` build `49` includes prose number normalization, the
+  Settings/Personalization reorganization, stronger silent-audio gating, and
+  lower-overhead meeting auto-detection.
 - Branch: `main`.
 
-## Unreleased: prose number contexts
+## Released in 0.7.30: prose number contexts
 
 - `NumberNormalizer` now converts small spelled-out numbers in quantitative
   contexts instead of leaving 1–9 as words:
@@ -19,15 +20,18 @@ Last updated: 2026-08-03
   - percent: `five percent` → `5%`
 - Ordinary prose still keeps small counts as words (`three apples`).
 - Whisper prose prompt tightened to prefer digits/symbols for these cases.
-- `swift test`: 406 tests, 0 failures.
+- `swift test`: 412 tests, 0 failures.
 
 ## Verification
 
-- Local app refreshed 2026-08-03: `./scripts/build-app.sh` →
+- Pre-release local app refreshed 2026-08-03: `./scripts/build-app.sh` →
   `/Applications/Vox.app`, LaunchAgent restarted
   (`com.andykumeda.vox`). Still reports Info.plist `0.7.29` / build `48`
   (version not bumped; binary includes unreleased changes).
 - Live smoke confirmed: prose currency / time / measurement number forms.
+- Release artifact validation on 2026-08-09: `dist/Vox.app` passed strict deep
+  code-signature verification; `dist/Vox.dmg` passed `hdiutil verify`; Sparkle
+  EdDSA signature and appcast enclosure length were generated on `AKsMini`.
 
 ## CPU investigation (2026-08-08)
 

@@ -6,6 +6,27 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.30</title>
+            <pubDate>Sun, 09 Aug 2026 22:51:14 +0000</pubDate>
+            <sparkle:version>49</sparkle:version>
+            <sparkle:shortVersionString>0.7.30</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>New:</strong> Personalization is now a main-sidebar destination containing Dictionary and Custom Instructions.</li>
+                    <li><strong>Settings:</strong> General controls now appear directly under Settings, and Remote Control Mode remains available from the menu bar without a duplicate Settings toggle.</li>
+                    <li><strong>Dictation:</strong> Prose cleanup better formats currency, time, percentages, and data sizes while preserving ordinary small-number wording.</li>
+                    <li><strong>Reliability:</strong> Stronger silent-audio gating avoids accidental prompt-echo transcriptions.</li>
+                    <li><strong>Performance:</strong> Meeting auto-detection avoids expensive window scans while unrelated apps are frontmost.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.30/Vox.dmg"
+                sparkle:edSignature="fYd5xavYQ5bllo3RiuJsYuhtflCC08R3qaXlAiEmxRBrOXjLcfg/XXc+CZmSllUERNoal4b32stDVf7Z53l+Cg=="
+                length="2553464"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.29</title>
             <pubDate>Wed, 29 Jul 2026 00:18:20 +0000</pubDate>
             <sparkle:version>48</sparkle:version>
