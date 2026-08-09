@@ -39,11 +39,8 @@ struct SettingsView: View {
     @State private var deepgramSavedMessage: String?
     @State private var meetingProvider: MeetingProvider = AppSettings.meetingProvider
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
-    @State private var remoteControlMode: Bool = AppSettings.remoteControlModeEnabled
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
-    @State private var cleanupProfile: String = CleanupProfileStore.shared.load()
-    @State private var cleanupProfileMessage: String?
     @State private var meetingMode: Bool = AppSettings.meetingModeEnabled
     @State private var meetingConsent: Bool = AppSettings.meetingConsentAcknowledged
     @State private var autoShowMeetingPanel: Bool = AppSettings.autoShowMeetingPanel
@@ -56,12 +53,11 @@ struct SettingsView: View {
     @State private var isRefreshingStorageUsage = false
     let keychain: KeychainStore
     private let deepgramKeychain = KeychainStore(account: "deepgram-api-key")
-    private let cleanupProfileStore = CleanupProfileStore.shared
 
     var body: some View {
         ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Vox — Settings")
+            Text("Settings")
                 .font(.title2)
                 .fontWeight(.semibold)
 
@@ -200,28 +196,6 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Personal cleanup instructions")
-                        .font(.subheadline)
-                    TextEditor(text: $cleanupProfile)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 110)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-                        )
-                    HStack {
-                        Button("Save") { saveCleanupProfile() }
-                        Button("Reset") { resetCleanupProfile() }
-                        Button("Reveal File") { revealCleanupProfile() }
-                        if let msg = cleanupProfileMessage {
-                            Text(msg).foregroundStyle(.secondary)
-                        }
-                    }
-                    Text("Optional guidance for preserving your voice, wording, and style. Empty uses the default conservative cleanup behavior.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             Divider()
@@ -374,16 +348,6 @@ struct SettingsView: View {
                 Text("When on, the transcribed text stays on your clipboard so you can Cmd+V again if focus moved away. Your prior clipboard contents are overwritten.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Remote control mode", isOn: Binding(
-                    get: { remoteControlMode },
-                    set: { newValue in
-                        remoteControlMode = newValue
-                        AppSettings.remoteControlModeEnabled = newValue
-                    }
-                ))
-                Text("Use this when controlling this Mac through VNC, Screen Sharing, or RustDesk from another machine. Vox types the transcript directly into the frontmost local app instead of using the clipboard. Outbound remote viewers (Screen Sharing, RustDesk, Parsec) keep their specialized paste paths even when this is on.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Divider()
@@ -508,10 +472,8 @@ struct SettingsView: View {
             deepgramKey = deepgramKeychain.read() ?? ""
             totals = UsageTracker.totals()
             model = AppSettings.transcriptionModel
-            remoteControlMode = AppSettings.remoteControlModeEnabled
             modeOverride = AppSettings.modeOverride
             smartCleanup = AppSettings.smartCleanupEnabled
-            cleanupProfile = cleanupProfileStore.load()
             meetingMode = AppSettings.meetingModeEnabled
             meetingConsent = AppSettings.meetingConsentAcknowledged
             meetingProvider = AppSettings.meetingProvider
@@ -545,34 +507,6 @@ struct SettingsView: View {
         }
     }
 
-    private func saveCleanupProfile() {
-        do {
-            try cleanupProfileStore.save(cleanupProfile)
-            cleanupProfileMessage = "Saved."
-        } catch {
-            cleanupProfileMessage = "Save failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func resetCleanupProfile() {
-        do {
-            try cleanupProfileStore.reset()
-            cleanupProfile = ""
-            cleanupProfileMessage = "Reset."
-        } catch {
-            cleanupProfileMessage = "Reset failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func revealCleanupProfile() {
-        do {
-            try cleanupProfileStore.ensureFileExists()
-            NSWorkspace.shared.activateFileViewerSelecting([cleanupProfileStore.fileURL])
-        } catch {
-            cleanupProfileMessage = "Reveal failed: \(error.localizedDescription)"
-        }
-    }
-
     @MainActor
     private func refreshStorageUsage() async {
         guard !isRefreshingStorageUsage else { return }
@@ -582,6 +516,84 @@ struct SettingsView: View {
         let usage = await RecordingStorageUsage.load()
         guard !Task.isCancelled else { return }
         storageUsageLine = usage.formatted()
+    }
+}
+
+struct CustomInstructionsView: View {
+    @State private var instructions: String
+    @State private var message: String?
+
+    private let store: CleanupProfileStore
+
+    init(store: CleanupProfileStore = .shared) {
+        self.store = store
+        _instructions = State(initialValue: store.load())
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Custom Instructions")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            Text("Optional guidance for preserving your voice, wording, and style. Leave this empty to use Vox's default conservative cleanup behavior.")
+                .foregroundStyle(.secondary)
+
+            TextEditor(text: $instructions)
+                .font(.system(.body, design: .monospaced))
+                .accessibilityLabel("Custom Instructions")
+                .frame(minHeight: 220)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                )
+
+            HStack {
+                Button("Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                Button("Reset") { reset() }
+                Button("Reveal in Finder") { revealInFinder() }
+                if let message {
+                    Text(message)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear {
+            instructions = store.load()
+        }
+    }
+
+    private func save() {
+        do {
+            try store.save(instructions)
+            message = "Saved."
+        } catch {
+            message = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func reset() {
+        do {
+            try store.reset()
+            instructions = ""
+            message = "Reset."
+        } catch {
+            message = "Reset failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func revealInFinder() {
+        do {
+            try store.ensureFileExists()
+            NSWorkspace.shared.activateFileViewerSelecting([store.fileURL])
+        } catch {
+            message = "Reveal failed: \(error.localizedDescription)"
+        }
     }
 }
 

@@ -11,13 +11,13 @@ Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mi
 Press your **Mode toggle** hotkey (default `⌃⌥M`) to force prose regardless of focus. The menu-bar icon shows a lock when prose is forced.
 
 ## Verbatim mode
-Smart Cleanup (Settings → Mode) polishes prose dictations conservatively — removes obvious false starts, fillers, self-corrections. Settings also includes a personal cleanup instructions editor saved at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
+Smart Cleanup (Settings → Mode) polishes prose dictations conservatively — removes obvious false starts, fillers, self-corrections. Personalization → **Custom Instructions** stores optional style guidance at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
 
 - **Hold Option while pressing Fn** — that recording is pasted raw, no cleanup, no trigger expansion.
 - **Say "verbatim" or "literal" as the first word** of the dictation. The prefix is stripped and the rest is pasted as Whisper transcribed it. Example: speaking *"verbatim he literally said um maybe yeah"* pastes `he literally said um maybe yeah`.
 
 ## Dictionary
-Settings → Dictionary lets you define custom substitutions:
+Personalization → Dictionary lets you define custom substitutions:
 - Spoken `vox` → replacement `Vox` (proper-noun fix in prose).
 - Spoken `next field` → replacement `next tab` to insert "next" + Tab key.
 - Mode scope: command, prose, or both.
@@ -125,7 +125,7 @@ Settings → Hotkeys lets you rebind:
   clipboard sync plus remote Cmd+V first, with the same physical typing
   fallback. Paste locks the target process and aborts if focus drifts (text
   stays on the clipboard). If you are remote-controlling the Mac that runs Vox,
-  enable **Remote Control Mode** from the menu bar or Settings → Paste behavior;
+  enable **Remote Control Mode** from the menu bar;
   outbound viewers keep their specialized paths even when that mode is on.
 - **Both Macs record at once** — if the viewer Mac and controlled Mac both have
   Vox running, forwarded Fn presses can trigger both instances. On the

@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Primary window for Vox. Sidebar nav with Home / Dictionary / Meeting / Settings /
-/// Help. Auto-opens on launch and reappears on menu-bar icon click. Closing the window
+/// Primary window for Vox. Sidebar nav with Home / Meeting / Settings /
+/// Personalization / Help. Auto-opens on launch and reappears on menu-bar icon
+/// click. Closing the window
 /// hides it (does not quit) so dictation hotkeys keep working in the background.
 @MainActor
 public final class MainWindowController: NSObject, NSWindowDelegate {
@@ -21,11 +22,21 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         bringToFront(window)
     }
 
-    public func showHome()       { showWindow(section: .home) }
-    public func showDictionary() { showWindow(section: .dictionary) }
-    public func showMeeting()    { showWindow(section: .meeting) }
-    public func showSettings()   { showWindow(section: .settings) }
-    public func showHelp()       { showWindow(section: .help) }
+    public func showHome()    { showWindow(section: .home) }
+    public func showMeeting() { showWindow(section: .meeting) }
+    public func showHelp()    { showWindow(section: .help) }
+
+    public func showDictionary() {
+        selection.selectDictionary()
+        showWindow()
+        handleSelectionChange(.personalization)
+    }
+
+    public func showSettings() {
+        selection.selectSettings()
+        showWindow()
+        handleSelectionChange(.settings)
+    }
 
     private func showWindow(section: SidebarItem) {
         selection.current = section
@@ -97,6 +108,20 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
 @MainActor
 final class SidebarSelection: ObservableObject {
     @Published var current: SidebarItem = .home
+    @Published var personalizationDestination: PersonalizationDestination = .dictionary
+
+    func selectSidebarItem(_ item: SidebarItem) {
+        current = item
+    }
+
+    func selectSettings() {
+        current = .settings
+    }
+
+    func selectDictionary() {
+        personalizationDestination = .dictionary
+        current = .personalization
+    }
 }
 
 private struct MainWindowRootView: View {
@@ -112,7 +137,7 @@ private struct MainWindowRootView: View {
             VStack(spacing: 0) {
                 List(SidebarItem.allCases, selection: Binding(
                     get: { selection.current },
-                    set: { if let v = $0 { selection.current = v } }
+                    set: { if let v = $0 { selection.selectSidebarItem(v) } }
                 )) { item in
                     Label(item.label, systemImage: item.systemImage).tag(item)
                 }
@@ -139,9 +164,9 @@ private struct MainWindowRootView: View {
         } detail: {
             switch selection.current {
             case .home:       HomeView()
-            case .dictionary: DictionaryDestinationView()
             case .meeting:    MeetingDestinationView()
             case .settings:   SettingsDestinationView()
+            case .personalization: PersonalizationDestinationView(selection: selection)
             case .help:       HelpDestinationView()
             }
         }
@@ -153,24 +178,46 @@ private struct MainWindowRootView: View {
 }
 
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
-    case home, dictionary, meeting, settings, help
+    case home, meeting, settings, personalization, help
+
     var id: String { rawValue }
     var label: String {
         switch self {
         case .home:       return "Home"
-        case .dictionary: return "Dictionary"
         case .meeting:    return "Meeting"
         case .settings:   return "Settings"
+        case .personalization: return "Personalization"
         case .help:       return "Help"
         }
     }
     var systemImage: String {
         switch self {
         case .home:       return "house"
-        case .dictionary: return "character.book.closed"
         case .meeting:    return "person.2.wave.2"
         case .settings:   return "gearshape"
+        case .personalization: return "person.crop.circle"
         case .help:       return "questionmark.circle"
+        }
+    }
+}
+
+enum PersonalizationDestination: String, Hashable, CaseIterable, Identifiable {
+    case dictionary
+    case customInstructions
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .dictionary:         return "Dictionary"
+        case .customInstructions: return "Custom Instructions"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .dictionary:         return "character.book.closed"
+        case .customInstructions: return "text.alignleft"
         }
     }
 }
@@ -339,16 +386,40 @@ private struct HomeView: View {
     }
 }
 
-private struct DictionaryDestinationView: View {
-    var body: some View { DictionaryView() }
-}
-
 private struct MeetingDestinationView: View {
     var body: some View { MeetingTranscriptsView() }
 }
 
 private struct SettingsDestinationView: View {
     var body: some View { SettingsView(keychain: KeychainStore()) }
+}
+
+private struct PersonalizationDestinationView: View {
+    @ObservedObject var selection: SidebarSelection
+
+    var body: some View {
+        HSplitView {
+            List(PersonalizationDestination.allCases, selection: Binding(
+                get: { selection.personalizationDestination },
+                set: { if let destination = $0 { selection.personalizationDestination = destination } }
+            )) { destination in
+                Label(destination.label, systemImage: destination.systemImage)
+                    .tag(destination)
+            }
+            .listStyle(.sidebar)
+            .frame(minWidth: 180, idealWidth: 200, maxWidth: 240)
+
+            Group {
+                switch selection.personalizationDestination {
+                case .dictionary:
+                    DictionaryView()
+                case .customInstructions:
+                    CustomInstructionsView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
 }
 
 private struct HelpDestinationView: View {

@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Standalone Dictionary editor extracted from SettingsView so it can live as its own
-/// sidebar destination in MainWindow. Backed by `DictionaryStore.shared`.
+/// Standalone Dictionary editor used within the Personalization destination.
+/// Backed by `DictionaryStore.shared`.
 public struct DictionaryView: View {
     @StateObject private var dict = DictionaryStore.shared
     @State private var editingEntry: DictionaryEntry?

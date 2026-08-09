@@ -154,7 +154,7 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 - **Model** — `gpt-4o-transcribe` (~$0.006/min, default and best quality), `gpt-4o-mini-transcribe` (~$0.003/min, lower cost), or `whisper-1` (~$0.006/min, no prompt-following).
 - **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`.
 - **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`.
-- **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes obvious false starts, fillers, and self-corrections in prose. The personal cleanup instructions editor is saved at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
+- **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes obvious false starts, fillers, and self-corrections in prose. Personalization → **Custom Instructions** stores optional style guidance at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
 - **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
@@ -170,7 +170,7 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 
 ## Dictionary
 
-Settings → **Dictionary** lets you define custom substitutions:
+Personalization → **Dictionary** lets you define custom substitutions:
 
 - Spoken `vox` → replacement `Vox` (proper-noun fix in prose).
 - Spoken `next field` → replacement `next tab` to insert "next" + Tab key.
@@ -236,7 +236,7 @@ The orange macOS recording indicator dot also appears whenever Vox holds the mic
 
 The status menu has entries for Home, Meeting, Dictionary, **Paste Last Transcription**, Settings, Check for Updates, Help, Quit. Paste-last is disabled when no history exists.
 
-Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/Parsec/RustDesk viewer frontmost, Screen Sharing/VNC and Parsec try System Events text insertion first, then fall back to delayed clipboard sync plus remote Cmd+V and Unicode-backed physical typing. RustDesk uses delayed clipboard sync plus remote Cmd+V first, with the same physical typing fallback. Paste locks the frontmost process at start and aborts if focus drifts (transcript stays on the clipboard). When you are remote-controlling the Mac that runs Vox, enable **Remote Control Mode** from the menu bar or Settings -> Paste behavior — it applies only to ordinary local apps and does not override outbound viewer paths. If both Macs have Vox running, turn on **Ignore Record Hotkey on This Mac** on the controlled/remote Mac so one Fn press does not trigger both Vox instances. Paste Last Transcription uses the same async target-specific path and is serialized with fresh dictation paste. Remote-dictation history and caveats are tracked in [docs/remote-dictation-status.md](docs/remote-dictation-status.md).
+Remote desktop apps need special paste handling. When Vox is running on the Mac with the VNC/Parsec/RustDesk viewer frontmost, Screen Sharing/VNC and Parsec try System Events text insertion first, then fall back to delayed clipboard sync plus remote Cmd+V and Unicode-backed physical typing. RustDesk uses delayed clipboard sync plus remote Cmd+V first, with the same physical typing fallback. Paste locks the frontmost process at start and aborts if focus drifts (transcript stays on the clipboard). When you are remote-controlling the Mac that runs Vox, enable **Remote Control Mode** from the menu bar — it applies only to ordinary local apps and does not override outbound viewer paths. If both Macs have Vox running, turn on **Ignore Record Hotkey on This Mac** on the controlled/remote Mac so one Fn press does not trigger both Vox instances. Paste Last Transcription uses the same async target-specific path and is serialized with fresh dictation paste. Remote-dictation history and caveats are tracked in [docs/remote-dictation-status.md](docs/remote-dictation-status.md).
 
 ## Files
 
