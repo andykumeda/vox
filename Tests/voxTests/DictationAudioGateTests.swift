@@ -51,6 +51,15 @@ final class DictationAudioGateTests: XCTestCase {
         ))
     }
 
+    func testSuppressesCatIsOnMatFiller() {
+        XCTAssertTrue(DictationHallucinationGuard.shouldSuppress(
+            "The cat is on the mat.",
+            mode: .prose,
+            durationSec: 2.4,
+            rms: 420
+        ))
+    }
+
     func testSuppressesCommandPromptEchoOnShortQuietClip() {
         XCTAssertTrue(DictationHallucinationGuard.shouldSuppress(
             "ls -l",

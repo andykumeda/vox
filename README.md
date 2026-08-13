@@ -17,7 +17,7 @@ log; only character and word counts are recorded.
 
 Vox runs in one of two text-shaping modes:
 
-- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation. Spelled-out quantities become digits in quantitative contexts (`five dollars` → `$5`, `three hours` → `3 hours`, `one terabyte` → `1 TB`); ordinary small counts stay words (`three apples`).
+- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation. Spelled-out quantities become digits in quantitative contexts (`five dollars` → `$5`, `three hours` → `3 hours`, `one terabyte` → `1 TB`, `option one` → `option 1`); letter-spelled numbers such as `F-I-F-T-Y feet` are also normalized (`50 feet`). Ordinary small counts stay words (`three apples`).
 - **Command** — no auto-capitalize, no trailing period, aggressive number-to-digit conversion, spoken-punctuation expansion (`dash`, `dot`, `pipe`), NATO phonetic letters after dashes, and trailing-keyword key-event synthesis (`tab`, `return`, `escape`, `control X`).
 
 Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`, `Warp`, `Ghostty`, `Alacritty`, `kitty`, `WezTerm`, `Hyper`, `Wave`, `Tabby`) → command; everything else → prose. Override via Settings → Mode (`auto` / `always prose` / `always command`) or the **mode-toggle hotkey** (default `⌃⌥M`).
@@ -110,6 +110,14 @@ open /Applications/Vox.app
 `create-dev-cert.sh` creates a self-signed `vox-dev` identity in the login keychain. Signing every build with the same identity keeps macOS **TCC permissions sticky across rebuilds**. Skip it and the build falls back to ad-hoc signing — every rebuild revokes Accessibility / Input Monitoring / Microphone, forcing re-permit.
 
 `build-app.sh` probes for the `vox-dev` identity in two phases: (a) `find-identity -v -p codesigning` against the default search list, then (b) the login keychain alone (MDM-managed Macs where the cert can't reach System trust). Designated requirement is pinned to the cert SHA so Keychain ACLs don't re-prompt every rebuild. By default it also installs the signed build to `/Applications/Vox.app`; set `INSTALL_TO_APPLICATIONS=0` to only write `dist/Vox.app`.
+
+Every installed production build must be distinguishable from the last public
+release. Before running this deployment path, bump both
+`CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`;
+never install changed code under the public release's existing version/build.
+For an unreleased Mac-mini deployment, record the new identity in `HANDOFF.md`
+but do not edit the Sparkle appcast or publish a DMG unless cutting a public
+release.
 
 On first app launch, Vox installs a per-user LaunchAgent at
 `~/Library/LaunchAgents/com.andykumeda.vox.plist` and hands off to that
@@ -308,7 +316,9 @@ The Sparkle EdDSA private key for signing updates lives only on the Mac mini
 MacBook.
 
 ```sh
-# 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist
+# 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist.
+#    These values must be newer than the latest appcast item, even for an
+#    unreleased production deployment; never reuse a public version/build.
 # 2. Build + sign DMG
 ./scripts/make-dmg.sh
 .build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg

@@ -98,6 +98,15 @@ final class NumberNormalizerTests: XCTestCase {
         XCTAssertEqual(n.normalize("wait five minutes"), "wait 5 minutes")
     }
 
+    func testLetterSpelledMeasurementNumberToDigits() {
+        XCTAssertEqual(n.normalize("F-I-F-T-Y feet"), "50 feet")
+    }
+
+    func testOptionNumberUsesDigits() {
+        XCTAssertEqual(n.normalize("option one, option two, or option three"), "option 1, option 2, or option 3")
+        XCTAssertEqual(n.normalize("Option three is selected"), "Option 3 is selected")
+    }
+
     func testTimeOClock() {
         XCTAssertEqual(n.normalize("meet at five o'clock"), "meet at 5 o'clock")
     }

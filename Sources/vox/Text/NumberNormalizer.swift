@@ -78,7 +78,10 @@ public struct NumberNormalizer {
     ///   bare singles ("three" → "3"). When false (prose default), keep bare
     ///   singles < 10 as words unless a currency/time/measurement unit follows.
     public func normalize(_ input: String, aggressive: Bool = false) -> String {
-        let tokens = tokenize(input)
+        let contextualized = normalizeContextualNumbers(
+            normalizeLetterSpelledNumbers(input)
+        )
+        let tokens = tokenize(contextualized)
         var output: [String] = []
         var runStart: Int? = nil
         var lastNumberWordInRun: String? = nil
@@ -129,6 +132,37 @@ public struct NumberNormalizer {
             output.append(contentsOf: result.parts)
         }
         return output.joined()
+    }
+
+    /// STT sometimes spells a number as individual letters separated by
+    /// hyphens ("F-I-F-T-Y feet"). Join only sequences that are themselves
+    /// known number words, then let the normal parser handle their context.
+    private func normalizeLetterSpelledNumbers(_ input: String) -> String {
+        var result = input
+        let numberWords = Array(Self.units.keys) + Array(Self.tens.keys)
+        for word in numberWords {
+            let letters = word.map(String.init).joined(separator: "-")
+            result = result.replacingOccurrences(
+                of: "(?i)\\b\(letters)\\b",
+                with: word,
+                options: .regularExpression
+            )
+        }
+        return result
+    }
+
+    /// Options are labels/identifiers, so even small number words should be
+    /// rendered as digits ("option one" → "option 1").
+    private func normalizeContextualNumbers(_ input: String) -> String {
+        var result = input
+        for (word, value) in Self.units where value <= 9 {
+            result = result.replacingOccurrences(
+                of: "(?i)\\b(option\\s+)\(word)\\b",
+                with: "$1\(value)",
+                options: .regularExpression
+            )
+        }
+        return result
     }
 
     private func isNumberWord(_ w: String) -> Bool {

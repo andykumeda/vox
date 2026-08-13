@@ -1,13 +1,13 @@
 # Vox Handoff
 
-Last updated: 2026-08-09
+Last updated: 2026-08-12
 
 ## Current state
 
 - Project root: `/Users/andy/Dev/vox` on Mac mini `AKsMini`.
-- Release: `0.7.30` build `49` includes prose number normalization, the
-  Settings/Personalization reorganization, stronger silent-audio gating, and
-  lower-overhead meeting auto-detection.
+- Release: `0.7.32` build `51` is the current published release. It includes
+  silent-dictation suppression, numeric normalization for measurements and
+  option labels, and the deployment-identity safeguards.
 - Branch: `main`.
 
 ## Unreleased: compact status menu
@@ -22,7 +22,19 @@ Last updated: 2026-08-09
 - `./scripts/build-app.sh`: release build, signing, and installation succeeded;
   known pre-existing Swift 6 Sendable warnings remain.
 
-## Released in 0.7.30: prose number contexts
+## Released in 0.7.32: dictation correctness
+
+- Empty or silent dictation holds suppress known invented filler instead of
+  pasting it.
+- Letter-separated number output such as `F-I-F-T-Y feet` becomes `50 feet`.
+- Option labels such as `option one` become `option 1`; ordinary small-number
+  prose remains unchanged.
+- The transcription prompt and postprocessor both require numeric formatting
+  in quantitative contexts.
+- The production bundle is `0.7.32` build `51`; the public appcast and GitHub
+  release use the same identity.
+
+## Previously released in 0.7.30: prose number contexts
 
 - `NumberNormalizer` now converts small spelled-out numbers in quantitative
   contexts instead of leaving 1–9 as words:
@@ -41,6 +53,11 @@ Last updated: 2026-08-09
   (`com.andykumeda.vox`). Still reports Info.plist `0.7.29` / build `48`
   (version not bumped; binary includes unreleased changes).
 - Live smoke confirmed: prose currency / time / measurement number forms.
+- Release verification: silent-dictation filler suppression includes “The cat
+  is on the mat.”; prose normalization converts letter-spelled number words and
+  option labels (`option one` → `option 1`) to digits. Targeted tests and the
+  dictation regression gate pass; live empty-hold and spoken-number smoke remain
+  useful follow-up validation.
 - Release artifact validation on 2026-08-09: `dist/Vox.app` passed strict deep
   code-signature verification; `dist/Vox.dmg` passed `hdiutil verify`; Sparkle
   EdDSA signature and appcast enclosure length were generated on `AKsMini`.
@@ -67,4 +84,5 @@ Last updated: 2026-08-09
 
 - Sparkle EdDSA private key and `vox-dev` codesign identity live on `AKsMini`.
 - Prefer Git push/pull between clones; do not put a live tree in iCloud Drive.
-- Do not bump Info.plist / appcast / DMG unless cutting a release.
+- The `0.7.32` / build `51` DMG is signed and published in the appcast. Future
+  production deployments must use a new unique bundle identity before install.

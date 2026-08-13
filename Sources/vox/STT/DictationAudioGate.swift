@@ -34,6 +34,7 @@ public enum DictationHallucinationGuard {
     public static let fillerPhrases: Set<String> = [
         "the quick brown fox jumps over the lazy dog",
         "the cat sat on the mat",
+        "the cat is on the mat",
         "you",
         "thank you",
         "thanks",

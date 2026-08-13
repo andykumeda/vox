@@ -6,6 +6,26 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.32</title>
+            <pubDate>Thu, 13 Aug 2026 01:54:35 +0000</pubDate>
+            <sparkle:version>51</sparkle:version>
+            <sparkle:shortVersionString>0.7.32</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Empty or silent dictation holds no longer paste invented filler such as “The cat is on the mat.”</li>
+                    <li><strong>Fix:</strong> Measurement numbers spoken as letter-separated words, such as “F-I-F-T-Y feet,” normalize to digits.</li>
+                    <li><strong>Dictation:</strong> Option labels such as “option one” normalize to “option 1,” while ordinary small-number prose remains unchanged.</li>
+                    <li><strong>Reliability:</strong> Transcription prompts and post-processing now agree on numeric formatting.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.32/Vox.dmg"
+                sparkle:edSignature="gHlBjQBugPk0w9cCMFXdfPF2fnYIOXwmLXArqiayrkUp/iJa/ktfF6DF9uG+xoC8H9NwxmONk9/Im6AYKWyZAg=="
+                length="2552667"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.30</title>
             <pubDate>Sun, 09 Aug 2026 22:51:14 +0000</pubDate>
             <sparkle:version>49</sparkle:version>

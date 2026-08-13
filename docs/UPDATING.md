@@ -2,6 +2,15 @@
 
 How to install a newer release of Vox over an existing install.
 
+## Development production deployments
+
+The Mac mini may run an unreleased production deployment for live validation.
+Such a deployment must always use a new `CFBundleShortVersionString` and
+`CFBundleVersion` that are higher/distinct from the latest public appcast item.
+The current public identity is `0.7.32` build `51`; future unreleased builds
+must use a newer identity. Do not reuse the public identity for changed code,
+and do not add an unreleased build to the public appcast.
+
 ## In-app update (Sparkle, recommended)
 
 Vox ships in-app updates via Sparkle. The appcast is served at
