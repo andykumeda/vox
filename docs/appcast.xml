@@ -6,6 +6,26 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.34</title>
+            <pubDate>Tue, 25 Aug 2026 20:26:38 +0000</pubDate>
+            <sparkle:version>54</sparkle:version>
+            <sparkle:shortVersionString>0.7.34</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fix:</strong> Smart Cleanup now preserves the dictated transcription when the cleanup model tries to add an interpretation or extra content.</li>
+                    <li><strong>Fix:</strong> Custom correction triggers declared in Personalization, including “rather” and “or rather,” are now honored deterministically.</li>
+                    <li><strong>Fix:</strong> Comma-joined “scratch that” corrections now remove the prior wording while keeping the replacement clause.</li>
+                    <li><strong>Reliability:</strong> Empty or handling-noise recordings are suppressed before transcription when they lack sustained speech activity.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.34/Vox.dmg"
+                sparkle:edSignature="pHsCasXQnInIlgt49xXDy1hC4ej7p6e9LdJXJWJkno69hcCIxuEGZfKbpvImZEhJgr6YDelRV9P3innhXWJWAg=="
+                length="2564138"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.32</title>
             <pubDate>Thu, 13 Aug 2026 01:54:35 +0000</pubDate>
             <sparkle:version>51</sparkle:version>

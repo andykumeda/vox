@@ -6,15 +6,18 @@ public struct CleanupProcessor {
     public let mode: TranscriptionMode
     public let enabled: Bool
     public let llmCleaner: LLMCleanFunc?
+    public let additionalScratchThatTriggers: [String]
 
     public init(
         mode: TranscriptionMode,
         enabled: Bool,
-        llmCleaner: LLMCleanFunc? = nil
+        llmCleaner: LLMCleanFunc? = nil,
+        additionalScratchThatTriggers: [String] = []
     ) {
         self.mode = mode
         self.enabled = enabled
         self.llmCleaner = llmCleaner
+        self.additionalScratchThatTriggers = additionalScratchThatTriggers
     }
 
     public func process(_ input: String) async -> String {
@@ -70,6 +73,12 @@ public struct CleanupProcessor {
             // or near-empty completions for normal-length input.
             if triggered.count >= 20 && trimmedCleaned.count < 3 {
                 dlog("Cleanup malformed response (length \(trimmedCleaned.count) < 3 for input length \(triggered.count))")
+                return triggered
+            }
+            let inputWords = wordCount(triggered)
+            let cleanedWords = wordCount(trimmedCleaned)
+            if cleanedWords > inputWords + 2 {
+                dlog("Cleanup expanded response discarded (words \(cleanedWords) > input \(inputWords) + 2)")
                 return triggered
             }
             if looksLikeAssistantMetaResponse(trimmedCleaned),
@@ -160,11 +169,21 @@ public struct CleanupProcessor {
     }
 
     private func applyTriggersProse(_ input: String) -> String {
-        let sentences = splitSentences(input)
+        let customTriggered = applyCustomScratchThatTriggers(input)
+        let sentences = splitSentences(customTriggered)
         var output: [String] = []
 
         for sentence in sentences {
             let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let remainder = scratchThatRemainder(trimmed) {
+                if !output.isEmpty {
+                    output.removeLast()
+                }
+                if !remainder.isEmpty {
+                    output.append(remainder)
+                }
+                continue
+            }
             if isScratchThatTrigger(trimmed) {
                 if !output.isEmpty {
                     output.removeLast()
@@ -183,6 +202,49 @@ public struct CleanupProcessor {
         }
 
         return joinSentences(output)
+    }
+
+    private func scratchThatRemainder(_ trimmed: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: "^(?i)(scratch|delete) that\\s*[,!?]\\s*(.*)$",
+            options: []
+        ) else { return nil }
+        let ns = trimmed as NSString
+        guard let match = regex.firstMatch(
+            in: trimmed,
+            range: NSRange(location: 0, length: ns.length)
+        ) else { return nil }
+        return ns.substring(with: match.range(at: 2))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Custom instructions may declare additional correction triggers. Treat
+    /// each phrase as a scratch-that marker before the sentence tokenizer runs,
+    /// so comma-joined corrections do not depend on the cleanup LLM noticing it.
+    private func applyCustomScratchThatTriggers(_ input: String) -> String {
+        var result = input
+        for phrase in additionalScratchThatTriggers
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .filter({ !$0.isEmpty })
+            .sorted(by: { $0.count > $1.count }) {
+            let escaped = NSRegularExpression.escapedPattern(for: phrase)
+            guard let regex = try? NSRegularExpression(
+                pattern: "(?i)(?:^|[.!?])[^.!?]*,\\s*\\b\(escaped)\\b\\s*",
+                options: []
+            ) else { continue }
+            let ns = result as NSString
+            result = regex.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: NSRange(location: 0, length: ns.length),
+                withTemplate: ""
+            )
+        }
+        return result
+    }
+
+    private func wordCount(_ text: String) -> Int {
+        text.split(whereSeparator: { $0.isWhitespace }).count
     }
 
     private func splitSentences(_ input: String) -> [String] {

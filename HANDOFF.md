@@ -1,11 +1,28 @@
 # Vox Handoff
 
-Last updated: 2026-08-12
+Last updated: 2026-08-25
+
+## Released in 0.7.34: preserve dictated wording and honor profile triggers
+
+- Smart Cleanup now fails open when its LLM response adds more than two words
+  beyond the transcription, preventing an interpretation from replacing the
+  dictated text.
+- Profile syntax such as `Additional trigger: “rather”, “or rather”` is wired
+  into deterministic correction handling. Comma-joined `scratch that` phrases
+  now remove the prior attempt while preserving the replacement clause.
+- Public Sparkle release: `0.7.34` / build `54`; appcast and GitHub release use
+  this identity.
+
+## Released in 0.7.34: empty-toggle transcription guard
+
+- Dictation clips now require sustained frame-level speech activity in addition to duration and aggregate RMS, regardless of total clip length. This blocks empty record-button toggles whose handling noise has deceptively high average RMS while preserving clips with sustained voice activity.
+- Regression coverage includes the observed `0.742625s` / RMS `590` empty-toggle case and a voiced short-clip allow case.
+- The release includes the frame-level speech-activity gate from build `53`.
 
 ## Current state
 
 - Project root: `/Users/andy/Dev/vox` on Mac mini `AKsMini`.
-- Release: `0.7.32` build `51` is the current published release. It includes
+- Release: `0.7.34` build `54` is the current published release. It includes
   silent-dictation suppression, numeric normalization for measurements and
   option labels, and the deployment-identity safeguards.
 - Branch: `main`.

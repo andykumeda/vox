@@ -6,7 +6,7 @@ Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-ta
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes
-- **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps. Uses digits for times, money, measurements, and option labels (`$5`, `3 hours`, `1 TB`, `option 1`); keeps small ordinary counts as words (`three apples`). Letter-spelled number output such as `F-I-F-T-Y feet` is normalized to `50 feet`.
+- **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps. Uses digits for times, money, measurements, and option labels (`$5`, `3 hours`, `1 TB`, `option 1`); keeps small ordinary counts as words (`three apples`). Letter-spelled number output such as `F-I-F-T-Y feet` is normalized to `50 feet`. Empty short toggles are rejected before transcription.
 - **Command** — verbatim shell commands, no capitalization, no trailing punctuation. Auto-selected when the focused app is a terminal (Terminal, iTerm, Wave, etc.).
 Press your **Mode toggle** hotkey (default `⌃⌥M`) to force prose regardless of focus. The menu-bar icon shows a lock when prose is forced.
 
@@ -106,7 +106,7 @@ Settings → Hotkeys lets you rebind:
 
 ## Files
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
-- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`
+- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`. Additional correction triggers declared in the profile (such as `rather` / `or rather`) are honored, and cleanup is discarded if it expands the dictated wording into an interpretation.
 - Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
 - Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
 - Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`

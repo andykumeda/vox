@@ -17,7 +17,7 @@ log; only character and word counts are recorded.
 
 Vox runs in one of two text-shaping modes:
 
-- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation. Spelled-out quantities become digits in quantitative contexts (`five dollars` → `$5`, `three hours` → `3 hours`, `one terabyte` → `1 TB`, `option one` → `option 1`); letter-spelled numbers such as `F-I-F-T-Y feet` are also normalized (`50 feet`). Ordinary small counts stay words (`three apples`).
+- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation. Spelled-out quantities become digits in quantitative contexts (`five dollars` → `$5`, `three hours` → `3 hours`, `one terabyte` → `1 TB`, `option one` → `option 1`); letter-spelled numbers such as `F-I-F-T-Y feet` are also normalized (`50 feet`). Ordinary small counts stay words (`three apples`). Empty short toggles are rejected using sustained frame-level speech activity before transcription.
 - **Command** — no auto-capitalize, no trailing period, aggressive number-to-digit conversion, spoken-punctuation expansion (`dash`, `dot`, `pipe`), NATO phonetic letters after dashes, and trailing-keyword key-event synthesis (`tab`, `return`, `escape`, `control X`).
 
 Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`, `Warp`, `Ghostty`, `Alacritty`, `kitty`, `WezTerm`, `Hyper`, `Wave`, `Tabby`) → command; everything else → prose. Override via Settings → Mode (`auto` / `always prose` / `always command`) or the **mode-toggle hotkey** (default `⌃⌥M`).
@@ -248,7 +248,7 @@ Remote desktop apps need special paste handling. When Vox is running on the Mac 
 ## Files
 
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
-- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`
+- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`. Profile-declared correction triggers such as `rather` / `or rather` are applied deterministically; cleanup also fails open when the LLM expands a dictation instead of preserving its wording.
 - Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
 - Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
 - Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`

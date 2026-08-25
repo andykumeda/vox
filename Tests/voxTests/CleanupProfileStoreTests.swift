@@ -58,4 +58,20 @@ final class CleanupProfileStoreTests: XCTestCase {
 
         XCTAssertEqual(store.load(), "")
     }
+
+    func testExtractsAdditionalCorrectionTriggers() {
+        let profile = "Additional trigger: “rather”, “or rather” - should function like “scratch that”\n"
+
+        XCTAssertEqual(
+            CleanupProfileStore.additionalScratchThatTriggers(from: profile),
+            ["rather", "or rather"]
+        )
+    }
+
+    func testDoesNotTreatOrdinaryProfileTextAsTrigger() {
+        XCTAssertEqual(
+            CleanupProfileStore.additionalScratchThatTriggers(from: "Preserve my casual phrasing."),
+            []
+        )
+    }
 }

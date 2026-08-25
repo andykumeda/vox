@@ -17,12 +17,24 @@ public enum DictationSilenceGate {
 
     public static let shortClipDurationSec: Double = 2.0
 
+    /// Minimum sustained frame-level energy for a short clip to count as speech.
+    /// Overall RMS is insufficient: an empty toggle can contain a brief click or
+    /// handling noise with a deceptively high average level.
+    public static let minimumVoicedDurationSec: Double = 0.28
+    public static let speechActivityFrameRMS: Double = 700
+
     /// Absolute floor — digital silence / muted mic.
     public static let absoluteMinimumRMS: Double = 40
 
-    public static func shouldSkip(durationSec: Double, rms: Double) -> Bool {
+    public static func shouldSkip(
+        durationSec: Double,
+        rms: Double,
+        voicedDurationSec: Double? = nil
+    ) -> Bool {
         if durationSec < minimumDurationSec { return true }
         if durationSec < shortClipDurationSec && rms < shortClipMinimumRMS { return true }
+        if let voicedDurationSec,
+           voicedDurationSec < minimumVoicedDurationSec { return true }
         if rms < absoluteMinimumRMS { return true }
         return false
     }

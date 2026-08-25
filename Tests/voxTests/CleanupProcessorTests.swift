@@ -53,16 +53,21 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, "Goodbye.")
     }
 
-    // Known limitation: comma-joined triggers (e.g., "Scratch that, Goodbye.") are
-    // not detected because the macOS sentence tokenizer keeps them as one sentence
-    // and our trigger regex requires the trigger to BE the full sentence. The LLM
-    // cleanup pass (prose mode only) handles these cases instead. Documented here
-    // so it doesn't get re-introduced as a "bug" in future review.
-    func testScratchThatCommaJoinedIsKnownLimitation() async {
+    func testScratchThatCommaJoinedWipesPrecedingSentenceAndKeepsRemainder() async {
         let proc = makeProseProc()
         let result = await proc.process("Hello. Scratch that, Goodbye.")
-        XCTAssertEqual(result, "Hello. Scratch that, Goodbye.",
-                       "When trigger is comma-joined to next clause, it is left in place; LLM handles it in prose.")
+        XCTAssertEqual(result, "Goodbye.")
+    }
+
+    func testCustomRatherTriggerWipesPrecedingSentence() async {
+        let proc = CleanupProcessor(
+            mode: .prose,
+            enabled: true,
+            llmCleaner: { $0 },
+            additionalScratchThatTriggers: ["rather", "or rather"]
+        )
+        let result = await proc.process("Use the first endpoint, or rather use the second endpoint.")
+        XCTAssertEqual(result, "use the second endpoint.")
     }
 
     // MARK: - Trigger: new paragraph
@@ -415,5 +420,17 @@ final class CleanupProcessorTests: XCTestCase {
         let result = await proc.process("This is plain prose with no triggers.")
         XCTAssertTrue(flag.value, "LLM must be invoked when triggered text has no newlines")
         XCTAssertEqual(result, "[cleaned] This is plain prose with no triggers.")
+    }
+
+    func testProseRejectsCleanupThatAddsInterpretation() async {
+        let input = "I want to keep this dictated wording exactly as I said it."
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            "The speaker is explaining that they want to preserve the exact wording of their dictated message."
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
     }
 }

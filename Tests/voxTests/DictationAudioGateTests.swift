@@ -26,6 +26,32 @@ final class DictationAudioGateTests: XCTestCase {
         XCTAssertFalse(DictationSilenceGate.shouldSkip(durationSec: 2.5, rms: 80))
     }
 
+    func testSilenceGateSkipsEmptyToggleWithModerateNoise() {
+        // Regression: an empty 0.74s toggle measured RMS 590 and reached STT,
+        // which invented a transcript. It had no sustained voiced frames.
+        XCTAssertTrue(DictationSilenceGate.shouldSkip(
+            durationSec: 0.742625,
+            rms: 590,
+            voicedDurationSec: 0
+        ))
+    }
+
+    func testSilenceGateAllowsShortSpeechWithSustainedActivity() {
+        XCTAssertFalse(DictationSilenceGate.shouldSkip(
+            durationSec: 1.37,
+            rms: 978,
+            voicedDurationSec: 0.64
+        ))
+    }
+
+    func testSilenceGateSkipsLongEmptyToggleToo() {
+        XCTAssertTrue(DictationSilenceGate.shouldSkip(
+            durationSec: 8.0,
+            rms: 590,
+            voicedDurationSec: 0
+        ))
+    }
+
     func testSilenceGateSkipsNearDigitalSilence() {
         XCTAssertTrue(DictationSilenceGate.shouldSkip(durationSec: 5.0, rms: 39))
         XCTAssertFalse(DictationSilenceGate.shouldSkip(durationSec: 5.0, rms: 40))

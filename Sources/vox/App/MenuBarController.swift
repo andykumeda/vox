@@ -629,8 +629,13 @@ final class MenuBarController: NSObject {
         // (e.g. prose pangram, command-mode "ls -l"). Tiered by duration so
         // quiet-but-real longer recordings still transcribe.
         let (durationSec, rms) = wavStats(wav)
-        dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) mode=\(mode)")
-        if DictationSilenceGate.shouldSkip(durationSec: durationSec, rms: rms) {
+        let voicedSec = voicedDurationSec(wav)
+        dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) voiced=\(voicedSec)s mode=\(mode)")
+        if DictationSilenceGate.shouldSkip(
+            durationSec: durationSec,
+            rms: rms,
+            voicedDurationSec: voicedSec
+        ) {
             dlog("silence gate tripped — skipping transcription")
             state = .idle
             return
@@ -691,7 +696,10 @@ final class MenuBarController: NSObject {
                 let cleaner = CleanupProcessor(
                     mode: mode,
                     enabled: cleanupEnabled,
-                    llmCleaner: cleanupEnabled ? self.liveLLMCleaner : nil
+                    llmCleaner: cleanupEnabled ? self.liveLLMCleaner : nil,
+                    additionalScratchThatTriggers: CleanupProfileStore.additionalScratchThatTriggers(
+                        from: CleanupProfileStore.shared.load()
+                    )
                 )
                 let cleanupStartedAt = Date()
                 let cleanedText = await cleaner.process(processed.text)
@@ -776,6 +784,33 @@ final class MenuBarController: NSObject {
         pulseTimer?.invalidate()
         pulseTimer = nil
         statusItem.button?.alphaValue = 1.0
+    }
+
+    private func voicedDurationSec(_ wav: Data) -> Double {
+        let headerSize = 44
+        guard wav.count > headerSize else { return 0 }
+        let pcm = wav.subdata(in: headerSize..<wav.count)
+        let samplesPerFrame = 320 // 20ms at 16kHz
+        let sampleCount = pcm.count / 2
+        guard sampleCount >= samplesPerFrame else { return 0 }
+        return pcm.withUnsafeBytes { raw -> Double in
+            let samples = raw.bindMemory(to: Int16.self)
+            var voicedFrames = 0
+            var frameStart = 0
+            while frameStart + samplesPerFrame <= samples.count {
+                var sumSq = 0.0
+                for index in frameStart..<(frameStart + samplesPerFrame) {
+                    let sample = Double(samples[index])
+                    sumSq += sample * sample
+                }
+                let frameRMS = sqrt(sumSq / Double(samplesPerFrame))
+                if frameRMS >= DictationSilenceGate.speechActivityFrameRMS {
+                    voicedFrames += 1
+                }
+                frameStart += samplesPerFrame
+            }
+            return Double(voicedFrames) * 0.020
+        }
     }
 
     private func wavStats(_ wav: Data) -> (durationSec: Double, rms: Double) {
