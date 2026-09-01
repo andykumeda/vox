@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.38</title>
+            <pubDate>Tue, 01 Sep 2026 22:25:00 +0000</pubDate>
+            <sparkle:version>58</sparkle:version>
+            <sparkle:shortVersionString>0.7.38</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Reliability:</strong> Dictation no longer terminates when Core Audio changes the microphone sample rate during startup.</li>
+                    <li><strong>Audio cues:</strong> Recording start sounds are retained reliably, with a system-beep fallback if a named cue is unavailable.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.38/Vox.dmg"
+                sparkle:edSignature="tE9foVkHRukmPuGkl63zQBb0vVZw6IrdXkvWedRpvGLLzSqaH+l9DRjdUhKhBZe4M6PMBUuhUB+RyaezfutBAw=="
+                length="2605215"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.34</title>
             <pubDate>Tue, 25 Aug 2026 20:26:38 +0000</pubDate>
             <sparkle:version>54</sparkle:version>
