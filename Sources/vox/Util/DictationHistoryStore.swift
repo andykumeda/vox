@@ -1,38 +1,12 @@
 import Foundation
 
-public struct DictationEntry: Codable, Equatable, Sendable, Identifiable {
-    public let id: UUID
-    public let timestamp: Date
-    public let mode: String
-    public let durationSec: Double
-    public let wordCount: Int
-    public let text: String
-
-    public init(
-        id: UUID = UUID(),
-        timestamp: Date = Date(),
-        mode: String,
-        durationSec: Double,
-        wordCount: Int,
-        text: String
-    ) {
-        self.id = id
-        self.timestamp = timestamp
-        self.mode = mode
-        self.durationSec = durationSec
-        self.wordCount = wordCount
-        self.text = text
-    }
-}
-
 public extension Notification.Name {
     static let dictationHistoryDidChange = Notification.Name("vox.dictationHistoryDidChange")
 }
 
-/// Persists every completed dictation to a single JSON file under
-/// `~/Library/Application Support/Vox/DictationHistory/history.json`.
-/// Atomic writes via `Data.write(.atomic)`. Retention is enforced on every record()
-/// based on `AppSettings.dictationHistoryRetention`.
+/// Persists completed dictations in one authenticated encrypted envelope.
+/// Legacy plaintext JSON is migrated only after the encrypted replacement can
+/// be decrypted and decoded successfully.
 public final class DictationHistoryStore {
     public static let shared = DictationHistoryStore()
 
@@ -47,8 +21,10 @@ public final class DictationHistoryStore {
     }
 
     public let fileURL: URL
+    private let legacyURL: URL?
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private let keyProvider: () throws -> Data
     private let log: (String) -> Void
     private let queue = DispatchQueue(label: "vox.dictation-history")
     /// Accessed only from `queue` so decoded entries and failure state stay
@@ -60,17 +36,22 @@ public final class DictationHistoryStore {
         decoder.dateDecodingStrategy = .iso8601
         self.init(
             fileURL: fileURL,
+            legacyURL: fileURL == Self.defaultURL() ? Self.legacyURL() : nil,
             decoder: decoder,
+            keyProvider: { try TranscriptEncryptionKeyStore.shared.loadOrCreate() },
             log: { message in dlog(message) }
         )
     }
 
     init(
         fileURL: URL,
+        legacyURL: URL? = nil,
         decoder: JSONDecoder,
+        keyProvider: @escaping () throws -> Data,
         log: @escaping (String) -> Void
     ) {
         self.fileURL = fileURL
+        self.legacyURL = legacyURL
         try? FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -80,6 +61,7 @@ public final class DictationHistoryStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         self.encoder = encoder
         self.decoder = decoder
+        self.keyProvider = keyProvider
         self.log = log
     }
 
@@ -89,7 +71,11 @@ public final class DictationHistoryStore {
         return support
             .appendingPathComponent("Vox", isDirectory: true)
             .appendingPathComponent("DictationHistory", isDirectory: true)
-            .appendingPathComponent("history.json")
+            .appendingPathComponent("history.enc")
+    }
+
+    public static func legacyURL() -> URL {
+        defaultURL().deletingLastPathComponent().appendingPathComponent("history.json")
     }
 
     public func list() -> [DictationEntry] {
@@ -147,6 +133,11 @@ public final class DictationHistoryStore {
     }
 
     private func readAll() -> ReadResult {
+        if !FileManager.default.fileExists(atPath: fileURL.path),
+           let legacyURL,
+           FileManager.default.fileExists(atPath: legacyURL.path) {
+            return migrateLegacyFile(at: legacyURL)
+        }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             readCache = nil
             return .success([])
@@ -157,9 +148,21 @@ public final class DictationHistoryStore {
                 return readCache.result
             }
             do {
-                let result = ReadResult.success(
-                    try decoder.decode([DictationEntry].self, from: data)
-                )
+                let plaintext: Data
+                if TranscriptCipher.isEncryptedEnvelope(data) {
+                    let cipher = try TranscriptCipher(keyData: keyProvider())
+                    plaintext = try cipher.open(data)
+                } else {
+                    // A custom/older path may itself contain plaintext. Treat it
+                    // as an in-place migration, preserving it if encryption fails.
+                    plaintext = data
+                }
+                let entries = try decoder.decode([DictationEntry].self, from: plaintext)
+                if !TranscriptCipher.isEncryptedEnvelope(data) {
+                    return writeAll(entries) ? .success(entries) : .failure
+                }
+                removeVerifiedLegacyPlaintextIfPresent()
+                let result = ReadResult.success(entries)
                 readCache = ReadCache(data: data, result: result)
                 return result
             } catch {
@@ -178,13 +181,61 @@ public final class DictationHistoryStore {
     @discardableResult
     private func writeAll(_ entries: [DictationEntry]) -> Bool {
         do {
-            let data = try encoder.encode(entries)
-            try data.write(to: fileURL, options: .atomic)
+            let plaintext = try encoder.encode(entries)
+            let cipher = try TranscriptCipher(keyData: keyProvider())
+            let data = try cipher.seal(plaintext)
+            let candidateURL = fileURL.deletingLastPathComponent()
+                .appendingPathComponent(".history-\(UUID().uuidString).candidate")
+            defer { try? FileManager.default.removeItem(at: candidateURL) }
+            try data.write(to: candidateURL, options: .atomic)
+            let verified = try decoder.decode(
+                [DictationEntry].self,
+                from: cipher.open(Data(contentsOf: candidateURL))
+            )
+            guard try encoder.encode(verified) == plaintext else {
+                log("DictationHistoryStore verification failed; encrypted file did not round-trip")
+                return false
+            }
+            try installVerifiedCandidate(candidateURL)
             readCache = ReadCache(data: data, result: .success(entries))
             return true
         } catch {
             log("DictationHistoryStore write failed: \(error)")
             return false
+        }
+    }
+
+    private func migrateLegacyFile(at url: URL) -> ReadResult {
+        do {
+            let data = try Data(contentsOf: url)
+            let entries = try decoder.decode([DictationEntry].self, from: data)
+            guard writeAll(entries) else { return .failure }
+            removeVerifiedLegacyPlaintextIfPresent()
+            return .success(entries)
+        } catch {
+            log("DictationHistoryStore legacy migration failed; preserving plaintext file: \(error)")
+            return .failure
+        }
+    }
+
+    private func installVerifiedCandidate(_ candidateURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: fileURL.path) {
+            _ = try fileManager.replaceItemAt(fileURL, withItemAt: candidateURL)
+        } else {
+            try fileManager.moveItem(at: candidateURL, to: fileURL)
+        }
+    }
+
+    private func removeVerifiedLegacyPlaintextIfPresent() {
+        guard let legacyURL,
+              legacyURL != fileURL,
+              FileManager.default.fileExists(atPath: legacyURL.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: legacyURL)
+            log("DictationHistoryStore removed verified legacy plaintext history")
+        } catch {
+            log("DictationHistoryStore could not remove legacy plaintext; will retry: \(error)")
         }
     }
 

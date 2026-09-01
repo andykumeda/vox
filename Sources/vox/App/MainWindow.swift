@@ -1,6 +1,13 @@
 import AppKit
 import SwiftUI
 
+public enum MainWindowNavigationSource: String, Equatable {
+    case launch
+    case statusMenu
+    case sidebar
+    case programmatic
+}
+
 /// Primary window for Vox. Sidebar nav with Home / Meeting / Settings /
 /// Personalization / Help. Auto-opens on launch and reappears on menu-bar icon
 /// click. Closing the window
@@ -22,26 +29,38 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         bringToFront(window)
     }
 
-    public func showHome()    { showWindow(section: .home) }
-    public func showMeeting() { showWindow(section: .meeting) }
-    public func showHelp()    { showWindow(section: .help) }
+    public func showHome(source: MainWindowNavigationSource = .programmatic) {
+        showWindow(section: .home, source: source)
+    }
+    public func showMeeting() { showWindow(section: .meeting, source: .programmatic) }
+    public func showHelp()    { showWindow(section: .help, source: .programmatic) }
 
     public func showDictionary() {
         selection.selectDictionary()
         showWindow()
-        handleSelectionChange(.personalization)
+        handleSelectionChange(.personalization, source: .programmatic)
     }
 
-    public func showSettings() {
+    public func showSettings(source: MainWindowNavigationSource) {
+        guard Self.allowsSettingsNavigation(from: source) else {
+            dlog("settings navigation blocked source=\(source.rawValue)")
+            return
+        }
         selection.selectSettings()
         showWindow()
-        handleSelectionChange(.settings)
+        handleSelectionChange(.settings, source: source)
     }
 
-    private func showWindow(section: SidebarItem) {
+    nonisolated static func allowsSettingsNavigation(
+        from source: MainWindowNavigationSource
+    ) -> Bool {
+        source == .statusMenu || source == .sidebar
+    }
+
+    private func showWindow(section: SidebarItem, source: MainWindowNavigationSource) {
         selection.current = section
         showWindow()
-        handleSelectionChange(section)
+        handleSelectionChange(section, source: source)
     }
 
     private func build() {
@@ -64,7 +83,7 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
             selection: selection,
             onSelectionChange: { [weak self] item in
                 Task { @MainActor in
-                    self?.handleSelectionChange(item)
+                    self?.handleSelectionChange(item, source: .sidebar)
                 }
             }
         ))
@@ -74,8 +93,15 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         self.window = win
     }
 
-    private func handleSelectionChange(_ item: SidebarItem) {
+    private func handleSelectionChange(
+        _ item: SidebarItem,
+        source: MainWindowNavigationSource
+    ) {
         applyPresentation(for: item)
+
+        if item == .settings {
+            dlog("settings navigation source=\(source.rawValue)")
+        }
 
         if item == .meeting {
             MeetingHUDPanel.shared.show()
@@ -350,6 +376,16 @@ private struct HomeView: View {
             Text(e.text)
                 .lineLimit(3)
                 .textSelection(.enabled)
+            if e.rawText != e.text {
+                DisclosureGroup("Raw vs final") {
+                    Text(TranscriptComparison.diff(raw: e.rawText, final: e.text))
+                        .font(.caption)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
+                .font(.caption)
+            }
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)

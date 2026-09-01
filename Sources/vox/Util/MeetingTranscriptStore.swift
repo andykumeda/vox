@@ -1,50 +1,5 @@
 import Foundation
 
-public enum SegmentSource: String, Codable, Sendable {
-    /// Captured via SCStream (system audio mix — remote participants in a meeting).
-    case remote
-    /// Captured via the local microphone (the user's own voice).
-    case local
-}
-
-public struct TranscriptSegment: Codable, Equatable, Sendable {
-    public let startTime: Double
-    public let endTime: Double
-    public let text: String
-    public let source: SegmentSource
-    /// Diarized speaker index (e.g. Deepgram speaker 0/1/…). Nil for OpenAI
-    /// Whisper output, which only carries the binary `source` tag.
-    public let speakerID: Int?
-
-    public init(
-        startTime: Double,
-        endTime: Double,
-        text: String,
-        source: SegmentSource = .remote,
-        speakerID: Int? = nil
-    ) {
-        self.startTime = startTime
-        self.endTime = endTime
-        self.text = text
-        self.source = source
-        self.speakerID = speakerID
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case startTime, endTime, text, source, speakerID
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.startTime = try c.decode(Double.self, forKey: .startTime)
-        self.endTime = try c.decode(Double.self, forKey: .endTime)
-        self.text = try c.decode(String.self, forKey: .text)
-        // Pre-multi-source persisted segments have no `source`; treat as remote (system audio).
-        self.source = try c.decodeIfPresent(SegmentSource.self, forKey: .source) ?? .remote
-        self.speakerID = try c.decodeIfPresent(Int.self, forKey: .speakerID)
-    }
-}
-
 public struct TranscriptSession: Codable, Equatable, Sendable {
     public enum Status: String, Codable, Sendable {
         case recording, chunking, transcribing, completed, cancelled, failed
@@ -57,6 +12,8 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
     public var status: Status
     public var chunksTotal: Int
     public var chunksCompleted: Int
+    /// Exact provider output before filtering, de-cascading, or timeline shaping.
+    public var rawSegments: [TranscriptSegment]
     public var segments: [TranscriptSegment]
     public var audioRetained: Bool
     public var failureReason: String?
@@ -73,6 +30,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
         status: Status,
         chunksTotal: Int,
         chunksCompleted: Int,
+        rawSegments: [TranscriptSegment] = [],
         segments: [TranscriptSegment],
         audioRetained: Bool,
         failureReason: String? = nil,
@@ -85,6 +43,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
         self.status = status
         self.chunksTotal = chunksTotal
         self.chunksCompleted = chunksCompleted
+        self.rawSegments = rawSegments
         self.segments = segments
         self.audioRetained = audioRetained
         self.failureReason = failureReason
@@ -93,7 +52,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, startedAt, endedAt, status, chunksTotal, chunksCompleted,
-             segments, audioRetained, failureReason, summary
+             rawSegments, segments, audioRetained, failureReason, summary
     }
 
     public init(from decoder: Decoder) throws {
@@ -105,6 +64,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
         self.status = try c.decode(Status.self, forKey: .status)
         self.chunksTotal = try c.decode(Int.self, forKey: .chunksTotal)
         self.chunksCompleted = try c.decode(Int.self, forKey: .chunksCompleted)
+        self.rawSegments = try c.decodeIfPresent([TranscriptSegment].self, forKey: .rawSegments) ?? []
         self.segments = try c.decode([TranscriptSegment].self, forKey: .segments)
         self.audioRetained = try c.decode(Bool.self, forKey: .audioRetained)
         self.failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
@@ -126,6 +86,7 @@ public final class MeetingTranscriptStore {
     public let rootDirectory: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private let keyProvider: () throws -> Data
 
     /// Default location: ~/Library/Application Support/Vox/MeetingTranscripts
     public static func defaultRoot() -> URL {
@@ -137,8 +98,19 @@ public final class MeetingTranscriptStore {
             .appendingPathComponent("MeetingTranscripts", isDirectory: true)
     }
 
-    public init(rootDirectory: URL = MeetingTranscriptStore.defaultRoot()) {
+    public convenience init(rootDirectory: URL = MeetingTranscriptStore.defaultRoot()) {
+        self.init(
+            rootDirectory: rootDirectory,
+            keyProvider: { try TranscriptEncryptionKeyStore.shared.loadOrCreate() }
+        )
+    }
+
+    init(
+        rootDirectory: URL,
+        keyProvider: @escaping () throws -> Data
+    ) {
         self.rootDirectory = rootDirectory
+        self.keyProvider = keyProvider
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -178,7 +150,11 @@ public final class MeetingTranscriptStore {
         return sessionDirectory(id: id).appendingPathComponent(name, isDirectory: true)
     }
 
-    private func transcriptFile(id: UUID) -> URL {
+    func transcriptFile(id: UUID) -> URL {
+        sessionDirectory(id: id).appendingPathComponent("transcript.enc")
+    }
+
+    func legacyTranscriptFile(id: UUID) -> URL {
         sessionDirectory(id: id).appendingPathComponent("transcript.json")
     }
 
@@ -192,8 +168,27 @@ public final class MeetingTranscriptStore {
     private func saveWithoutNotification(_ session: TranscriptSession) throws {
         let dir = sessionDirectory(id: session.id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let data = try encoder.encode(session)
-        try data.write(to: transcriptFile(id: session.id), options: .atomic)
+        let plaintext = try encoder.encode(session)
+        let cipher = try TranscriptCipher(keyData: keyProvider())
+        let encrypted = try cipher.seal(plaintext)
+        let destination = transcriptFile(id: session.id)
+        let candidate = destination.deletingLastPathComponent()
+            .appendingPathComponent(".transcript-\(UUID().uuidString).candidate")
+        defer { try? FileManager.default.removeItem(at: candidate) }
+        try encrypted.write(to: candidate, options: .atomic)
+        let verified = try decoder.decode(
+            TranscriptSession.self,
+            from: cipher.open(Data(contentsOf: candidate))
+        )
+        guard try encoder.encode(verified) == plaintext else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: candidate)
+        } else {
+            try FileManager.default.moveItem(at: candidate, to: destination)
+        }
+        removeLegacyPlaintextIfPresent(id: session.id)
     }
 
     public func load(id: UUID) -> TranscriptSession? {
@@ -203,10 +198,44 @@ public final class MeetingTranscriptStore {
     }
 
     private func loadWithoutLock(id: UUID) -> TranscriptSession? {
-        guard let data = try? Data(contentsOf: transcriptFile(id: id)) else {
+        let encryptedURL = transcriptFile(id: id)
+        let legacyURL = legacyTranscriptFile(id: id)
+        if FileManager.default.fileExists(atPath: encryptedURL.path) {
+            guard let data = try? Data(contentsOf: encryptedURL),
+                  TranscriptCipher.isEncryptedEnvelope(data),
+                  let cipher = try? TranscriptCipher(keyData: keyProvider()),
+                  let plaintext = try? cipher.open(data) else {
+                return nil
+            }
+            guard let session = try? decoder.decode(TranscriptSession.self, from: plaintext) else {
+                return nil
+            }
+            removeLegacyPlaintextIfPresent(id: id)
+            return session
+        }
+        guard let legacyData = try? Data(contentsOf: legacyURL),
+              let session = try? decoder.decode(TranscriptSession.self, from: legacyData)
+        else { return nil }
+        do {
+            try saveWithoutNotification(session)
+            guard loadWithoutLock(id: id) == session else { return nil }
+            removeLegacyPlaintextIfPresent(id: id)
+            return session
+        } catch {
+            dlog("MeetingTranscriptStore migration failed; preserving plaintext transcript id=\(id)")
             return nil
         }
-        return try? decoder.decode(TranscriptSession.self, from: data)
+    }
+
+    private func removeLegacyPlaintextIfPresent(id: UUID) {
+        let legacyURL = legacyTranscriptFile(id: id)
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: legacyURL)
+            dlog("MeetingTranscriptStore removed verified legacy plaintext transcript id=\(id)")
+        } catch {
+            dlog("MeetingTranscriptStore could not remove legacy plaintext id=\(id); will retry")
+        }
     }
 
     /// Atomically checks and updates an existing transcript. `delete(id:)`
@@ -299,6 +328,26 @@ public final class MeetingTranscriptStore {
         return purged
     }
 
+    /// Startup privacy sweep independent of transcript decryption. A new app
+    /// process has no live meeting jobs, so audio found under any session
+    /// directory is terminal/orphaned even when its transcript is corrupt or
+    /// its Keychain key is temporarily unavailable.
+    @discardableResult
+    public func purgeAllAudioArtifacts() -> Int {
+        guard let directories = try? FileManager.default.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        ) else { return 0 }
+        var purged = 0
+        for directory in directories {
+            guard (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+                  hasAudioArtifacts(in: directory) else { continue }
+            purgeAudioArtifacts(in: directory)
+            if !hasAudioArtifacts(in: directory) { purged += 1 }
+        }
+        return purged
+    }
+
     /// Total bytes of all meeting audio artifacts under the transcript root.
     public func audioDiskBytes() -> UInt64 {
         var total: UInt64 = 0
@@ -314,14 +363,29 @@ public final class MeetingTranscriptStore {
     }
 
     private func hasAudioArtifacts(for id: UUID) -> Bool {
-        if !m4aFiles(in: sessionDirectory(id: id)).isEmpty {
+        hasAudioArtifacts(in: sessionDirectory(id: id))
+    }
+
+    private func hasAudioArtifacts(in directory: URL) -> Bool {
+        if !m4aFiles(in: directory).isEmpty {
             return true
         }
-        return [
-            chunksDirectory(id: id),
-            chunksDirectory(id: id, source: .local),
-            chunksDirectory(id: id, source: .remote),
-        ].contains { FileManager.default.fileExists(atPath: $0.path) }
+        return ["chunks", "chunks-mic", "chunks-system"].contains {
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent($0, isDirectory: true).path
+            )
+        }
+    }
+
+    private func purgeAudioArtifacts(in directory: URL) {
+        let fileManager = FileManager.default
+        for url in m4aFiles(in: directory) { try? fileManager.removeItem(at: url) }
+        for name in ["chunks", "chunks-mic", "chunks-system"] {
+            let url = directory.appendingPathComponent(name, isDirectory: true)
+            if fileManager.fileExists(atPath: url.path) {
+                try? fileManager.removeItem(at: url)
+            }
+        }
     }
 
     private func m4aFiles(in directory: URL) -> [URL] {

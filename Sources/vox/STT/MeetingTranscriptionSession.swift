@@ -41,9 +41,7 @@ public final class MeetingTranscriptionSession {
         provider: { AppSettings.meetingProvider },
         apiKey: { KeychainStore().read() },
         deepgramAPIKey: { KeychainStore(account: "deepgram-api-key").read() },
-        // The shared audio-retention picker owns deletion. Keep meeting audio
-        // after transcription so replay/re-transcribe works until that sweep.
-        retainAudio: { true },
+        retainAudio: { false },
         summarize: { segments in
             try await MeetingSummarizer(
                 apiKeyProvider: { KeychainStore().read() }
@@ -208,7 +206,7 @@ public final class MeetingTranscriptionSession {
         let initial = TranscriptSession(
             id: id, title: title, startedAt: now, endedAt: nil,
             status: .recording, chunksTotal: 0, chunksCompleted: 0,
-            segments: [], audioRetained: retainAudioProvider()
+            segments: [], audioRetained: true
         )
         try withSessionLock {
             if let existing = session {
@@ -251,6 +249,7 @@ public final class MeetingTranscriptionSession {
                 s.endedAt = Date()
                 s.failureReason = "Recorder start failed: \(error)"
             }
+            try? store.purgeAudio(for: id)
             clearSession(ifMatching: id)
             throw SessionError.recorderStartFailed(String(describing: error))
         }
@@ -310,6 +309,7 @@ public final class MeetingTranscriptionSession {
                 s.status = .failed
                 s.failureReason = "Recorder missing during stop"
             }
+            try? store.purgeAudio(for: current.id)
             clearSession(ifMatching: current.id)
             throw SessionError.notRecording
         }
@@ -334,6 +334,7 @@ public final class MeetingTranscriptionSession {
                 s.status = .failed
                 s.failureReason = "Recorder stop failed: \(error)"
             }
+            try? store.purgeAudio(for: current.id)
             clearSession(ifMatching: current.id)
             throw error
         }
@@ -385,6 +386,7 @@ public final class MeetingTranscriptionSession {
                 s.failureReason = "System audio: \(sysReason)" +
                     (micFailureReason.map { " | Mic: \($0)" } ?? "")
             }
+            try? store.purgeAudio(for: sid)
             return
         }
         if let micReason = micFailureReason {
@@ -432,6 +434,20 @@ public final class MeetingTranscriptionSession {
         systemShift: Double, micShift: Double, phoneShift: Double = 0,
         sessionID: UUID
     ) async {
+        defer {
+            if let terminal = store.load(id: sessionID)?.status {
+                switch terminal {
+                case .completed, .cancelled, .failed:
+                    do {
+                        try store.purgeAudio(for: sessionID)
+                    } catch {
+                        dlog("Meeting terminal audio cleanup failed id=\(sessionID): \(error)")
+                    }
+                case .recording, .chunking, .transcribing:
+                    break
+                }
+            }
+        }
         // Deepgram path: mix mic+system (+ phone-tap) into one m4a, single batch
         // request, diarized speaker IDs across the whole meeting. Falls through
         // to the OpenAI per-source pipeline if Deepgram isn't wired or fails preflight.
@@ -514,6 +530,17 @@ public final class MeetingTranscriptionSession {
                 let deCascaded = MeetingTranscriptionSession.collapseRepetitionRuns(
                     segments, minRun: 4, source: source
                 )
+                updateSession { s in
+                    s.rawSegments.append(contentsOf: segments.map { segment in
+                        TranscriptSegment(
+                            startTime: segment.startTime + shift,
+                            endTime: segment.endTime + shift,
+                            text: segment.text,
+                            source: segment.source,
+                            speakerID: segment.speakerID
+                        )
+                    })
+                }
 
                 // Drop Whisper hallucinations whose timestamps fall outside the actual
                 // audible portion of the stream (Whisper sometimes invents segments past
@@ -563,10 +590,6 @@ public final class MeetingTranscriptionSession {
         for (_, _, dir, _, _) in streams {
             try? FileManager.default.removeItem(at: dir)
         }
-        if !retainAudioProvider() {
-            try? store.purgeAudio(for: sessionID)
-        }
-
         await runSummarizationIfEnabled(sessionID: sessionID)
     }
 
@@ -874,17 +897,16 @@ public final class MeetingTranscriptionSession {
                 )
             }
             allSegments.append(contentsOf: tagged)
-            updateSession { s in s.chunksCompleted += 1 }
+            updateSession { s in
+                s.rawSegments.append(contentsOf: tagged)
+                s.chunksCompleted += 1
+            }
         }
 
         updateSession { s in
             s.segments = allSegments.sorted(by: TranscriptSegment.byStartTime)
             s.summary = nil
             s.status = .completed
-        }
-
-        if !retainAudioProvider() {
-            try? store.purgeAudio(for: sessionID)
         }
 
         await runSummarizationIfEnabled(sessionID: sessionID)

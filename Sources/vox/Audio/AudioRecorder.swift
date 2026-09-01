@@ -123,7 +123,12 @@ public final class AudioRecorder {
         self.currentURL = url
         self.pcmBytesWritten = 0
 
-        input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+        // Do not pass the format queried above. Core Audio can renegotiate the
+        // input device between outputFormat() and installTap(), and AVAudio
+        // raises an Objective-C exception (which Swift cannot catch) when the
+        // supplied format is no longer the node's live format. nil tells the
+        // input node to use its current native format.
+        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             self?.handle(buffer: buffer, targetFormat: targetFormat)
         }
 

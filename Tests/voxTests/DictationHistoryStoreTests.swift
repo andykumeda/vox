@@ -2,6 +2,7 @@ import XCTest
 @testable import vox
 
 final class DictationHistoryStoreTests: XCTestCase {
+    private let encryptionKey = Data(repeating: 0xA5, count: 32)
     private var tempDirectory: URL!
     private var historyURL: URL!
 
@@ -27,6 +28,7 @@ final class DictationHistoryStoreTests: XCTestCase {
         let store = DictationHistoryStore(
             fileURL: historyURL,
             decoder: decoder,
+            keyProvider: { self.encryptionKey },
             log: { messages.append($0) }
         )
 
@@ -56,6 +58,7 @@ final class DictationHistoryStoreTests: XCTestCase {
         let store = DictationHistoryStore(
             fileURL: historyURL,
             decoder: CountingHistoryDecoder(),
+            keyProvider: { self.encryptionKey },
             log: { messages.append($0) }
         )
         let noChange = expectation(description: "unreadable history is not replaced")
@@ -86,7 +89,7 @@ final class DictationHistoryStoreTests: XCTestCase {
     }
 
     func testMissingHistoryIsValidEmptyAndRecordsSuccessfully() {
-        let store = DictationHistoryStore(fileURL: historyURL)
+        let store = makeStore()
         let changed = expectation(description: "successful write posts a change")
         let observer = NotificationCenter.default.addObserver(
             forName: .dictationHistoryDidChange,
@@ -106,6 +109,74 @@ final class DictationHistoryStoreTests: XCTestCase {
         wait(for: [changed], timeout: 1)
         XCTAssertEqual(store.list(), [entry])
         XCTAssertTrue(FileManager.default.fileExists(atPath: historyURL.path))
+        let persisted = try? Data(contentsOf: historyURL)
+        XCTAssertTrue(persisted.map(TranscriptCipher.isEncryptedEnvelope) == true)
+        XCTAssertFalse(String(data: persisted ?? Data(), encoding: .utf8)?.contains(entry.text) == true)
+    }
+
+    func testLegacyPlaintextMigratesAndIsRemovedAfterVerification() throws {
+        let legacyURL = tempDirectory.appendingPathComponent("history.json")
+        let encryptedURL = tempDirectory.appendingPathComponent("history.enc")
+        let entry = makeEntry(text: "Legacy private text")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([entry]).write(to: legacyURL, options: .atomic)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let store = DictationHistoryStore(
+            fileURL: encryptedURL,
+            legacyURL: legacyURL,
+            decoder: decoder,
+            keyProvider: { self.encryptionKey },
+            log: { _ in }
+        )
+
+        XCTAssertEqual(store.list(), [entry])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
+        XCTAssertTrue(TranscriptCipher.isEncryptedEnvelope(try Data(contentsOf: encryptedURL)))
+    }
+
+    func testVerifiedEncryptedHistoryRetriesLegacyPlaintextRemoval() throws {
+        let legacyURL = tempDirectory.appendingPathComponent("history.json")
+        let encryptedURL = tempDirectory.appendingPathComponent("history.enc")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let initial = DictationHistoryStore(
+            fileURL: encryptedURL,
+            legacyURL: legacyURL,
+            decoder: decoder,
+            keyProvider: { self.encryptionKey },
+            log: { _ in }
+        )
+        let entry = makeEntry(text: "Encrypted source of truth")
+        XCTAssertTrue(initial.record(entry))
+
+        try Data("leftover plaintext".utf8).write(to: legacyURL)
+        let reloaded = DictationHistoryStore(
+            fileURL: encryptedURL,
+            legacyURL: legacyURL,
+            decoder: decoder,
+            keyProvider: { self.encryptionKey },
+            log: { _ in }
+        )
+
+        XCTAssertEqual(reloaded.list(), [entry])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
+    }
+
+    func testUnavailableKeyPreventsWriteWithoutCreatingPlaintext() {
+        struct KeyUnavailable: Error {}
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let store = DictationHistoryStore(
+            fileURL: historyURL,
+            decoder: decoder,
+            keyProvider: { throw KeyUnavailable() },
+            log: { _ in }
+        )
+
+        XCTAssertFalse(store.record(makeEntry(text: "Must remain in memory only")))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: historyURL.path))
     }
 
     func testUnchangedHistoryIsDecodedOnlyOnceAcrossReadsAndRecord() throws {
@@ -115,11 +186,14 @@ final class DictationHistoryStoreTests: XCTestCase {
         let store = DictationHistoryStore(
             fileURL: historyURL,
             decoder: decoder,
+            keyProvider: { self.encryptionKey },
             log: { _ in }
         )
 
         XCTAssertEqual(store.list(), [existing])
+        let decodeCountAfterMigration = decoder.decodeCount
         XCTAssertEqual(store.last(), existing)
+        XCTAssertEqual(decoder.decodeCount, decodeCountAfterMigration)
 
         let appended = makeEntry(text: "Appended entry")
         let changed = expectation(description: "record completes")
@@ -133,7 +207,7 @@ final class DictationHistoryStoreTests: XCTestCase {
 
         wait(for: [changed], timeout: 1)
         XCTAssertEqual(store.list(), [existing, appended])
-        XCTAssertEqual(decoder.decodeCount, 1)
+        XCTAssertEqual(decoder.decodeCount, decodeCountAfterMigration + 1)
     }
 
     func testFailedWriteLogsErrorWithoutPostingChangeNotification() throws {
@@ -145,6 +219,7 @@ final class DictationHistoryStoreTests: XCTestCase {
         let store = DictationHistoryStore(
             fileURL: unwritableHistoryURL,
             decoder: decoder,
+            keyProvider: { self.encryptionKey },
             log: { messages.append($0) }
         )
         let noChange = expectation(description: "failed write does not post a change")
@@ -175,6 +250,17 @@ final class DictationHistoryStoreTests: XCTestCase {
             durationSec: 1.5,
             wordCount: text.split(separator: " ").count,
             text: text
+        )
+    }
+
+    private func makeStore() -> DictationHistoryStore {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return DictationHistoryStore(
+            fileURL: historyURL,
+            decoder: decoder,
+            keyProvider: { self.encryptionKey },
+            log: { _ in }
         )
     }
 

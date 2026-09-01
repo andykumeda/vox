@@ -2,6 +2,7 @@ import XCTest
 @testable import vox
 
 final class MeetingTranscriptStoreTests: XCTestCase {
+    private let encryptionKey = Data(repeating: 0x5A, count: 32)
     var tempRoot: URL!
     var store: MeetingTranscriptStore!
 
@@ -9,7 +10,10 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         super.setUp()
         tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("vox-tests-\(UUID().uuidString)")
-        store = MeetingTranscriptStore(rootDirectory: tempRoot)
+        store = MeetingTranscriptStore(
+            rootDirectory: tempRoot,
+            keyProvider: { self.encryptionKey }
+        )
     }
 
     override func tearDown() {
@@ -40,6 +44,48 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         XCTAssertEqual(loaded.segments.count, 2)
         XCTAssertEqual(loaded.segments[0].text, "hello")
         XCTAssertEqual(loaded.status, .completed)
+        let encrypted = try Data(contentsOf: store.transcriptFile(id: id))
+        XCTAssertTrue(TranscriptCipher.isEncryptedEnvelope(encrypted))
+        XCTAssertFalse(String(data: encrypted, encoding: .utf8)?.contains("hello") == true)
+    }
+
+    func testLegacyPlaintextTranscriptMigratesAndIsRemoved() throws {
+        let session = makeSession(status: .completed)
+        let legacy = store.legacyTranscriptFile(id: session.id)
+        try FileManager.default.createDirectory(
+            at: legacy.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(session).write(to: legacy, options: .atomic)
+
+        XCTAssertEqual(store.load(id: session.id)?.id, session.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
+        XCTAssertTrue(
+            TranscriptCipher.isEncryptedEnvelope(
+                try Data(contentsOf: store.transcriptFile(id: session.id))
+            )
+        )
+    }
+
+    func testVerifiedEncryptedTranscriptRetriesLegacyPlaintextRemoval() throws {
+        let session = makeSession(status: .completed)
+        try store.save(session)
+        let legacy = store.legacyTranscriptFile(id: session.id)
+        try Data("leftover plaintext".utf8).write(to: legacy)
+
+        XCTAssertEqual(store.load(id: session.id)?.id, session.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
+    }
+
+    func testUnavailableKeyPreventsTranscriptWrite() {
+        struct KeyUnavailable: Error {}
+        let unavailable = MeetingTranscriptStore(
+            rootDirectory: tempRoot,
+            keyProvider: { throw KeyUnavailable() }
+        )
+        XCTAssertThrowsError(try unavailable.save(makeSession()))
     }
 
     private func makeSession(
@@ -231,10 +277,37 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(store.load(id: session.id)).audioRetained)
     }
 
+    func testStartupSweepPurgesOrphanAudioWithoutDecryptingTranscript() throws {
+        let id = UUID()
+        let directory = store.sessionDirectory(id: id)
+        let orphanAudio = directory.appendingPathComponent("mixed.m4a")
+        let orphanChunk = directory
+            .appendingPathComponent("chunks-system", isDirectory: true)
+            .appendingPathComponent("000.m4a")
+        try writeFixture(byteCount: 5, to: orphanAudio)
+        try writeFixture(byteCount: 7, to: orphanChunk)
+        try Data("corrupt encrypted transcript".utf8)
+            .write(to: store.transcriptFile(id: id))
+
+        XCTAssertEqual(store.purgeAllAudioArtifacts(), 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphanAudio.path))
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("chunks-system").path
+            )
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: store.transcriptFile(id: id).path)
+        )
+    }
+
     func testConditionalUpdateCannotResurrectAConcurrentlyDeletedSession() throws {
         let session = makeSession(status: .completed)
         try store.save(session)
-        let deletingStore = MeetingTranscriptStore(rootDirectory: tempRoot)
+        let deletingStore = MeetingTranscriptStore(
+            rootDirectory: tempRoot,
+            keyProvider: { self.encryptionKey }
+        )
         let predicateEntered = DispatchSemaphore(value: 0)
         let releaseUpdate = DispatchSemaphore(value: 0)
         let deleteStarted = DispatchSemaphore(value: 0)
@@ -329,7 +402,8 @@ final class MeetingTranscriptStoreTests: XCTestCase {
 
     func testListReturnsEmptyWhenRootMissing() {
         let empty = MeetingTranscriptStore(
-            rootDirectory: tempRoot.appendingPathComponent("does-not-exist")
+            rootDirectory: tempRoot.appendingPathComponent("does-not-exist"),
+            keyProvider: { self.encryptionKey }
         )
         XCTAssertEqual(empty.list(), [])
     }

@@ -2,6 +2,13 @@ import XCTest
 @testable import vox
 
 final class SettingsWindowTests: XCTestCase {
+    func testOnlyExplicitUserRoutesMayOpenSettings() {
+        XCTAssertTrue(MainWindowController.allowsSettingsNavigation(from: .statusMenu))
+        XCTAssertTrue(MainWindowController.allowsSettingsNavigation(from: .sidebar))
+        XCTAssertFalse(MainWindowController.allowsSettingsNavigation(from: .launch))
+        XCTAssertFalse(MainWindowController.allowsSettingsNavigation(from: .programmatic))
+    }
+
     @MainActor
     func testMainSidebarListsPersonalizationAfterSettings() {
         XCTAssertEqual(

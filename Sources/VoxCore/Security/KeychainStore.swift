@@ -52,8 +52,53 @@ public struct KeychainStore: Sendable {
     }
 
     public func read() -> String? {
+        try? readThrowing()
+    }
+
+    /// Reads without collapsing an inaccessible Keychain into "not found".
+    /// Callers protecting durable ciphertext must use this variant so a
+    /// temporary Keychain failure cannot be mistaken for a missing key.
+    public func readThrowing() throws -> String? {
         Self.lock.lock()
         defer { Self.lock.unlock() }
+        return try readWithoutLock()
+    }
+
+    /// Returns the existing value or creates it with an atomic Keychain add.
+    /// The process lock prevents duplicate first-use generation in this app;
+    /// `errSecDuplicateItem` also handles a concurrent creator in another
+    /// process without overwriting the value it installed.
+    public func readOrCreate(_ create: () throws -> String) throws -> String {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+
+        if let existing = try readWithoutLock() { return existing }
+        let value = try create()
+        guard let data = value.data(using: .utf8) else {
+            throw KeychainError.dataEncodingFailed
+        }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            guard let existing = try readWithoutLock() else {
+                throw KeychainError.unexpectedStatus(status)
+            }
+            return existing
+        }
+        guard status == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+        Self.cache[cacheKey] = value
+        return value
+    }
+
+    private func readWithoutLock() throws -> String? {
         if let cached = Self.cache[cacheKey] { return cached }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -64,8 +109,14 @@ public struct KeychainStore: Sendable {
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data,
-              let value = String(data: data, encoding: .utf8) else { return nil }
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+        guard let data = result as? Data,
+              let value = String(data: data, encoding: .utf8) else {
+            throw KeychainError.dataEncodingFailed
+        }
         Self.cache[cacheKey] = value
         return value
     }

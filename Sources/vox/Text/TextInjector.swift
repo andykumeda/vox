@@ -2,23 +2,6 @@ import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
 
-public enum ArrowDirection: Sendable, Equatable, Hashable {
-    case left, right, up, down
-}
-
-public enum KeyModifier: Sendable, Equatable, Hashable {
-    case control, command, option, shift
-}
-
-public enum SuffixKey: Sendable, Equatable {
-    case tab
-    case `return`
-    case escape
-    case space
-    case control(Character)
-    case arrow(ArrowDirection, modifiers: Set<KeyModifier>)
-}
-
 private let letterKeyCodes: [Character: CGKeyCode] = [
     "a": CGKeyCode(kVK_ANSI_A), "b": CGKeyCode(kVK_ANSI_B),
     "c": CGKeyCode(kVK_ANSI_C), "d": CGKeyCode(kVK_ANSI_D),

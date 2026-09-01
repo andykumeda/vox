@@ -1,5 +1,6 @@
 import XCTest
 @testable import vox
+@testable import VoxCore
 
 final class CleanupProcessorTests: XCTestCase {
 

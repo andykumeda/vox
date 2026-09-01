@@ -85,7 +85,7 @@ public final class DictionaryStore: ObservableObject {
         return base.appendingPathComponent("dictionary.json")
     }
 
-    nonisolated static func loadEntriesFromDisk(
+    public nonisolated static func loadEntriesFromDisk(
         fileURL: URL = DictionaryStore.defaultFileURL(),
         bundledDefaults: [DictionaryEntry] = DictionaryDefaults.bundledDefaults
     ) -> [DictionaryEntry] {
@@ -228,7 +228,10 @@ public final class DictionaryStore: ObservableObject {
         let tmp = fileURL.deletingLastPathComponent()
             .appendingPathComponent(".\(fileURL.lastPathComponent).\(UUID().uuidString).tmp")
         try data.write(to: tmp, options: .atomic)
-        // Replace destination atomically.
-        _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tmp)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tmp)
+        } else {
+            try FileManager.default.moveItem(at: tmp, to: fileURL)
+        }
     }
 }

@@ -89,24 +89,6 @@ private final class MeetingTranscriptsModel: ObservableObject {
         }
     }
 
-    /// True when the session is in a terminal state and we still have the
-    /// raw audio on disk to feed back through Deepgram.
-    func canReTranscribe(_ session: TranscriptSession) -> Bool {
-        let terminal: Set<TranscriptSession.Status> = [.completed, .failed, .cancelled]
-        guard terminal.contains(session.status) else { return false }
-        let store = MeetingTranscriptStore()
-        let fm = FileManager.default
-        return fm.fileExists(atPath: store.audioFile(id: session.id).path)
-            || fm.fileExists(atPath: store.micFile(id: session.id).path)
-            || fm.fileExists(atPath: store.phoneFile(id: session.id).path)
-    }
-
-    func reTranscribeWithDeepgram(_ id: UUID) {
-        Task.detached {
-            await MeetingTranscriptionSession.shared.reTranscribeWithDeepgram(sessionID: id)
-        }
-    }
-
     func export(_ session: TranscriptSession, format: ExportFormat) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(session.title).txt"
@@ -186,12 +168,6 @@ struct MeetingTranscriptsView: View {
                 HStack {
                     Text(s.title).font(.headline)
                     Spacer()
-                    if model.canReTranscribe(s) {
-                        Button("Re-transcribe (Deepgram)") {
-                            model.reTranscribeWithDeepgram(s.id)
-                        }
-                        .help("Re-run this meeting through Deepgram for diarized speaker IDs. Requires the Deepgram key in Settings and the original audio still on disk.")
-                    }
                     Menu("Export") {
                         Button("Plain Text") { model.export(s, format: .plain) }
                         Button("Timestamped Text") { model.export(s, format: .timestamped) }
@@ -228,6 +204,21 @@ struct MeetingTranscriptsView: View {
                             Image(systemName: "sparkles")
                             Text("Summary").font(.subheadline).bold()
                         }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    Divider()
+                }
+                if !s.rawSegments.isEmpty, s.rawSegments != s.segments {
+                    DisclosureGroup("Raw provider transcript comparison") {
+                        ScrollView(.vertical, showsIndicators: true) {
+                            Text(meetingComparison(s))
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        }
+                        .frame(maxHeight: 180)
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 8)
@@ -272,6 +263,12 @@ struct MeetingTranscriptsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func meetingComparison(_ session: TranscriptSession) -> String {
+        let raw = session.rawSegments.map(\.text).joined(separator: " ")
+        let final = session.segments.map(\.text).joined(separator: " ")
+        return TranscriptComparison.diff(raw: raw, final: final)
     }
 
     private func formatTime(_ t: Double) -> String {

@@ -1,5 +1,6 @@
 import XCTest
 @testable import vox
+@testable import VoxCore
 
 @MainActor
 final class DictionaryStoreTests: XCTestCase {

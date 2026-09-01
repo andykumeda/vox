@@ -11,10 +11,16 @@ Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mi
 Press your **Mode toggle** hotkey (default `⌃⌥M`) to force prose regardless of focus. The menu-bar icon shows a lock when prose is forced.
 
 ## Verbatim mode
-Smart Cleanup (Settings → Mode) polishes prose dictations conservatively — removes obvious false starts, fillers, self-corrections. Personalization → **Custom Instructions** stores optional style guidance at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
+Smart Cleanup (Settings → Mode) polishes prose dictations conservatively — removes obvious false starts, fillers, self-corrections. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
 
 - **Hold Option while pressing Fn** — that recording is pasted raw, no cleanup, no trigger expansion.
 - **Say "verbatim" or "literal" as the first word** of the dictation. The prefix is stripped and the rest is pasted as Whisper transcribed it. Example: speaking *"verbatim he literally said um maybe yeah"* pastes `he literally said um maybe yeah`.
+
+## Writing-voice skill
+
+If you already have a writing-voice skill or Markdown style guide, link it under Personalization → **Custom Instructions**; there is no need to generate another one. If you do not have one, **Export Writing-Voice Skill…** creates a self-contained `SKILL.md` for use with Codex, Claude, or another instruction-aware application. The export includes skill metadata, register guidance, observed cadence, cleanup preferences, composition prompts, final checks, and evidence boundaries. It does not include transcript excerpts and does not treat remote or unattributed meeting participants as evidence of your voice.
+
+About 100 prose dictations can produce a rough first pass. For a relatively accurate guide, aim for roughly 500 prose dictations or 10,000–15,000 attributable words across professional, casual, technical, and reflective contexts. Variety matters as much as the raw count. In Codex, save or copy the export as `SKILL.md` inside its own skill folder; in Claude, add the Markdown as the applicable project or writing instructions.
 
 ## Dictionary
 Personalization → Dictionary lets you define custom substitutions:
@@ -45,10 +51,9 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   Re-open the panel via hotkey or menu to see the running timer or stop.
 - When you click Stop, Vox transcribes via the configured meeting provider,
   interleaves segments by time, and opens the transcript browser.
-- Meeting audio is kept in `~/Library/Application Support/Vox/MeetingTranscripts/<id>/`
-  so you can replay or re-transcribe later. See **Settings → Recordings storage**
-  to set a retention cutoff (default: delete audio after 1 month, transcripts
-  always kept).
+- Meeting audio is temporary and deleted after transcription and optional
+  summarization finish. Raw provider segments, final displayed segments, and
+  summaries are retained in authenticated encrypted transcript files.
 
 ### Permissions for Meetings
 - **Screen Recording** — required for system-audio capture via ScreenCaptureKit.
@@ -106,10 +111,10 @@ Settings → Hotkeys lets you rebind:
 
 ## Files
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
-- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`. Additional correction triggers declared in the profile (such as `rather` / `or rather`) are honored, and cleanup is discarded if it expands the dictated wording into an interpretation.
-- Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
-- Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
-- Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`
+- Smart cleanup fallback: `~/Library/Application Support/Vox/cleanup-profile.md`; a linked external Markdown file replaces it while selected.
+- Encrypted dictation history: `~/Library/Application Support/Vox/DictationHistory/history.enc`
+- Temporary dictation recordings: `~/Library/Application Support/Vox/Recordings/`
+- Encrypted meeting transcripts: `~/Library/Application Support/Vox/MeetingTranscripts/<id>/transcript.enc`
 - Logs: `~/Library/Logs/vox.log`
 - Auto-relaunch agent: `~/Library/LaunchAgents/com.andykumeda.vox.plist`
 

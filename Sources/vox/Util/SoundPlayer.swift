@@ -6,10 +6,18 @@ public enum SoundCue: String {
     case error = "Funk"
 }
 
-public struct SoundPlayer {
+public final class SoundPlayer {
+    private var activeSound: NSSound?
+
     public init() {}
 
     public func play(_ cue: SoundCue) {
-        NSSound(named: NSSound.Name(cue.rawValue))?.play()
+        activeSound?.stop()
+        guard let sound = NSSound(named: NSSound.Name(cue.rawValue)) else {
+            NSSound.beep()
+            return
+        }
+        activeSound = sound
+        sound.play()
     }
 }

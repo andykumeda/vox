@@ -13,18 +13,33 @@ public enum DictationSilenceGate {
 
     /// For short clips (< `shortClipDurationSec`), require at least this RMS.
     /// Ambient mic floor on empty holds landed ~200–300; real speech was 400+.
+    #if os(iOS)
+    /// iPhone AVAudioRecorder levels are substantially lower than the Mac
+    /// input path (typical spoken clips can measure around 150–300 RMS).
+    public static let shortClipMinimumRMS: Double = 100
+    #else
     public static let shortClipMinimumRMS: Double = 350
+    #endif
 
     public static let shortClipDurationSec: Double = 2.0
 
     /// Minimum sustained frame-level energy for a short clip to count as speech.
     /// Overall RMS is insufficient: an empty toggle can contain a brief click or
     /// handling noise with a deceptively high average level.
+    #if os(iOS)
+    public static let minimumVoicedDurationSec: Double = 0.20
+    public static let speechActivityFrameRMS: Double = 150
+    #else
     public static let minimumVoicedDurationSec: Double = 0.28
     public static let speechActivityFrameRMS: Double = 700
+    #endif
 
     /// Absolute floor — digital silence / muted mic.
+    #if os(iOS)
+    public static let absoluteMinimumRMS: Double = 20
+    #else
     public static let absoluteMinimumRMS: Double = 40
+    #endif
 
     public static func shouldSkip(
         durationSec: Double,

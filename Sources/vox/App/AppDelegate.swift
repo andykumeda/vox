@@ -21,21 +21,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutoRelaunch.installAndHandOffIfNeeded()
         // Patch headers on any dictation WAVs left half-finished by a prior crash.
         RecordingArchive.repairOrphans()
-        // Purge audio older than the configured retention. Transcript text is
-        // kept indefinitely; only heavy WAV/m4a files are deleted.
-        if let cutoff = AppSettings.audioRetention.cutoffDate() {
-            let dictDeleted = RecordingArchive.purgeOlderThan(cutoff)
-            let meetingDeleted = MeetingTranscriptStore().purgeAudioOlderThan(cutoff)
-            if dictDeleted > 0 || meetingDeleted > 0 {
-                dlog("audio retention sweep: dictation=\(dictDeleted) meeting=\(meetingDeleted) cutoff=\(cutoff)")
-            }
+        let transcriptStore = MeetingTranscriptStore()
+        transcriptStore.recoverInFlightSessions()
+        let dictDeleted = RecordingArchive.purgeOlderThan(.distantFuture)
+        let meetingDeleted = transcriptStore.purgeAllAudioArtifacts()
+        if dictDeleted > 0 || meetingDeleted > 0 {
+            dlog("privacy audio sweep: dictation=\(dictDeleted) meeting=\(meetingDeleted)")
         }
         menuController.start()
-        MeetingTranscriptStore().recoverInFlightSessions()
         try? CleanupProfileStore.shared.ensureFileExists()
         DictionaryStore.shared.load()
         DictionaryStore.shared.startWatching()
-        Task { @MainActor in MainWindowController.shared.showWindow() }
+        Task { @MainActor in
+            MainWindowController.shared.showHome(source: .launch)
+        }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,

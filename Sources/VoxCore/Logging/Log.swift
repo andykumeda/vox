@@ -27,7 +27,7 @@ private let isoFormatStyle = Date.ISO8601FormatStyle(
 
 private let logQueue = DispatchQueue(label: "vox.log")
 private let mirrorDLogToStandardError = shouldMirrorDLogToStandardError(
-    isLaunchAgentInstance: AutoRelaunch.isLaunchAgentInstance
+    isLaunchAgentInstance: CommandLine.arguments.contains("--vox-launch-agent")
 )
 
 func shouldMirrorDLogToStandardError(isLaunchAgentInstance: Bool) -> Bool {
@@ -98,7 +98,7 @@ func writeDLogData(
 /// Produces useful text diagnostics without putting user-authored content in logs.
 /// Counts characters and whitespace-delimited words in one pass without allocating
 /// an array of substrings.
-func textLogMetrics(label: String, text: String) -> String {
+public func textLogMetrics(label: String, text: String) -> String {
     var characterCount = 0
     var wordCount = 0
     var isInsideWord = false

@@ -1,5 +1,6 @@
 import XCTest
 @testable import vox
+@testable import VoxCore
 
 final class DictationRegressionTests: XCTestCase {
     private let latencyBudgetMs: Double = 50.0

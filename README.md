@@ -4,6 +4,17 @@ Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn**, speak, rele
 
 Default transcription model is `gpt-4o-transcribe` for better dictation accuracy. Switchable to `gpt-4o-mini-transcribe` (lower cost) or `whisper-1`.
 
+## iPhone MVP
+
+The repository also contains an experimental iOS 18+ host app and custom
+keyboard extension. It reuses Vox's transcription, silence gate, cleanup,
+dictionary, and post-processing core. Because iOS does not allow a keyboard
+extension to capture microphone audio directly, tapping its microphone opens
+the Vox host app to record; the finished text is returned to the matching
+keyboard request through an App Group and inserted once. See
+[Mobile/README.md](Mobile/README.md) for signing, installation, and physical
+iPhone validation steps.
+
 If text appears slowly after you release Fn, check `~/Library/Logs/vox.log`.
 Vox logs `transcription http attempt` and `dictation timing` lines so you can
 tell whether the wait is the OpenAI transcription request, Smart Cleanup, or
@@ -162,10 +173,11 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 - **Model** — `gpt-4o-transcribe` (~$0.006/min, default and best quality), `gpt-4o-mini-transcribe` (~$0.003/min, lower cost), or `whisper-1` (~$0.006/min, no prompt-following).
 - **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`.
 - **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`.
-- **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes obvious false starts, fillers, and self-corrections in prose. Personalization → **Custom Instructions** stores optional style guidance at `~/Library/Application Support/Vox/cleanup-profile.md`; leave it empty for default behavior. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
+- **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes obvious false starts, fillers, and self-corrections in prose. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
-- **Recordings storage** — retention cutoff for raw audio (forever / 1y / 3mo / 1mo / 7d). Transcripts are kept indefinitely. Reveal-in-Finder buttons + live disk usage.
-- **Dictation history** — retention cutoff for transcript history (forever / 1y / 90d / 30d).
+- **Recordings storage** — audio is temporary and deleted after dictation or meeting processing reaches a terminal state. A startup sweep removes crash leftovers.
+- **Dictation history** — encrypted raw STT and final delivered text, with a raw-vs-final disclosure and retention choices (forever / 1y / 90d / 30d).
+- **Writing-voice skill export** — Personalization → Custom Instructions exports an import-ready `SKILL.md` for Codex, Claude, or another instruction-aware app. It uses attributable final text and raw-vs-final cleanup patterns without embedding transcript bodies or treating remote meeting participants as the user's voice. Users who already have a writing-voice skill can simply link it instead. About 100 prose dictations gives a rough first pass; roughly 500 dictations or 10,000–15,000 words across varied contexts is the recommended target for a relatively accurate guide.
 - **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Remote insertion paths skip restoring the prior clipboard because remote clipboard synchronization can lag behind the local paste event.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
@@ -173,7 +185,7 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 
 - **Wrong transcription with delayed start/stop sounds** — check System Settings → Sound. If macOS has selected a Bluetooth speaker/headset as the default input, Vox will capture that low-bandwidth mic instead of your studio/USB mic. In `~/Library/Logs/vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` is a strong sign of this route. Re-select the intended mic, ideally a USB device at 48 kHz, and move output/system output off Bluetooth if the audible cues lag.
 - **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for `dictation timing`, `transcription request model=...`, `transcription api key read elapsed=...`, and `transcription http attempt` lines. A slow first dictation after relaunch can be Keychain warming; longer waits after that are usually the OpenAI transcription request, network path, or Smart Cleanup. The `timeout=...` value scales up for longer WAVs. `resource_timeout=...` is the remaining hard deadline shared by the request and any retry, so retries cannot multiply a stalled request into a much longer wait.
-- **Raw audio replay** — recent dictation WAVs are kept in `~/Library/Application Support/Vox/Recordings/` according to the configured audio-retention setting. Replay the saved WAV and compare its duration with the log's `raw_chars/raw_words`, `cleaned_chars/cleaned_words`, and `processed_chars/processed_words` metrics to separate capture problems from STT or cleanup problems without putting transcript content in logs.
+- **Raw-vs-final troubleshooting** — expand **Raw vs final** on a recent dictation. Vox retains both forms in encrypted history while deleting the WAV after processing. Logs continue to contain counts and timing only, never transcript text.
 
 ## Dictionary
 
@@ -204,8 +216,8 @@ Vox transcribes meetings end-to-end by capturing **system audio** (Zoom/Meet/etc
   - **Deepgram Nova-3 (default if a Deepgram key is set)** — mic + system audio are mixed into a single composition aligned by wall-clock and submitted in one batch request with `diarize=true`. Returns segments tagged with `Speaker 0 / 1 / 2 …` so individual participants are distinguished within the system-audio stream instead of being collapsed under a single "Remote" label.
   - **OpenAI Whisper (fallback)** — mic and system streams are chunked, transcribed independently, and tagged `You` (mic) vs `Other` (system). No within-stream speaker separation.
   Provider is selectable in Settings → Meeting. Add a Deepgram API key in Settings → Deepgram API key (Keychain account `deepgram-api-key`).
-- Meeting audio + transcripts persist at `~/Library/Application Support/Vox/MeetingTranscripts/<id>/`. Audio is auto-purged per Settings → Recordings storage; transcripts kept forever.
-- Each meeting in the transcript browser has a **Re-transcribe (Deepgram)** button that reruns an existing meeting through Deepgram using the retained audio on disk, replacing the segments + summary in place. Useful for rescuing meetings transcribed before 0.7.0.
+- Meeting audio is temporary and deleted after transcription and optional summarization finish. Raw provider segments, final displayed segments, and summaries remain in authenticated encrypted transcript files.
+- The transcript browser exposes a raw-provider comparison when filtering or cleanup changed the delivered meeting transcript. Re-transcription from retained audio is intentionally unavailable.
 
 Permissions: **Screen Recording** (system audio + window-title polling for auto-detect), **Microphone** (local stream).
 
@@ -248,10 +260,10 @@ Remote desktop apps need special paste handling. When Vox is running on the Mac 
 ## Files
 
 - Dictionary: `~/Library/Application Support/Vox/dictionary.json`
-- Smart cleanup profile: `~/Library/Application Support/Vox/cleanup-profile.md`. Profile-declared correction triggers such as `rather` / `or rather` are applied deterministically; cleanup also fails open when the LLM expands a dictation instead of preserving its wording.
-- Dictation history: `~/Library/Application Support/Vox/DictationHistory/history.json`
-- Dictation recordings: `~/Library/Application Support/Vox/Recordings/`
-- Meeting transcripts + audio: `~/Library/Application Support/Vox/MeetingTranscripts/`
+- Smart cleanup profile fallback: `~/Library/Application Support/Vox/cleanup-profile.md`; a user-selected external Markdown file can replace it while linked.
+- Encrypted dictation history: `~/Library/Application Support/Vox/DictationHistory/history.enc`
+- Temporary dictation recordings: `~/Library/Application Support/Vox/Recordings/` (empty after terminal processing/startup recovery)
+- Encrypted meeting transcripts: `~/Library/Application Support/Vox/MeetingTranscripts/<id>/transcript.enc` (audio is temporary)
 - Logs: `~/Library/Logs/vox.log`
 
 ## Log file
@@ -314,6 +326,14 @@ See [docs/dictation-regression.md](docs/dictation-regression.md) for thresholds 
 The Sparkle EdDSA private key for signing updates lives only on the Mac mini
 (`AKsMini`). Releases must be cut there, even when development happened on the
 MacBook.
+
+Before staging a release, inspect both `git diff` and `git status --short`.
+Stage an explicit allowlist of source, test, and documentation files; do not
+use `git add -A` in a worktree that may contain another task's changes. Keep
+Xcode user state, `.build/`, `dist/`, logs, credentials, and runtime data out
+of the release commit. A previous release attempt accidentally staged the
+entire accumulated worktree, which made the release scope ambiguous and was
+stopped before commit.
 
 ```sh
 # 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist.

@@ -1,11 +1,11 @@
 import Foundation
 
-enum DictionaryDefaults {
+public enum DictionaryDefaults {
 
     /// Built-in entries seeded on first launch. Each id is stable across
     /// versions; new app versions may append entries with new ids — never
     /// renumber existing ones.
-    static let bundledDefaults: [DictionaryEntry] = [
+    public static let bundledDefaults: [DictionaryEntry] = [
         // Single-letter flag misfires: -<word> -> -l
         DictionaryEntry(id: "builtin-shell-l", spoken: "-shell", replacement: "-l",
                         mode: .command, isBuiltIn: true),

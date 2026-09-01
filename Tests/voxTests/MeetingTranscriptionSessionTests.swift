@@ -2,6 +2,7 @@ import XCTest
 @testable import vox
 
 final class MeetingTranscriptionSessionTests: XCTestCase {
+    private let encryptionKey = Data(repeating: 0x7C, count: 32)
     var tempRoot: URL!
     var store: MeetingTranscriptStore!
 
@@ -10,7 +11,10 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("vox-session-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
-        store = MeetingTranscriptStore(rootDirectory: tempRoot)
+        store = MeetingTranscriptStore(
+            rootDirectory: tempRoot,
+            keyProvider: { self.encryptionKey }
+        )
     }
 
     override func tearDown() {
@@ -417,7 +421,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         }
     }
 
-    func testAudioRetainedTrueKeepsAudio() async throws {
+    func testAudioIsDeletedEvenWhenLegacyRetentionProviderReturnsTrue() async throws {
         let recorder = MockRecorder()
         let url = tempRoot.appendingPathComponent("c.m4a")
         try Data([0]).write(to: url)
@@ -434,7 +438,11 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         let id = session.activeSessionID!
         try await session.stop()
         await session.waitForCompletion()
-        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioFile(id: id).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.audioFile(id: id).path))
+        let saved = try XCTUnwrap(store.load(id: id))
+        XCTAssertFalse(saved.audioRetained)
+        XCTAssertEqual(saved.rawSegments.map(\.text), ["x"])
+        XCTAssertEqual(saved.segments.map(\.text), ["x"])
     }
 
     func testInterleavesSystemAndMicSegmentsByStartTime() async throws {

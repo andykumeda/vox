@@ -71,7 +71,11 @@ final class MenuBarController: NSObject {
     )
     private lazy var liveLLMCleaner: CleanupProcessor.LLMCleanFunc = makeLiveLLMCleaner(
         apiKeyProvider: { [keychain] in keychain.read() },
-        profileProvider: { CleanupProfileStore.shared.load() },
+        profileProvider: {
+            WritingStyleSourceStore.shared.activeInstructions(
+                fallback: CleanupProfileStore.shared.load()
+            )
+        },
         dictionaryProvider: { DictionaryStore.loadEntriesFromDisk() }
     )
     private lazy var updaterController: SPUStandardUpdaterController = {
@@ -286,7 +290,9 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openSettings() {
-        Task { @MainActor in MainWindowController.shared.showSettings() }
+        Task { @MainActor in
+            MainWindowController.shared.showSettings(source: .statusMenu)
+        }
     }
 
     @objc private func openHelp() {
@@ -637,6 +643,7 @@ final class MenuBarController: NSObject {
             voicedDurationSec: voicedSec
         ) {
             dlog("silence gate tripped — skipping transcription")
+            try? FileManager.default.removeItem(at: url)
             state = .idle
             return
         }
@@ -644,6 +651,9 @@ final class MenuBarController: NSObject {
         state = .transcribing
 
         Task { [weak self] in
+            defer {
+                try? FileManager.default.removeItem(at: url)
+            }
             guard let self else { return }
             let pipelineStartedAt = Date()
             dlog("dictation pipeline started duration=\(durationSec)s bytes=\(wav.count) mode=\(mode)")
@@ -698,7 +708,9 @@ final class MenuBarController: NSObject {
                     enabled: cleanupEnabled,
                     llmCleaner: cleanupEnabled ? self.liveLLMCleaner : nil,
                     additionalScratchThatTriggers: CleanupProfileStore.additionalScratchThatTriggers(
-                        from: CleanupProfileStore.shared.load()
+                        from: WritingStyleSourceStore.shared.activeInstructions(
+                            fallback: CleanupProfileStore.shared.load()
+                        )
                     )
                 )
                 let cleanupStartedAt = Date()
@@ -723,7 +735,8 @@ final class MenuBarController: NSObject {
                         mode: mode == .prose ? "prose" : "command",
                         durationSec: durationSec,
                         wordCount: wordCount,
-                        text: finalText
+                        text: finalText,
+                        rawText: raw
                     ))
                     if !recorded {
                         dlog("dictation history record failed; paste will still proceed")

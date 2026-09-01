@@ -2,6 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RecordingStorageUsage: Equatable, Sendable {
     let dictationBytes: UInt64
@@ -46,7 +47,6 @@ struct SettingsView: View {
     @State private var autoShowMeetingPanel: Bool = AppSettings.autoShowMeetingPanel
     @State private var meetingSummaryEnabled: Bool = AppSettings.meetingSummaryEnabled
     @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider()
-    @State private var audioRetention: AudioRetention = AppSettings.audioRetention
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
     @State private var storageUsageLine = "Calculating disk usage…"
@@ -293,29 +293,9 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Recordings storage")
                     .font(.headline)
-                Picker("Delete audio older than", selection: Binding(
-                    get: { audioRetention },
-                    set: { newValue in
-                        audioRetention = newValue
-                        AppSettings.audioRetention = newValue
-                    }
-                )) {
-                    ForEach(AudioRetention.allCases, id: \.self) { r in
-                        Text(r.displayName).tag(r)
-                    }
-                }
-                Text("Transcripts are kept indefinitely. Only the raw audio (dictation WAVs and meeting recordings) is purged. Sweep runs at app launch.")
+                Text("Audio is temporary. Dictation and meeting recordings are deleted when processing reaches a terminal state; encrypted transcript history is retained according to the history setting.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    Button("Reveal Dictation Recordings") {
-                        NSWorkspace.shared.activateFileViewerSelecting([RecordingArchive.directory()])
-                    }
-                    Button("Reveal Meeting Recordings") {
-                        NSWorkspace.shared.activateFileViewerSelecting([MeetingTranscriptStore.defaultRoot()])
-                    }
-                }
                 HStack(spacing: 6) {
                     Text(storageUsageLine)
                         .font(.caption)
@@ -478,7 +458,6 @@ struct SettingsView: View {
             meetingConsent = AppSettings.meetingConsentAcknowledged
             meetingProvider = AppSettings.meetingProvider
             meetingBackendStatus = MeetingPreflight.backendStatusProvider()
-            audioRetention = AppSettings.audioRetention
         }
         .task {
             await refreshStorageUsage()
@@ -522,11 +501,17 @@ struct SettingsView: View {
 struct CustomInstructionsView: View {
     @State private var instructions: String
     @State private var message: String?
+    @State private var linkedFileName: String?
 
     private let store: CleanupProfileStore
+    private let styleSource: WritingStyleSourceStore
 
-    init(store: CleanupProfileStore = .shared) {
+    init(
+        store: CleanupProfileStore = .shared,
+        styleSource: WritingStyleSourceStore = .shared
+    ) {
         self.store = store
+        self.styleSource = styleSource
         _instructions = State(initialValue: store.load())
     }
 
@@ -536,7 +521,26 @@ struct CustomInstructionsView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Optional guidance for preserving your voice, wording, and style. Leave this empty to use Vox's default conservative cleanup behavior.")
+            Text("Optional guidance for preserving your voice, wording, and style. A linked Markdown file is read fresh for each eligible dictation, replaces the inline fallback while linked, and is sent to your configured OpenAI cleanup provider with the transcript.")
+                .foregroundStyle(.secondary)
+
+            Text("If you already have a writing-voice skill or style guide, link it here—there is no need to export another one from Vox.")
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Choose Markdown Style File…") { chooseStyleFile() }
+                if let linkedFileName {
+                    Text(linkedFileName).foregroundStyle(.secondary)
+                    Button("Unlink") {
+                        styleSource.clear()
+                        self.linkedFileName = nil
+                        message = "External style file unlinked."
+                    }
+                }
+            }
+
+            Text("For a Vox-generated skill, about 100 prose dictations produces a rough first pass. For relatively accurate results, aim for roughly 500 prose dictations or 10,000–15,000 attributable words across several audiences and contexts.")
+                .font(.caption)
                 .foregroundStyle(.secondary)
 
             TextEditor(text: $instructions)
@@ -553,6 +557,7 @@ struct CustomInstructionsView: View {
                     .keyboardShortcut(.defaultAction)
                 Button("Reset") { reset() }
                 Button("Reveal in Finder") { revealInFinder() }
+                Button("Export Writing-Voice Skill…") { exportWritingStyle() }
                 if let message {
                     Text(message)
                         .foregroundStyle(.secondary)
@@ -565,6 +570,7 @@ struct CustomInstructionsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             instructions = store.load()
+            linkedFileName = try? styleSource.linkedURL()?.lastPathComponent
         }
     }
 
@@ -593,6 +599,41 @@ struct CustomInstructionsView: View {
             NSWorkspace.shared.activateFileViewerSelecting([store.fileURL])
         } catch {
             message = "Reveal failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func chooseStyleFile() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText, .plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try styleSource.select(url)
+            _ = try styleSource.loadExternal()
+            linkedFileName = url.lastPathComponent
+            message = "Linked and readable."
+        } catch {
+            styleSource.clear()
+            linkedFileName = nil
+            message = "Link failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func exportWritingStyle() {
+        let markdown = WritingStyleExporter.markdown(
+            dictations: DictationHistoryStore.shared.list(),
+            meetings: MeetingTranscriptStore().list()
+        )
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "SKILL.md"
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try markdown.write(to: url, atomically: true, encoding: .utf8)
+            message = "Import-ready writing-voice skill exported."
+        } catch {
+            message = "Export failed: \(error.localizedDescription)"
         }
     }
 }
