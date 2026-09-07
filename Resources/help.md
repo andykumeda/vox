@@ -3,6 +3,7 @@
 ## Recording
 Hold **Fn** (default) and speak. Release to transcribe.
 Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-tap-start, one-tap-stop.
+A start sound plays before the microphone opens; a stop sound plays after you release. Change or silence either cue in Settings → Sounds.
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes

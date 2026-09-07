@@ -220,6 +220,38 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: dictationHistoryRetentionKey) }
     }
 
+    private static let startSoundKey = "startSound"
+    private static let stopSoundKey = "stopSound"
+    private static let errorSoundKey = "errorSound"
+
+    static var startSound: SystemAlertSound {
+        get { readSound(forKey: startSoundKey) ?? .startDefault }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: startSoundKey) }
+    }
+
+    static var stopSound: SystemAlertSound {
+        get { readSound(forKey: stopSoundKey) ?? .stopDefault }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: stopSoundKey) }
+    }
+
+    static var errorSound: SystemAlertSound {
+        get { readSound(forKey: errorSoundKey) ?? .errorDefault }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: errorSoundKey) }
+    }
+
+    static func sound(for cue: SoundCue) -> SystemAlertSound {
+        switch cue {
+        case .start: return startSound
+        case .stop: return stopSound
+        case .error: return errorSound
+        }
+    }
+
+    private static func readSound(forKey key: String) -> SystemAlertSound? {
+        guard let raw = UserDefaults.standard.string(forKey: key) else { return nil }
+        return SystemAlertSound(rawValue: raw)
+    }
+
     private static let recordHotkeyKey = "recordHotkey"
     private static let modeToggleHotkeyKey = "modeToggleHotkey"
     private static let meetingHotkeyKey = "meetingHotkey"

@@ -55,4 +55,17 @@ final class SettingsWindowTests: XCTestCase {
             "On disk now: 2048 bytes dictation, 8192 bytes meetings."
         )
     }
+
+    func testSoundPickerCatalogListsNoneThenSystemAlerts() {
+        XCTAssertEqual(SystemAlertSound.allCases.first?.displayName, "None")
+        XCTAssertTrue(SystemAlertSound.allCases.contains(.tink))
+        XCTAssertTrue(SystemAlertSound.allCases.contains(.pop))
+        XCTAssertTrue(SystemAlertSound.allCases.contains(.funk))
+        XCTAssertEqual(SystemAlertSound.tink.displayName, "Tink")
+        XCTAssertEqual(SystemAlertSound.none.fileURL, nil)
+        XCTAssertEqual(
+            SystemAlertSound.tink.fileURL?.path,
+            "/System/Library/Sounds/Tink.aiff"
+        )
+    }
 }

@@ -64,7 +64,7 @@ final class MenuBarController: NSObject {
     private let hotkey = HotkeyMonitor()
     private let injector = TextInjector()
     private let pasteGate = PasteGate()
-    private let sound = SoundPlayer()
+    private let sound = SoundPlayer.shared
     private lazy var transcriber = OpenAITranscriber(
         modelProvider: { AppSettings.transcriptionModel.rawValue },
         apiKeyProvider: { [keychain] in keychain.read() }
@@ -552,7 +552,7 @@ final class MenuBarController: NSObject {
         // could swallow the first press when auto already resolved to the same mode).
         AppSettings.modeOverride = (effectiveMode() == .command) ? .prose : .command
         refreshIcon()
-        NSSound(named: NSSound.Name("Tink"))?.play()
+        sound.play(.start)
     }
 
     private func reconfigureHotkey() {
@@ -594,7 +594,7 @@ final class MenuBarController: NSObject {
         if DictationMutex.isBlocked() {
             dlog("dictation Fn ignored — meeting recording active")
             // Audible cue so the user notices their dictation isn't going through.
-            NSSound(named: NSSound.Name("Funk"))?.play()
+            sound.play(.error)
             return
         }
         currentVerbatim = verbatim
@@ -604,9 +604,13 @@ final class MenuBarController: NSObject {
         case .command: currentMode = .command
         }
         do {
-            try recorder.start(mode: currentMode == .prose ? "prose" : "command")
+            try SoundPlayer.playStartCueThenOpenCapture(
+                playStart: { sound.play(.start) },
+                openCapture: {
+                    try recorder.start(mode: currentMode == .prose ? "prose" : "command")
+                }
+            )
             state = .recording
-            sound.play(.start)
         } catch {
             state = .error
             sound.play(.error)

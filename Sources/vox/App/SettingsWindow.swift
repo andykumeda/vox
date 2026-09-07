@@ -39,6 +39,9 @@ struct SettingsView: View {
     @State private var showDeepgramKey = false
     @State private var deepgramSavedMessage: String?
     @State private var meetingProvider: MeetingProvider = AppSettings.meetingProvider
+    @State private var startSound: SystemAlertSound = AppSettings.startSound
+    @State private var stopSound: SystemAlertSound = AppSettings.stopSound
+    @State private var errorSound: SystemAlertSound = AppSettings.errorSound
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
@@ -396,6 +399,25 @@ struct SettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("Sounds")
+                    .font(.headline)
+                soundRow("Start recording", selection: $startSound) {
+                    AppSettings.startSound = $0
+                }
+                soundRow("Stop recording", selection: $stopSound) {
+                    AppSettings.stopSound = $0
+                }
+                soundRow("Error", selection: $errorSound) {
+                    AppSettings.errorSound = $0
+                }
+                Text("The start sound plays before the microphone opens so it stays audible. Choose None to silence a cue.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Hotkeys").font(.headline)
 
                 HotkeyRecorderField(
@@ -458,9 +480,45 @@ struct SettingsView: View {
             meetingConsent = AppSettings.meetingConsentAcknowledged
             meetingProvider = AppSettings.meetingProvider
             meetingBackendStatus = MeetingPreflight.backendStatusProvider()
+            startSound = AppSettings.startSound
+            stopSound = AppSettings.stopSound
+            errorSound = AppSettings.errorSound
         }
         .task {
             await refreshStorageUsage()
+        }
+    }
+
+    private func soundRow(
+        _ title: String,
+        selection: Binding<SystemAlertSound>,
+        onChange: @escaping (SystemAlertSound) -> Void
+    ) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Picker("", selection: Binding(
+                get: { selection.wrappedValue },
+                set: { newValue in
+                    selection.wrappedValue = newValue
+                    onChange(newValue)
+                }
+            )) {
+                ForEach(SystemAlertSound.allCases) { sound in
+                    Text(sound.displayName).tag(sound)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 160)
+            .accessibilityLabel(title)
+            Button {
+                SoundPlayer.shared.play(selection.wrappedValue)
+            } label: {
+                Image(systemName: "speaker.wave.2.fill")
+            }
+            .buttonStyle(.borderless)
+            .disabled(selection.wrappedValue == .none)
+            .accessibilityLabel("Preview \(title) sound")
         }
     }
 

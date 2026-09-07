@@ -1,6 +1,23 @@
 # Vox Handoff
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
+
+## Unreleased 0.7.39 build 59: restore start-recording cue and make sounds configurable
+
+- Start recording played `Tink` *after* `AVAudioEngine` began capture. macOS
+  mutes system sounds while an input stream is running, so the start cue was
+  silent even though `NSSound.play()` returned true; the stop cue still worked
+  because it plays after `recorder.stop()`. The start cue now plays before the
+  mic opens, and `SoundPlayer` loads an independent copy from
+  `/System/Library/Sounds` instead of stopping the shared `NSSound(named:)`
+  cache.
+- Settings → Sounds lets the user pick start, stop, and error alerts from the
+  built-in macOS sounds (or None), with a preview button.
+- Verification: `swift test` passes 445 macOS tests plus 11 VoxCore tests.
+  Manual Fn start/stop smoke is required after the deployed build is used.
+- `0.7.39` / build `59` is an unreleased local deployment; public Sparkle
+  remains `0.7.38` / build `58`. `./scripts/build-app.sh` installed that
+  identity and the LaunchAgent was restarted.
 
 ## Released 0.7.38 build 58: prevent input-format tap crashes and improve start cues
 
