@@ -1,6 +1,24 @@
 # Vox Handoff
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
+
+## Unreleased 0.7.40 build 60: preserve dictated capability requests
+
+- A live dictation asking to create a cover letter PDF was transcribed correctly,
+  but Smart Cleanup interpreted it as a prompt and replaced it with "I'm unable
+  to create PDFs or downloadable files." The assistant-response guard recognized
+  several refusals but did not recognize the "I'm unable to ..." capability form.
+- Cleanup now rejects that response form and fails open to the dictated text. The
+  guard still permits the same wording when it was itself dictated.
+- Regression coverage reproduces the cover-letter request and assistant refusal.
+- Verification: `swift test` passes 446 macOS tests plus 11 VoxCore tests;
+  `DictationRegressionTests` passes with quality score `1.0` and failure rate
+  `0.0`. `./scripts/build-app.sh` installed the new identity, the installed and
+  built binaries have matching SHA-256 hashes, and the LaunchAgent is running
+  `/Applications/Vox.app/Contents/MacOS/vox`. The live cover-letter dictation
+  was repeated successfully, confirming the deployed fix.
+- `0.7.40` / build `60` is an unreleased local deployment; public Sparkle remains
+  `0.7.38` / build `58`.
 
 ## Unreleased 0.7.39 build 59: restore start-recording cue and make sounds configurable
 

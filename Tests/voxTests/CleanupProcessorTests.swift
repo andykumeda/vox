@@ -271,6 +271,18 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, input)
     }
 
+    func testLLMCapabilityRefusalReturnsDictatedCoverLetterRequest() async {
+        let input = "Create a cover letter as a PDF for this job application."
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            "I'm unable to create PDFs or downloadable files."
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
+    }
+
     func testDictatedRefusalCanRemainWhenInputMatches() async {
         let cleaner: CleanupProcessor.LLMCleanFunc = { _ in "I can't assist with that." }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)

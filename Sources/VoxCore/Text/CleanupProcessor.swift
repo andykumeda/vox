@@ -304,6 +304,7 @@ public struct CleanupProcessor {
 
         let patterns = [
             #"^i\s+(can't|cannot|can not|am unable to|won't|will not)\s+(assist|help|comply|provide|fulfill)\b"#,
+            #"^i(?:'m| am)\s+unable to\b"#,
             #"^(i'm sorry|sorry)[,!]?\s+(but\s+)?i\s+(can't|cannot|can not|am unable to|won't|will not)\b"#,
             #"^as an ai\b"#,
             #"^(sure[,.]?\s+)?please provide (the )?(text|content|snippet)\b"#,
