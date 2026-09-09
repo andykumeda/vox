@@ -22,10 +22,13 @@ Last updated: 2026-09-09
   clipboard value, both export formats appeared, and Plain Text opened the
   native Save panel (cancelled without writing a file). That first `0.7.41` /
   build `61` install also picked up unrelated in-progress source edits that
-  arrived in the shared worktree before compilation, so it is being superseded
-  by a clean isolated build from this exact scoped commit.
-- `0.7.42` / build `62` is the intended unreleased local build; public Sparkle remains
-  `0.7.38` / build `58`.
+  arrived in the shared worktree before compilation, so it was superseded by a
+  clean isolated build from commit `bc32c82`.
+- `./scripts/build-app.sh` built and installed `0.7.42` / build `62` from an
+  isolated worktree at `bc32c82`. The installed executable matches that build's
+  SHA-256 (`e16b3b07a100d75fdc9aabd153e0bdbca5f8c5c6721a6c52cef0da3e0de172b6`),
+  and launchd is running the installed app. Public Sparkle remains `0.7.38` /
+  build `58`.
 
 ## Unreleased 0.7.40 build 60: preserve dictated capability requests
 
