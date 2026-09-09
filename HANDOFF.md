@@ -2,6 +2,72 @@
 
 Last updated: 2026-09-09
 
+## Released 0.7.45 build 69: pin dictation and remove recording delays
+
+- Settings now lists live Core Audio input devices and can persistently pin
+  dictation to one device UID. Before every recording, Vox explicitly binds the
+  engine to that device. If the pinned mic is disconnected, Vox reports an
+  error rather than silently falling back to another input.
+- This fixes a reproduced AT2020 USB / OontZ Bluetooth race. Playing the start
+  cue woke the 44.1 kHz Bluetooth output; the input node briefly reported the
+  Bluetooth mic at 8 kHz before Core Audio restored the 48 kHz USB input. The
+  resulting tap/hardware mismatch failed engine startup with `-10868`.
+- The first deployed iteration proved that device binding alone was
+  insufficient: `AVAudioEngine` kept a stale 44.1 kHz graph after binding the
+  48 kHz AT2020. The pinned path now reads the selected device's authoritative
+  nominal sample rate and channel count directly from Core Audio and applies
+  that exact format to the input tap, as required by `AVAudioInputNode`.
+- Every visible Settings control was traced to its runtime consumer. Stale
+  mode/meeting hotkey descriptions were corrected, the meeting-only Screen
+  Recording permission was clarified, and cached controls now reload their
+  persisted values whenever Settings reappears.
+- Unpinned recorder startup still detects a native-format transition, rebuilds
+  the converter and tap, and retries once. A failed start no longer makes the
+  Fn hotkey permanently inert; the error state accepts a fresh attempt.
+- A live first-recording trace showed the initial start cue blocking for 3.221
+  seconds while the Bluetooth output woke; later starts reached the recorder in
+  18-116 ms. Vox now prepares the configured start cue on a background queue at
+  launch and reuses that prepared player for the first Fn press, while retaining
+  cue-before-microphone ordering.
+- A second live press arrived while the first recording was still in Smart
+  Cleanup and was silently rejected by the `.transcribing` menu state. Dictation
+  capture can now restart immediately while earlier pipelines continue; each
+  pipeline retains its own mode/verbatim state, and an older completion cannot
+  overwrite the icon state of a newer recording.
+- The menu now ends with **Quit Vox**. A normal quit exits successfully, so the
+  crash-only LaunchAgent does not reopen the app.
+- Repeated Keychain prompts were reproduced and traced to all three Vox items:
+  transcript encryption during startup recovery, OpenAI during background
+  warmup, and Deepgram when Settings evaluated the meeting provider. Despite
+  choosing **Always Allow**, the self-signed `vox-dev` app accumulated only
+  per-build `cdhash:` partitions (156, 63, and 12 historical hashes) and no
+  stable team partition. The build now prefers an Apple-issued team identity;
+  a signed throwaway probe confirmed macOS records `teamid:852LS98PQ9`.
+  Team-signed build 68 required one targeted Accessibility/Input Monitoring
+  reset and re-grant, then relaunched with all three Keychain reads immediate
+  and no password prompts.
+- Focused regressions cover pinned selection order, unavailable-device refusal,
+  8-to-48 kHz startup recovery, preference persistence, and error-state retry.
+- Verification: `swift test` passes 459 macOS tests plus 11 VoxCore tests;
+  `./scripts/run-dictation-regression.sh` passes with quality score `1.0` and
+  failure rate `0.0`. The initial `0.7.43` / build `63` deployment confirmed the
+  stale 44.1/48 kHz graph failure. Build 66 then passed a live four-recording
+  sequence, including presses while older Smart Cleanup pipelines were still
+  active, with the AT2020USB-X pinned and Bluetooth output active. Team-signed
+  build 68 also passed two immediate recordings with the second capture opening
+  while the first pipeline was still active; a subsequent quit/relaunch had no
+  Keychain prompts and retained hotkey, Accessibility, and microphone access.
+  Build 69 then changed the executable CDHash again and launched with Keychain
+  warmup in 6 ms, `AXIsProcessTrusted=true`, microphone granted, and the hotkey
+  listener active. All three Keychain items contain `teamid:852LS98PQ9`.
+- Release verification: the installed and packaged executables match SHA-256
+  `07581378b30f3955b30c2f9bd1ae11a1ca1823819cc8088322f314b22d35a6ff`;
+  nested `codesign --verify --deep --strict` passes; `hdiutil verify` passes;
+  the 2,670,909-byte DMG verifies against Sparkle EdDSA signature
+  `Af6hRyAV7Tn2bhuophNhsV8TFt8ocFLrZebF8ALSOqgHasA8aOaRzkoySqwurzJtaCJEq/D31ixRD6bfsnNfCw==`.
+- `0.7.45` / build `69` is the public Sparkle release replacing `0.7.38` /
+  build `58`.
+
 ## Unreleased 0.7.42 build 62: exact symbol substitutions and meeting transcript copy/export
 
 - Standalone symbol-only dictionary substitutions now remain exact in prose.

@@ -73,14 +73,24 @@ section "Signing identity"
 
 LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
 HAS_VOX_DEV="false"
+HAS_TEAM_IDENTITY="false"
 
-if security find-identity -v -p codesigning 2>/dev/null | grep -q '"vox-dev"'; then
+if security find-identity -v -p codesigning 2>/dev/null \
+    | grep -Eq '"(Developer ID Application|Apple Development):'; then
+    HAS_TEAM_IDENTITY="true"
+fi
+
+if [[ "$HAS_TEAM_IDENTITY" == "true" ]]; then
+    green "✓ Apple team signing identity already installed"
+elif security find-identity -v -p codesigning 2>/dev/null | grep -q '"vox-dev"'; then
     HAS_VOX_DEV="true"
 elif security find-identity "$LOGIN_KC" 2>/dev/null | grep -q '"vox-dev"'; then
     HAS_VOX_DEV="true"
 fi
 
-if [[ "$HAS_VOX_DEV" == "true" ]]; then
+if [[ "$HAS_TEAM_IDENTITY" == "true" ]]; then
+    green "  Keychain authorization can persist across rebuilt Vox binaries"
+elif [[ "$HAS_VOX_DEV" == "true" ]]; then
     green "✓ vox-dev identity already installed"
 else
     yellow "→ vox-dev identity missing — installing now"
@@ -101,12 +111,17 @@ fi
 section "Build"
 ./scripts/build-app.sh
 
-# Verify signing succeeded
-if codesign -dvv dist/Vox.app 2>&1 | grep -q "Authority=vox-dev"; then
-    green "✓ build signed with vox-dev (TCC permissions will persist)"
+# Verify signing succeeded. A real team identifier prevents Keychain from
+# recording a new per-build cdhash partition after every rebuild.
+SIGNING_INFO="$(codesign -dvvv dist/Vox.app 2>&1)"
+if printf '%s\n' "$SIGNING_INFO" | grep -Eq 'TeamIdentifier=.+$' \
+    && ! printf '%s\n' "$SIGNING_INFO" | grep -q 'TeamIdentifier=not set'; then
+    green "✓ build signed with a stable Apple team identity"
+elif printf '%s\n' "$SIGNING_INFO" | grep -q "Authority=vox-dev"; then
+    yellow "⚠ build signed with vox-dev (Keychain may re-prompt after rebuilds)"
 else
     yellow "⚠ build is ad-hoc signed (TCC will reset every rebuild)"
-    yellow "  re-run this script if vox-dev was just installed"
+    yellow "  install an Apple Development or Developer ID identity if available"
 fi
 
 # ─── Launch ────────────────────────────────────────────────────────────────

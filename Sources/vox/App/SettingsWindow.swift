@@ -42,6 +42,8 @@ struct SettingsView: View {
     @State private var startSound: SystemAlertSound = AppSettings.startSound
     @State private var stopSound: SystemAlertSound = AppSettings.stopSound
     @State private var errorSound: SystemAlertSound = AppSettings.errorSound
+    @State private var audioInputDevices: [AudioInputDevice] = AudioInputDevices.available()
+    @State private var audioInputDeviceUID: String = AppSettings.audioInputDeviceUID ?? ""
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
     @State private var smartCleanup: Bool = AppSettings.smartCleanupEnabled
@@ -185,7 +187,7 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                Text("Auto: dictation in Terminal/iTerm/Wave/etc gets command formatting (no period, no caps, dash/NATO/control); other apps get prose with sentence punctuation. Always prose: every dictation formatted as prose. Always command: every dictation formatted as a shell command (useful when dictating into a journal app or notes that hold shell commands you'll copy out later). The mode-toggle hotkey cycles through all three.")
+                Text("Auto: dictation in Terminal/iTerm/Wave/etc gets command formatting (no period, no caps, dash/NATO/control); other apps get prose with sentence punctuation. Always prose: every dictation is formatted as prose. Always command: every dictation is formatted as a shell command. The mode-toggle hotkey switches directly between Always prose and Always command.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Smart cleanup (prose mode): remove false starts and self-corrections via gpt-4o-mini", isOn: Binding(
@@ -394,6 +396,48 @@ struct SettingsView: View {
                     NSWorkspace.shared.open(URL(string:
                         "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                 }
+                Text("Screen Recording is needed only for Meeting Mode system-audio capture.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Microphone")
+                    .font(.headline)
+                HStack {
+                    Picker("Input source", selection: $audioInputDeviceUID) {
+                        Text("System Default").tag("")
+                        ForEach(audioInputDevices) { device in
+                            Text(device.displayName).tag(device.uid)
+                        }
+                        if !audioInputDeviceUID.isEmpty,
+                           !audioInputDevices.contains(where: { $0.uid == audioInputDeviceUID }) {
+                            Text("Pinned device unavailable").tag(audioInputDeviceUID)
+                        }
+                    }
+                    .onChange(of: audioInputDeviceUID) { newValue in
+                        AppSettings.audioInputDeviceUID = newValue.isEmpty ? nil : newValue
+                    }
+                    Button("Refresh") {
+                        audioInputDevices = AudioInputDevices.available()
+                    }
+                    .controlSize(.small)
+                }
+                if audioInputDeviceUID.isEmpty {
+                    Text("System Default follows macOS input changes.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let selected = audioInputDevices.first(where: { $0.uid == audioInputDeviceUID }) {
+                    Text("Pinned to \(selected.name). Vox will not fall back to another microphone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("The pinned microphone is unavailable. Vox will fail safely instead of switching inputs.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             Divider()
@@ -434,7 +478,7 @@ struct SettingsView: View {
                         get: { AppSettings.modeToggleHotkey },
                         set: { AppSettings.modeToggleHotkey = $0 }
                     ),
-                    label: "Toggle mode (auto / force prose)",
+                    label: "Toggle mode (prose / command)",
                     allowTriggerModePicker: false
                 )
 
@@ -443,7 +487,7 @@ struct SettingsView: View {
                         get: { AppSettings.meetingHotkey },
                         set: { AppSettings.meetingHotkey = $0 }
                     ),
-                    label: "Start / stop meeting transcript",
+                    label: "Show / hide meeting panel",
                     allowTriggerModePicker: false
                 )
 
@@ -474,15 +518,20 @@ struct SettingsView: View {
             deepgramKey = deepgramKeychain.read() ?? ""
             totals = UsageTracker.totals()
             model = AppSettings.transcriptionModel
+            keepOnClipboard = AppSettings.keepTranscriptionOnClipboard
             modeOverride = AppSettings.modeOverride
             smartCleanup = AppSettings.smartCleanupEnabled
             meetingMode = AppSettings.meetingModeEnabled
             meetingConsent = AppSettings.meetingConsentAcknowledged
+            autoShowMeetingPanel = AppSettings.autoShowMeetingPanel
+            meetingSummaryEnabled = AppSettings.meetingSummaryEnabled
             meetingProvider = AppSettings.meetingProvider
             meetingBackendStatus = MeetingPreflight.backendStatusProvider()
             startSound = AppSettings.startSound
             stopSound = AppSettings.stopSound
             errorSound = AppSettings.errorSound
+            audioInputDevices = AudioInputDevices.available()
+            audioInputDeviceUID = AppSettings.audioInputDeviceUID ?? ""
         }
         .task {
             await refreshStorageUsage()

@@ -113,14 +113,14 @@ Input Monitoring, Accessibility, and Screen Recording. See
 ## Manual build
 
 ```sh
-./scripts/create-dev-cert.sh   # ONE TIME — persistent self-signed identity
+./scripts/create-dev-cert.sh   # fallback only when no Apple team identity exists
 ./scripts/build-app.sh
 open /Applications/Vox.app
 ```
 
-`create-dev-cert.sh` creates a self-signed `vox-dev` identity in the login keychain. Signing every build with the same identity keeps macOS **TCC permissions sticky across rebuilds**. Skip it and the build falls back to ad-hoc signing — every rebuild revokes Accessibility / Input Monitoring / Microphone, forcing re-permit.
+`build-app.sh` prefers an installed Developer ID Application or Apple Development identity. Its stable Apple team identifier keeps macOS Keychain authorization valid across rebuilds. If neither exists, the script falls back to the self-signed `vox-dev` identity created by `create-dev-cert.sh`, then to ad-hoc signing. The self-signed fallback can preserve TCC permissions but modern macOS may still ask for Keychain authorization after each changed build because it records a per-build code hash rather than a team identifier.
 
-`build-app.sh` probes for the `vox-dev` identity in two phases: (a) `find-identity -v -p codesigning` against the default search list, then (b) the login keychain alone (MDM-managed Macs where the cert can't reach System trust). Designated requirement is pinned to the cert SHA so Keychain ACLs don't re-prompt every rebuild. By default it also installs the signed build to `/Applications/Vox.app`; set `INSTALL_TO_APPLICATIONS=0` to only write `dist/Vox.app`.
+By default the script installs the signed build to `/Applications/Vox.app`; set `INSTALL_TO_APPLICATIONS=0` to only write `dist/Vox.app`.
 
 Every installed production build must be distinguishable from the last public
 release. Before running this deployment path, bump both
@@ -150,7 +150,7 @@ Settings → Hotkeys lets you rebind:
 | Hotkey | Default | Trigger | Purpose |
 |---|---|---|---|
 | Record dictation | `Fn` | press-and-hold | hold to record, release to transcribe + paste |
-| Mode toggle | `⌃⌥M` | tap | flip between prose ↔ command (skips `.auto`) |
+| Mode toggle | `⌃⌥M` | tap | switch directly between Always prose and Always command (skips `.auto`) |
 | Meeting panel | `⌃⌥⇧M` | tap | toggles the floating Meeting Record/Stop panel |
 | Paste last transcription | *(disabled)* | tap | re-pastes the most recent dictation. Pick a combo to enable. |
 
@@ -176,15 +176,16 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 - **Smart cleanup** — opt-in LLM polish via gpt-4o-mini removes obvious false starts, fillers, and self-corrections in prose. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — audio is temporary and deleted after dictation or meeting processing reaches a terminal state. A startup sweep removes crash leftovers.
+- **Microphone** — choose **System Default** or pin Vox to a specific input device. A pinned device is selected by its persistent Core Audio UID before every dictation; if it is disconnected, Vox fails safely instead of switching to another microphone.
 - **Dictation history** — encrypted raw STT and final delivered text, with a raw-vs-final disclosure and retention choices (forever / 1y / 90d / 30d).
 - **Writing-voice skill export** — Personalization → Custom Instructions exports an import-ready `SKILL.md` for Codex, Claude, or another instruction-aware app. It uses attributable final text and raw-vs-final cleanup patterns without embedding transcript bodies or treating remote meeting participants as the user's voice. Users who already have a writing-voice skill can simply link it instead. About 100 prose dictations gives a rough first pass; roughly 500 dictations or 10,000–15,000 words across varied contexts is the recommended target for a relatively accurate guide.
 - **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard contents are restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Remote insertion paths skip restoring the prior clipboard because remote clipboard synchronization can lag behind the local paste event.
-- **Sounds** — choose the macOS alert used for start recording, stop recording, and errors, or None to silence a cue. Preview each sound from Settings. The start cue plays before the microphone opens so it stays audible.
+- **Sounds** — choose the macOS alert used for start recording, stop recording, and errors, or None to silence a cue. Preview each sound from Settings. Vox prepares the start cue silently after launch, then plays it before the microphone opens so the first recording stays responsive and the cue remains audible.
 - **Hotkeys** — rebind any of the four hotkeys (see table above).
 
 ## Dictation troubleshooting
 
-- **Wrong transcription with delayed start/stop sounds** — check System Settings → Sound. If macOS has selected a Bluetooth speaker/headset as the default input, Vox will capture that low-bandwidth mic instead of your studio/USB mic. In `~/Library/Logs/vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` is a strong sign of this route. Re-select the intended mic, ideally a USB device at 48 kHz, and move output/system output off Bluetooth if the audible cues lag.
+- **Wrong transcription with delayed start/stop sounds** — pin the intended USB/studio mic under Settings → Microphone. Vox then binds that device before every dictation and will not fall back to a Bluetooth input. In `~/Library/Logs/vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` indicates a Bluetooth-route transition; Vox retries once if the hardware format changes during startup. Bluetooth output can still delay the audible cue while the speaker wakes.
 - **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for `dictation timing`, `transcription request model=...`, `transcription api key read elapsed=...`, and `transcription http attempt` lines. A slow first dictation after relaunch can be Keychain warming; longer waits after that are usually the OpenAI transcription request, network path, or Smart Cleanup. The `timeout=...` value scales up for longer WAVs. `resource_timeout=...` is the remaining hard deadline shared by the request and any retry, so retries cannot multiply a stalled request into a much longer wait.
 - **Raw-vs-final troubleshooting** — expand **Raw vs final** on a recent dictation. Vox retains both forms in encrypted history while deleting the WAV after processing. Logs continue to contain counts and timing only, never transcript text.
 

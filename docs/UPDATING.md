@@ -32,11 +32,14 @@ both keyed on bundle ID, not signature.
 
 ## Why an update can require permissions again
 
-Vox is not yet signed and notarized with an Apple Developer ID. Development and
-release builds use the local self-signed `vox-dev` identity when it is available
-and fall back to ad-hoc signing when it is not. macOS can invalidate TCC grants
-when the installed bundle's signing requirement changes, when an ad-hoc build's
-code hash changes, or after an OS/security update.
+Vox is not yet signed and notarized with an Apple Developer ID. Builds prefer
+an installed Developer ID Application or Apple Development identity so macOS
+Keychain records a stable team partition. Without an Apple team identity, the
+build falls back to the local self-signed `vox-dev` identity, then ad-hoc
+signing. Modern macOS records `vox-dev` as a per-build code-hash partition, so
+even **Always Allow** can prompt again after every changed build. macOS can also
+invalidate TCC grants when the installed bundle's signing requirement changes,
+when an ad-hoc build's code hash changes, or after an OS/security update.
 
 Result: permissions may survive an update, but callers must be prepared to
 re-grant them. Vox can still launch while hotkeys, audio, paste, or meeting
@@ -49,8 +52,9 @@ codesign -d -r- /Applications/Vox.app 2>&1
 ```
 
 `TeamIdentifier=not set` alone does not distinguish an ad-hoc signature from
-Vox's self-signed development certificate. A future Developer ID-notarized
-release is the durable fix for update trust and permission churn.
+Vox's self-signed development certificate. An Apple Development identity
+provides stable local team trust; a future Developer ID-notarized release is
+still the durable distribution fix for Gatekeeper and permission churn.
 
 ## Manual fallback (if Sparkle fails)
 

@@ -14,6 +14,22 @@ public enum DictationMutex {
 
 enum MenuIconState {
     case idle, recording, transcribing, error
+
+    var acceptsRecordingAttempt: Bool {
+        switch self {
+        case .idle, .transcribing, .error: return true
+        case .recording: return false
+        }
+    }
+
+    func resolvedAfterPipelineCompletion(
+        remainingPipelines: Int,
+        hadError: Bool
+    ) -> MenuIconState {
+        guard self != .recording else { return .recording }
+        if remainingPipelines > 0 { return .transcribing }
+        return hadError ? .error : .idle
+    }
 }
 
 enum MenuBarCommand: CaseIterable {
@@ -23,6 +39,7 @@ enum MenuBarCommand: CaseIterable {
     case settings
     case checkForUpdates
     case help
+    case quit
 
     var title: String {
         switch self {
@@ -32,6 +49,7 @@ enum MenuBarCommand: CaseIterable {
         case .settings:               return "Settings"
         case .checkForUpdates:        return "Check for Updates…"
         case .help:                   return "Help"
+        case .quit:                   return "Quit Vox"
         }
     }
 
@@ -43,6 +61,7 @@ enum MenuBarCommand: CaseIterable {
         case .settings:               return "gearshape"
         case .checkForUpdates:        return "arrow.triangle.2.circlepath"
         case .help:                   return "questionmark.circle"
+        case .quit:                   return "power"
         }
     }
 }
@@ -92,6 +111,7 @@ final class MenuBarController: NSObject {
 
     private var currentMode: TranscriptionMode = .prose
     private var currentVerbatim: Bool = false
+    private var activeDictationPipelines = 0
     private var pulseTimer: Timer?
     private var state: MenuIconState = .idle {
         didSet { refreshIcon() }
@@ -237,6 +257,11 @@ final class MenuBarController: NSObject {
             )
         }
 
+        let startSound = AppSettings.startSound
+        DispatchQueue.global(qos: .utility).async {
+            SoundPlayer.shared.prepare(startSound)
+        }
+
         let trusted = AXIsProcessTrustedWithOptions(
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         )
@@ -271,6 +296,7 @@ final class MenuBarController: NSObject {
         case .settings:               return #selector(openSettings)
         case .checkForUpdates:        return #selector(checkForUpdatesAction)
         case .help:                   return #selector(openHelp)
+        case .quit:                   return #selector(quitApplication)
         }
     }
 
@@ -332,6 +358,10 @@ final class MenuBarController: NSObject {
 
     @objc private func checkForUpdatesAction() {
         updaterController.checkForUpdates(nil)
+    }
+
+    @objc private func quitApplication() {
+        NSApp.terminate(nil)
     }
 
     private func appIconForMenuBar(
@@ -586,7 +616,7 @@ final class MenuBarController: NSObject {
     // MARK: - Record / Transcribe
 
     private func beginRecording(verbatim: Bool = false) {
-        guard state == .idle else { return }
+        guard state.acceptsRecordingAttempt else { return }
         if AppSettings.ignoreRecordHotkey {
             dlog("dictation Fn ignored — record hotkey disabled on this Mac")
             return
@@ -623,6 +653,7 @@ final class MenuBarController: NSObject {
         let recordingURL = recorder.stop()
         sound.play(.stop)
         let mode = currentMode
+        let verbatimMode = currentVerbatim
 
         guard let url = recordingURL else {
             dlog("recorder.stop returned no file")
@@ -652,6 +683,7 @@ final class MenuBarController: NSObject {
             return
         }
 
+        activeDictationPipelines += 1
         state = .transcribing
 
         Task { [weak self] in
@@ -673,7 +705,7 @@ final class MenuBarController: NSObject {
                     raw, mode: mode, durationSec: durationSec, rms: rms
                 ) {
                     dlog("hallucination guard: suppressed filler/prompt-echo \(rawMetrics) duration=\(durationSec)s rms=\(rms)")
-                    await MainActor.run { self.state = .idle }
+                    await MainActor.run { self.finishDictationPipeline(hadError: false) }
                     return
                 }
 
@@ -687,11 +719,7 @@ final class MenuBarController: NSObject {
                 if raw.count > maxChars {
                     dlog("hallucination guard: \(raw.count) chars for \(durationSec)s audio (max \(maxChars)) — suppressing paste")
                     await MainActor.run {
-                        self.state = .error
-                        self.sound.play(.error)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                            self.state = .idle
-                        }
+                        self.finishDictationPipeline(hadError: true)
                     }
                     return
                 }
@@ -705,7 +733,6 @@ final class MenuBarController: NSObject {
                 // raw transcribed text is pasted as-is. Setting `enabled: false`
                 // also skips trigger phrases ("scratch that", "new paragraph"),
                 // which is intentional — verbatim means literal.
-                let verbatimMode = await MainActor.run { self.currentVerbatim }
                 let cleanupEnabled = AppSettings.smartCleanupEnabled && !verbatimMode
                 let cleaner = CleanupProcessor(
                     mode: mode,
@@ -768,19 +795,29 @@ final class MenuBarController: NSObject {
                             self.injector.sendKey(key)
                         }
                     }
-                    self.state = .idle
+                    self.finishDictationPipeline(hadError: false)
                 }
                 dlog("dictation timing complete total=\(Self.elapsedString(since: pipelineStartedAt))s")
             } catch {
                 dlog("transcription failed: \(error) total=\(Self.elapsedString(since: pipelineStartedAt))s")
                 await MainActor.run {
-                    self.state = .error
-                    self.sound.play(.error)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        self.state = .idle
-                    }
+                    self.finishDictationPipeline(hadError: true)
                 }
             }
+        }
+    }
+
+    private func finishDictationPipeline(hadError: Bool) {
+        activeDictationPipelines = max(0, activeDictationPipelines - 1)
+        state = state.resolvedAfterPipelineCompletion(
+            remainingPipelines: activeDictationPipelines,
+            hadError: hadError
+        )
+        guard hadError, state == .error else { return }
+        sound.play(.error)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self, self.state == .error else { return }
+            self.state = self.activeDictationPipelines > 0 ? .transcribing : .idle
         }
     }
 

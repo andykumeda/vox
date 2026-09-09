@@ -6,6 +6,28 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.45</title>
+            <pubDate>Wed, 09 Sep 2026 21:14:38 +0000</pubDate>
+            <sparkle:version>69</sparkle:version>
+            <sparkle:shortVersionString>0.7.45</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Microphone:</strong> Settings can pin Vox to a specific input device, preventing an unintended switch from a USB microphone to Bluetooth.</li>
+                    <li><strong>Responsiveness:</strong> The first recording cue is prepared at launch, and a new recording can begin immediately while an earlier dictation is still transcribing.</li>
+                    <li><strong>Reliability:</strong> Input-route changes are recovered once when using System Default; an unavailable pinned microphone fails safely instead of silently choosing another device.</li>
+                    <li><strong>Settings:</strong> Stale hotkey and permission descriptions were corrected, and cached controls refresh whenever Settings reopens.</li>
+                    <li><strong>Menu:</strong> The Vox menu now includes Quit Vox.</li>
+                    <li><strong>Upgrade note:</strong> Vox now uses a stable Apple team signature. macOS may require one final Accessibility/Input Monitoring re-approval and Keychain authorization during this upgrade; later builds retain those approvals.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.45/Vox.dmg"
+                sparkle:edSignature="Af6hRyAV7Tn2bhuophNhsV8TFt8ocFLrZebF8ALSOqgHasA8aOaRzkoySqwurzJtaCJEq/D31ixRD6bfsnNfCw=="
+                length="2670909"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.38</title>
             <pubDate>Tue, 01 Sep 2026 22:25:00 +0000</pubDate>
             <sparkle:version>58</sparkle:version>

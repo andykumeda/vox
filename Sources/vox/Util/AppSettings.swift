@@ -88,6 +88,7 @@ public enum ModeOverride: String, CaseIterable, Sendable {
 }
 
 enum AppSettings {
+    private static let audioInputDeviceUIDKey = "audioInputDeviceUID"
     private static let keepKey = "keepTranscriptionOnClipboard"
     private static let remoteControlModeKey = "remoteControlModeEnabled"
     private static let ignoreRecordHotkeyKey = "ignoreRecordHotkey"
@@ -100,6 +101,24 @@ enum AppSettings {
     private static let autoShowMeetingPanelKey = "autoShowMeetingPanel"
     private static let meetingSummaryEnabledKey = "meetingSummaryEnabled"
     private static let meetingProviderKey = "meetingProvider"
+
+    /// A persistent Core Audio device UID. Nil follows the macOS default input;
+    /// a non-nil value is explicitly bound before every recording.
+    static var audioInputDeviceUID: String? {
+        get {
+            guard let uid = UserDefaults.standard.string(forKey: audioInputDeviceUIDKey),
+                  !uid.isEmpty
+            else { return nil }
+            return uid
+        }
+        set {
+            if let newValue, !newValue.isEmpty {
+                UserDefaults.standard.set(newValue, forKey: audioInputDeviceUIDKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: audioInputDeviceUIDKey)
+            }
+        }
+    }
 
     // Defaults to true. Restoring the prior clipboard ~1.5s after ⌘V races
     // web text inputs (Comet/Perplexity sidebar, Slack web, etc.) that read

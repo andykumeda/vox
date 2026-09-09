@@ -3,13 +3,14 @@
 ## Recording
 Hold **Fn** (default) and speak. Release to transcribe.
 Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-tap-start, one-tap-stop.
-A start sound plays before the microphone opens; a stop sound plays after you release. Change or silence either cue in Settings → Sounds.
+A start sound plays before the microphone opens; a stop sound plays after you release. Vox prepares the start cue silently after launch so the first recording does not wait for a sleeping audio output. Change or silence either cue in Settings → Sounds.
+Choose Settings → Microphone to pin dictation to a specific input device. A pinned USB mic will not silently fall back to Bluetooth.
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes
 - **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps. Uses digits for times, money, measurements, and option labels (`$5`, `3 hours`, `1 TB`, `option 1`); keeps small ordinary counts as words (`three apples`). Letter-spelled number output such as `F-I-F-T-Y feet` is normalized to `50 feet`. Empty short toggles are rejected before transcription.
 - **Command** — verbatim shell commands, no capitalization, no trailing punctuation. Auto-selected when the focused app is a terminal (Terminal, iTerm, Wave, etc.).
-Press your **Mode toggle** hotkey (default `⌃⌥M`) to force prose regardless of focus. The menu-bar icon shows a lock when prose is forced.
+Press your **Mode toggle** hotkey (default `⌃⌥M`) to switch directly between Always prose and Always command. Choose Auto again in Settings → Mode when you want app-based detection.
 
 ## Verbatim mode
 Smart Cleanup (Settings → Mode) polishes prose dictations conservatively — removes obvious false starts, fillers, self-corrections. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
@@ -143,12 +144,12 @@ Settings → Hotkeys lets you rebind:
   and any retry. Smart Cleanup can add a smaller second wait. Hold Option while
   pressing Fn, or start with "verbatim", to skip Smart Cleanup for one recording.
   Vox logs only transcript character/word counts, not the dictated text itself.
-- **Wrong transcription plus delayed start/stop sounds** — check System
-  Settings → Sound. If macOS selected a Bluetooth speaker/headset as the default
-  input, Vox captures that low-bandwidth mic instead of your intended USB/studio
-  mic. In `vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` is a
-  strong sign of this route. Re-select the intended mic, ideally 48 kHz USB, and
-  move output/system output off Bluetooth if the audible cues lag.
+- **Wrong transcription plus delayed start/stop sounds** — pin the intended
+  USB/studio mic under Settings → Microphone. Vox will bind that input before
+  every dictation and fail safely if it is unavailable instead of switching to
+  Bluetooth. An `inputFormat sampleRate=8000.0` log indicates a Bluetooth-route
+  transition; Vox retries once when the hardware format changes during startup.
+  Bluetooth output can still delay the cue while the speaker wakes.
 - **Fn key doesn't fire** — System Settings → Keyboard → "Press 🌐 key to"
   must be **Do Nothing**.
 - **Wrong transcription on short phrases** — add a Dictionary entry to fix
@@ -157,7 +158,7 @@ Settings → Hotkeys lets you rebind:
   (or a prior meeting session) left CoreAudio holding the input device.
   Quitting Vox + reselecting the input device in System Settings → Sound
   usually clears it. `sudo killall coreaudiod` is the heavy hammer.
-- **Dictation captures silence after a meeting** — Vox rebuilds its audio
-  engine on each recording to avoid this, but if you ever see `peak=0` lines
+- **Dictation captures silence after a meeting** — Vox resets its audio
+  capture path on each recording, but if you ever see `peak=0` lines
   in `vox.log` immediately after a meeting, the mic device is stuck. Same
   recovery as above.

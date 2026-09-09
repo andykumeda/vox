@@ -49,51 +49,49 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
 fi
 
-# Prefer the persistent "vox-dev" self-signed identity (created by
-# scripts/create-dev-cert.sh) so TCC permissions stick across rebuilds.
-# Fall back to ad-hoc if the identity isn't installed.
+# Prefer an Apple-issued team identity. Modern macOS Keychain ACLs record its
+# stable `teamid:` partition, while a self-signed identity is recorded as a
+# changing `cdhash:` partition and makes "Always Allow" prompt after rebuilds.
+# Developer ID is preferred when installed; Apple Development is suitable for
+# these personal builds and still supplies the stable team partition.
 #
-# Probe the login keychain directly (not `find-identity -v`) for two reasons:
-#   1. On MDM-managed Macs the self-signed cert can't reach the System
-#      keychain, so it lists as CSSMERR_TP_NOT_TRUSTED and `-v` filters it
-#      out — but codesign can still sign with the private key just fine.
-#   2. Prior runs sometimes left duplicate "vox-dev" certs in System.keychain
-#      making `--sign vox-dev` ambiguous. Sign by SHA-1 hash to disambiguate.
+# Keep the historical `vox-dev` identity as a fallback for Macs without an
+# Apple-issued identity. Its explicit designated requirement still helps TCC,
+# but Keychain authorization may repeat after changed builds on modern macOS.
 SIGN_IDENTITY="-"
 LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
-# Probe in two phases:
-#   (a) default search list with -v — catches the common case where cert lives
-#       in System.keychain (System-trusted) and key in login.keychain.
-#   (b) login keychain alone, no -v — catches MDM-managed Macs where the
-#       cert can't reach System.keychain and lists as CSSMERR_TP_NOT_TRUSTED
-#       (filtered by -v) but the private key + cert are in login.keychain.
-VOX_MATCHES="$(security find-identity -v -p codesigning 2>/dev/null \
-    | awk '/"vox-dev"/ {print $2}')"
-if [ -z "$VOX_MATCHES" ]; then
-    VOX_MATCHES="$(security find-identity "$LOGIN_KC" 2>/dev/null \
-        | awk '/"vox-dev"/ {print $2}')"
-fi
-VOX_MATCH_COUNT="$(printf '%s\n' "$VOX_MATCHES" | grep -c . || true)"
-if [ "$VOX_MATCH_COUNT" -gt 1 ]; then
-    echo "⚠ found $VOX_MATCH_COUNT 'vox-dev' identities; using first."
-    echo "  consider re-running ./scripts/create-dev-cert.sh to dedupe."
-fi
-VOX_SHA="$(printf '%s\n' "$VOX_MATCHES" | head -n 1)"
 BUNDLE_ID="com.andykumeda.vox"
 REQ_ARG=()
-if [ -n "$VOX_SHA" ]; then
-    SIGN_IDENTITY="$VOX_SHA"
-    echo "→ codesign (vox-dev $VOX_SHA — permissions will persist)"
-    # Pin the designated requirement to the cert SHA so the bundle's identity
-    # is stable across rebuilds. Without this the DR defaults to something
-    # that embeds the CDHash, which changes every build and invalidates
-    # Keychain ACLs ("Always Allow" re-prompting after every rebuild).
-    # The `=` prefix marks it as an inline requirement string; `designated =>`
-    # names which slot it binds to.
-    REQ_ARG=(-r "=designated => identifier \"$BUNDLE_ID\" and certificate leaf = H\"$VOX_SHA\"")
+VALID_IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+TEAM_SHA="$(printf '%s\n' "$VALID_IDENTITIES" \
+    | awk '/"Developer ID Application:/ {print $2; exit}')"
+TEAM_LABEL="Developer ID Application"
+if [ -z "$TEAM_SHA" ]; then
+    TEAM_SHA="$(printf '%s\n' "$VALID_IDENTITIES" \
+        | awk '/"Apple Development:/ {print $2; exit}')"
+    TEAM_LABEL="Apple Development"
+fi
+
+if [ -n "$TEAM_SHA" ]; then
+    SIGN_IDENTITY="$TEAM_SHA"
+    echo "→ codesign ($TEAM_LABEL $TEAM_SHA — stable Keychain team identity)"
 else
-    echo "→ codesign (ad-hoc — permissions will reset on each rebuild)"
-    echo "   run ./scripts/create-dev-cert.sh once to make permissions persistent"
+    # Probe the login keychain without `-v` as an MDM fallback: an untrusted
+    # self-signed private key can still be used by codesign.
+    VOX_SHA="$(security find-identity "$LOGIN_KC" 2>/dev/null \
+        | awk '/"vox-dev"/ {print $2; exit}')"
+    if [ -n "$VOX_SHA" ]; then
+        SIGN_IDENTITY="$VOX_SHA"
+        echo "→ codesign (vox-dev $VOX_SHA — Keychain may re-prompt after rebuilds)"
+        # Pin the designated requirement to the cert SHA so the bundle's identity
+        # is stable for TCC even though modern Keychain partitions remain cdhashes.
+        # The `=` prefix marks it as an inline requirement string; `designated =>`
+        # names which slot it binds to.
+        REQ_ARG=(-r "=designated => identifier \"$BUNDLE_ID\" and certificate leaf = H\"$VOX_SHA\"")
+    else
+        echo "→ codesign (ad-hoc — permissions will reset on each rebuild)"
+        echo "   install an Apple Development/Developer ID identity or run ./scripts/create-dev-cert.sh"
+    fi
 fi
 
 # Sign Sparkle's nested helpers inside-out, then the framework, then the app.

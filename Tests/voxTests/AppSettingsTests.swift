@@ -2,6 +2,28 @@ import XCTest
 @testable import vox
 
 final class AppSettingsTests: XCTestCase {
+    func testPinnedAudioInputDeviceUIDPersistsAndCanReturnToSystemDefault() {
+        let defaults = UserDefaults.standard
+        let key = "audioInputDeviceUID"
+        let previous = defaults.object(forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        defaults.removeObject(forKey: key)
+        XCTAssertNil(AppSettings.audioInputDeviceUID)
+
+        AppSettings.audioInputDeviceUID = "AppleUSBAudioEngine:test"
+        XCTAssertEqual(AppSettings.audioInputDeviceUID, "AppleUSBAudioEngine:test")
+
+        AppSettings.audioInputDeviceUID = nil
+        XCTAssertNil(AppSettings.audioInputDeviceUID)
+    }
+
     func testTranscriptionModelDefaultsToFullQualityModel() {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "transcriptionModel")

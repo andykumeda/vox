@@ -1,4 +1,6 @@
 import AVFoundation
+import AudioToolbox
+import CoreAudio
 import Foundation
 
 public enum AudioRecorderError: Error {
@@ -7,6 +9,79 @@ public enum AudioRecorderError: Error {
     case noInputNode
     case formatConversionFailed
     case fileOpenFailed(Error)
+    case inputDeviceUnavailable(String)
+    case inputDeviceSelectionFailed(String, Error)
+    case inputDeviceFormatUnavailable(String)
+}
+
+protocol AudioEngineControlling: AnyObject {
+    var isRunning: Bool { get }
+
+    func inputFormat() -> AVAudioFormat
+    func selectInputDevice(_ deviceID: AudioDeviceID) throws
+    func installInputTap(
+        bufferSize: AVAudioFrameCount,
+        format: AVAudioFormat?,
+        handler: @escaping AVAudioNodeTapBlock
+    )
+    func removeInputTap()
+    func prepare()
+    func start() throws
+    func stop()
+    func reset()
+}
+
+private final class SystemAudioEngine: AudioEngineControlling {
+    private let engine = AVAudioEngine()
+
+    var isRunning: Bool { engine.isRunning }
+
+    func inputFormat() -> AVAudioFormat {
+        engine.inputNode.outputFormat(forBus: 0)
+    }
+
+    func selectInputDevice(_ deviceID: AudioDeviceID) throws {
+        guard let audioUnit = engine.inputNode.audioUnit else {
+            throw NSError(
+                domain: "com.andykumeda.vox.audio-input",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "AVAudioEngine input unit is unavailable"]
+            )
+        }
+        var selectedID = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &selectedID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        guard status == noErr else {
+            throw NSError(
+                domain: NSOSStatusErrorDomain,
+                code: Int(status),
+                userInfo: [NSLocalizedDescriptionKey: "Core Audio rejected input device \(deviceID)"]
+            )
+        }
+    }
+
+    func installInputTap(
+        bufferSize: AVAudioFrameCount,
+        format: AVAudioFormat?,
+        handler: @escaping AVAudioNodeTapBlock
+    ) {
+        engine.inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: format, block: handler)
+    }
+
+    func removeInputTap() {
+        engine.inputNode.removeTap(onBus: 0)
+    }
+
+    func prepare() { engine.prepare() }
+    func start() throws { try engine.start() }
+    func stop() { engine.stop() }
+    func reset() { engine.reset() }
 }
 
 /// Records microphone input as 16kHz mono 16-bit PCM and streams the WAV to disk
@@ -24,7 +99,10 @@ public final class AudioRecorder {
     /// case observed during testing turned out to be a hardware-level mic
     /// stall, not framework state, so this rolls back to the original
     /// single-engine pattern with explicit reset on each start.
-    private let engine = AVAudioEngine()
+    private let engine: AudioEngineControlling
+    private let selectedInputDeviceUID: () -> String?
+    private let resolveInputDevice: (String) -> AudioDeviceID?
+    private let hardwareInputFormat: (AudioDeviceID) -> AVAudioFormat?
     private var converter: AVAudioConverter?
     private let targetSampleRate: Double = 16_000
     private let lock = NSLock()
@@ -35,8 +113,28 @@ public final class AudioRecorder {
     private var pcmBytesWritten: UInt32 = 0
     private let mode: String
 
-    public init(mode: String = "prose") {
+    public convenience init(mode: String = "prose") {
+        self.init(
+            mode: mode,
+            engine: SystemAudioEngine(),
+            selectedInputDeviceUID: { AppSettings.audioInputDeviceUID },
+            resolveInputDevice: { AudioInputDevices.deviceID(forUID: $0) },
+            hardwareInputFormat: { AudioInputDevices.hardwareInputFormat(for: $0) }
+        )
+    }
+
+    init(
+        mode: String,
+        engine: AudioEngineControlling,
+        selectedInputDeviceUID: @escaping () -> String? = { nil },
+        resolveInputDevice: @escaping (String) -> AudioDeviceID? = { _ in nil },
+        hardwareInputFormat: @escaping (AudioDeviceID) -> AVAudioFormat? = { _ in nil }
+    ) {
         self.mode = mode
+        self.engine = engine
+        self.selectedInputDeviceUID = selectedInputDeviceUID
+        self.resolveInputDevice = resolveInputDevice
+        self.hardwareInputFormat = hardwareInputFormat
     }
 
     public func requestPermission() async -> Bool {
@@ -76,16 +174,26 @@ public final class AudioRecorder {
         // engine. Stop / reset clears in-flight render state without tearing
         // down the IO unit (which is what triggered the recursive_mutex
         // deadlock in 0.6.0).
-        if engine.isRunning {
-            engine.stop()
-        }
-        engine.inputNode.removeTap(onBus: 0)
+        if engine.isRunning { engine.stop() }
+        engine.removeInputTap()
         engine.reset()
 
-        let input = engine.inputNode
-        let inputFormat = input.outputFormat(forBus: 0)
-        dlog("AudioRecorder.start inputFormat sampleRate=\(inputFormat.sampleRate) channels=\(inputFormat.channelCount)")
-        guard inputFormat.sampleRate > 0 else { throw AudioRecorderError.noInputNode }
+        var pinnedFormat: AVAudioFormat?
+        if let uid = selectedInputDeviceUID() {
+            guard let deviceID = resolveInputDevice(uid) else {
+                throw AudioRecorderError.inputDeviceUnavailable(uid)
+            }
+            do {
+                try engine.selectInputDevice(deviceID)
+                dlog("AudioRecorder.start pinned input uid=\(uid) deviceID=\(deviceID)")
+            } catch {
+                throw AudioRecorderError.inputDeviceSelectionFailed(uid, error)
+            }
+            guard let format = hardwareInputFormat(deviceID) else {
+                throw AudioRecorderError.inputDeviceFormatUnavailable(uid)
+            }
+            pinnedFormat = format
+        }
 
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -93,11 +201,6 @@ public final class AudioRecorder {
             channels: 1,
             interleaved: true
         ) else { throw AudioRecorderError.formatConversionFailed }
-
-        guard let conv = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            throw AudioRecorderError.formatConversionFailed
-        }
-        self.converter = conv
 
         // Create the file with a 44-byte placeholder header (sizes = 0).
         let placeholder = wavHeader(
@@ -123,25 +226,53 @@ public final class AudioRecorder {
         self.currentURL = url
         self.pcmBytesWritten = 0
 
-        // Do not pass the format queried above. Core Audio can renegotiate the
-        // input device between outputFormat() and installTap(), and AVAudio
-        // raises an Objective-C exception (which Swift cannot catch) when the
-        // supplied format is no longer the node's live format. nil tells the
-        // input node to use its current native format.
-        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            self?.handle(buffer: buffer, targetFormat: targetFormat)
-        }
-
+        // A pinned device's Core Audio hardware format is authoritative. The
+        // AVAudioEngine input node may still expose the prior Bluetooth/output
+        // route's cached format immediately after kAudioOutputUnitProperty_CurrentDevice.
+        let initialInputFormat = pinnedFormat ?? engine.inputFormat()
         do {
-            engine.prepare()
-            try engine.start()
-            isRecording = true
-        } catch {
-            input.removeTap(onBus: 0)
-            try? handle.close()
-            self.fileHandle = nil
-            throw AudioRecorderError.engineStartFailed(error)
+            try configureAndStart(
+                inputFormat: initialInputFormat,
+                tapFormat: pinnedFormat,
+                targetFormat: targetFormat
+            )
+        } catch let initialError {
+            engine.removeInputTap()
+            engine.stop()
+            engine.reset()
+
+            // A start cue can wake a Bluetooth output while the selected USB
+            // microphone remains the input. During that route transition,
+            // AVAudioEngine can first report the Bluetooth input's 8 kHz format
+            // and then fail because the hardware input settles at 48 kHz. Once
+            // the failed start returns, query the now-settled format and rebuild
+            // the converter/tap exactly once.
+            let settledInputFormat = engine.inputFormat()
+            guard Self.inputFormatChanged(from: initialInputFormat, to: settledInputFormat) else {
+                cleanUpFailedStart(handle: handle, url: url)
+                throw AudioRecorderError.engineStartFailed(initialError)
+            }
+
+            dlog(
+                "AudioRecorder.start recovering after input route change "
+                    + "sampleRate=\(initialInputFormat.sampleRate)->\(settledInputFormat.sampleRate) "
+                    + "channels=\(initialInputFormat.channelCount)->\(settledInputFormat.channelCount)"
+            )
+            do {
+                try configureAndStart(
+                    inputFormat: settledInputFormat,
+                    tapFormat: nil,
+                    targetFormat: targetFormat
+                )
+            } catch {
+                engine.removeInputTap()
+                engine.stop()
+                engine.reset()
+                cleanUpFailedStart(handle: handle, url: url)
+                throw AudioRecorderError.engineStartFailed(error)
+            }
         }
+        isRecording = true
     }
 
     /// Stops capture, finalises the WAV header on disk, and returns the URL.
@@ -159,7 +290,7 @@ public final class AudioRecorder {
         // removeTap waits for any in-flight tap callback to finish. The tap
         // callback also takes `lock`, so holding it here can deadlock the main
         // thread while the audio callback waits for the same lock.
-        engine.inputNode.removeTap(onBus: 0)
+        engine.removeInputTap()
         engine.stop()
 
         lock.lock()
@@ -171,6 +302,49 @@ public final class AudioRecorder {
         self.currentURL = nil
         self.converter = nil
         return url
+    }
+
+    private func configureAndStart(
+        inputFormat: AVAudioFormat,
+        tapFormat: AVAudioFormat?,
+        targetFormat: AVAudioFormat
+    ) throws {
+        dlog(
+            "AudioRecorder.start inputFormat sampleRate=\(inputFormat.sampleRate) "
+                + "channels=\(inputFormat.channelCount)"
+        )
+        guard inputFormat.sampleRate > 0 else { throw AudioRecorderError.noInputNode }
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            throw AudioRecorderError.formatConversionFailed
+        }
+        self.converter = converter
+
+        // Use the input node's native format. Supplying the earlier snapshot
+        // here can raise an Objective-C exception if the route changes between
+        // querying the node and installing the tap.
+        engine.installInputTap(bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
+            self?.handle(buffer: buffer, targetFormat: targetFormat)
+        }
+        engine.prepare()
+        try engine.start()
+    }
+
+    private static func inputFormatChanged(
+        from initial: AVAudioFormat,
+        to settled: AVAudioFormat
+    ) -> Bool {
+        initial.sampleRate != settled.sampleRate
+            || initial.channelCount != settled.channelCount
+            || initial.commonFormat != settled.commonFormat
+            || initial.isInterleaved != settled.isInterleaved
+    }
+
+    private func cleanUpFailedStart(handle: FileHandle, url: URL) {
+        try? handle.close()
+        fileHandle = nil
+        currentURL = nil
+        converter = nil
+        try? FileManager.default.removeItem(at: url)
     }
 
     private func handle(buffer: AVAudioPCMBuffer, targetFormat: AVAudioFormat) {

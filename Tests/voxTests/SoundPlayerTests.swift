@@ -3,6 +3,26 @@ import XCTest
 @testable import vox
 
 final class SoundPlayerTests: XCTestCase {
+    private final class PreparedSound: SoundControlling {
+        private(set) var prepareCount = 0
+        private(set) var playCount = 0
+        private(set) var stopCount = 0
+
+        func prepareToPlay() -> Bool {
+            prepareCount += 1
+            return true
+        }
+
+        func play() -> Bool {
+            playCount += 1
+            return true
+        }
+
+        func stop() {
+            stopCount += 1
+        }
+    }
+
     func testCatalogIncludesNoneAndDefaultCues() {
         XCTAssertEqual(SystemAlertSound.allCases.first, SystemAlertSound.none)
         XCTAssertEqual(SystemAlertSound.startDefault, .tink)
@@ -45,5 +65,24 @@ final class SoundPlayerTests: XCTestCase {
             openCapture: { order.append("mic") }
         )
         XCTAssertEqual(order, ["cue", "mic"])
+    }
+
+    func testPreparedSoundIsReusedForFirstPlayback() {
+        let sound = PreparedSound()
+        var loadCount = 0
+        let player = SoundPlayer(
+            loader: { _ in
+                loadCount += 1
+                return sound
+            },
+            fallbackBeep: {}
+        )
+
+        player.prepare(.tink)
+        player.play(.tink)
+
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(sound.prepareCount, 1)
+        XCTAssertEqual(sound.playCount, 1)
     }
 }

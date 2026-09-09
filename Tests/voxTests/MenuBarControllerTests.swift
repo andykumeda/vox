@@ -2,6 +2,37 @@ import XCTest
 @testable import vox
 
 final class MenuBarControllerTests: XCTestCase {
+    func testIdleErrorAndTranscribingStatesAcceptARecordingAttempt() {
+        XCTAssertTrue(MenuIconState.idle.acceptsRecordingAttempt)
+        XCTAssertTrue(MenuIconState.error.acceptsRecordingAttempt)
+        XCTAssertTrue(MenuIconState.transcribing.acceptsRecordingAttempt)
+        XCTAssertFalse(MenuIconState.recording.acceptsRecordingAttempt)
+    }
+
+    func testCompletingOlderPipelineDoesNotOverrideNewRecordingState() {
+        XCTAssertEqual(
+            MenuIconState.recording.resolvedAfterPipelineCompletion(
+                remainingPipelines: 0,
+                hadError: false
+            ),
+            .recording
+        )
+        XCTAssertEqual(
+            MenuIconState.transcribing.resolvedAfterPipelineCompletion(
+                remainingPipelines: 1,
+                hadError: false
+            ),
+            .transcribing
+        )
+        XCTAssertEqual(
+            MenuIconState.transcribing.resolvedAfterPipelineCompletion(
+                remainingPipelines: 0,
+                hadError: false
+            ),
+            .idle
+        )
+    }
+
     func testMenuContainsOnlyRequestedCommandsInOrder() {
         XCTAssertEqual(
             MenuBarCommand.allCases.map(\.title),
@@ -12,6 +43,7 @@ final class MenuBarControllerTests: XCTestCase {
                 "Settings",
                 "Check for Updates…",
                 "Help",
+                "Quit Vox",
             ]
         )
     }
