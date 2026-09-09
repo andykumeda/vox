@@ -316,4 +316,22 @@ final class DictionaryMatcherTests: XCTestCase {
         )
         XCTAssertEqual(result, "Hello, how are you?")
     }
+
+    func testStandaloneSymbolReplacementDropsTranscriptionTerminator() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("tilde", "~", mode: .both)],
+            to: "Tilde.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "~")
+    }
+
+    func testInlineSymbolReplacementKeepsSentenceTerminator() {
+        let result = DictionaryMatcher.apply(
+            entries: [entry("tilde", "~", mode: .both)],
+            to: "Use tilde.",
+            scope: .prose
+        )
+        XCTAssertEqual(result, "Use ~.")
+    }
 }

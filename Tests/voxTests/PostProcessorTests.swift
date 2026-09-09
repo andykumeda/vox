@@ -472,6 +472,15 @@ final class PostProcessorTests: XCTestCase {
         )
     }
 
+    func testProseDictionaryPreservesExactStandaloneSymbolReplacement() {
+        let entries = [DictionaryEntry(
+            id: "user-tilde", spoken: "tilde", replacement: "~", mode: .both,
+            isBuiltIn: false
+        )]
+        let p = PostProcessor(mode: .prose, dictionaryProvider: { entries })
+        XCTAssertEqual(p.apply("Tilde."), "~")
+    }
+
     func testDisabledEntryIsNoOpInPipeline() {
         let entries = [DictionaryEntry(
             id: "user-foo", spoken: "foo", replacement: "bar",

@@ -2,6 +2,51 @@ import AppKit
 import Combine
 import SwiftUI
 
+enum MeetingTranscriptFormat {
+    case plain
+    case timestamped
+}
+
+enum MeetingTranscriptFormatter {
+    static func render(_ session: TranscriptSession, format: MeetingTranscriptFormat) -> String {
+        let useSpeakerID = session.segments.contains { $0.speakerID != nil }
+        func label(_ segment: TranscriptSegment) -> String {
+            if useSpeakerID, let id = segment.speakerID { return "Speaker \(id)" }
+            return segment.source == .local ? "You" : "Other"
+        }
+
+        switch format {
+        case .plain:
+            var output = ""
+            var currentLabel: String?
+            for segment in session.segments {
+                let segmentLabel = label(segment)
+                if segmentLabel != currentLabel {
+                    if !output.isEmpty { output += "\n\n" }
+                    output += "\(segmentLabel): \(segment.text)"
+                    currentLabel = segmentLabel
+                } else {
+                    output += " " + segment.text
+                }
+            }
+            return output
+        case .timestamped:
+            return session.segments.map { segment in
+                "[\(formatTime(segment.startTime))] \(label(segment)): \(segment.text)"
+            }.joined(separator: "\n")
+        }
+    }
+
+    private static func formatTime(_ time: Double) -> String {
+        let total = Int(time)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, seconds) }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
 @MainActor
 public final class MeetingTranscriptsWindow {
     public static let shared = MeetingTranscriptsWindow()
@@ -94,49 +139,25 @@ private final class MeetingTranscriptsModel: ObservableObject {
         panel.nameFieldStringValue = "\(session.title).txt"
         panel.allowedContentTypes = [.plainText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let body = format.render(session: session)
+        let body = MeetingTranscriptFormatter.render(session, format: format.transcriptFormat)
         try? body.data(using: .utf8)?.write(to: url, options: .atomic)
+    }
+
+    func copy(_ session: TranscriptSession) {
+        let body = MeetingTranscriptFormatter.render(session, format: .plain)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(body, forType: .string)
     }
 
     enum ExportFormat {
         case plain, timestamped
 
-        func render(session: TranscriptSession) -> String {
-            let useSpeakerID = session.segments.contains { $0.speakerID != nil }
-            func label(_ seg: TranscriptSegment) -> String {
-                if useSpeakerID, let id = seg.speakerID { return "Speaker \(id)" }
-                return seg.source == .local ? "You" : "Other"
-            }
+        var transcriptFormat: MeetingTranscriptFormat {
             switch self {
-            case .plain:
-                // Group consecutive same-speaker segments into one paragraph
-                // labelled with the speaker. New speaker → blank line + new block.
-                var out = ""
-                var currentLabel: String? = nil
-                for seg in session.segments {
-                    let l = label(seg)
-                    if l != currentLabel {
-                        if !out.isEmpty { out += "\n\n" }
-                        out += "\(l): \(seg.text)"
-                        currentLabel = l
-                    } else {
-                        out += " " + seg.text
-                    }
-                }
-                return out
-            case .timestamped:
-                return session.segments.map { seg in
-                    "[\(formatTime(seg.startTime))] \(label(seg)): \(seg.text)"
-                }.joined(separator: "\n")
+            case .plain: return .plain
+            case .timestamped: return .timestamped
             }
-        }
-        private func formatTime(_ t: Double) -> String {
-            let total = Int(t)
-            let h = total / 3600
-            let m = (total % 3600) / 60
-            let s = total % 60
-            if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-            return String(format: "%02d:%02d", m, s)
         }
     }
 }
@@ -168,7 +189,13 @@ struct MeetingTranscriptsView: View {
                 HStack {
                     Text(s.title).font(.headline)
                     Spacer()
-                    Menu("Export") {
+                    Button {
+                        model.copy(s)
+                    } label: {
+                        Label("Copy Transcript", systemImage: "doc.on.doc")
+                    }
+                    .help("Copy the plain-text transcript to the clipboard")
+                    Menu("Export…") {
                         Button("Plain Text") { model.export(s, format: .plain) }
                         Button("Timestamped Text") { model.export(s, format: .timestamped) }
                     }

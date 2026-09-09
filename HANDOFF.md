@@ -1,6 +1,31 @@
 # Vox Handoff
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
+
+## Unreleased 0.7.42 build 62: exact symbol substitutions and meeting transcript copy/export
+
+- Standalone symbol-only dictionary substitutions now remain exact in prose.
+  In particular, Whisper's `Tilde.` output becomes the configured `~` rather
+  than inheriting or regaining a sentence period. Inline uses still preserve
+  normal sentence punctuation, such as `Use tilde.` becoming `Use ~.`.
+- The selected-meeting toolbar now has a prominent **Copy Transcript** action
+  for clipboard-ready plain text. The existing plain and timestamped file
+  exports remain available under the clearer **Export…** menu.
+- Verification: the focused regressions pass, and `swift test` passed 451
+  macOS tests plus 11 VoxCore tests with dictation-regression quality score
+  `1.0` and failure rate `0.0`. A later standalone regression-script run was
+  blocked by unrelated in-progress tests added to the worktree after that clean
+  run (`MenuBarControllerTests` expects a source member not yet present); those
+  files are preserved and excluded from this batch.
+- Live UI smoke on the initial build confirmed the Copy Transcript and Export…
+  controls against a saved meeting: copy produced a non-empty 25,003-byte
+  clipboard value, both export formats appeared, and Plain Text opened the
+  native Save panel (cancelled without writing a file). That first `0.7.41` /
+  build `61` install also picked up unrelated in-progress source edits that
+  arrived in the shared worktree before compilation, so it is being superseded
+  by a clean isolated build from this exact scoped commit.
+- `0.7.42` / build `62` is the intended unreleased local build; public Sparkle remains
+  `0.7.38` / build `58`.
 
 ## Unreleased 0.7.40 build 60: preserve dictated capability requests
 

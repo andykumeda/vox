@@ -218,6 +218,7 @@ Vox transcribes meetings end-to-end by capturing **system audio** (Zoom/Meet/etc
   - **OpenAI Whisper (fallback)** — mic and system streams are chunked, transcribed independently, and tagged `You` (mic) vs `Other` (system). No within-stream speaker separation.
   Provider is selectable in Settings → Meeting. Add a Deepgram API key in Settings → Deepgram API key (Keychain account `deepgram-api-key`).
 - Meeting audio is temporary and deleted after transcription and optional summarization finish. Raw provider segments, final displayed segments, and summaries remain in authenticated encrypted transcript files.
+- Select a saved meeting to use **Copy Transcript** for clipboard-ready plain text, or **Export…** to save plain or timestamped text.
 - The transcript browser exposes a raw-provider comparison when filtering or cleanup changed the delivered meeting transcript. Re-transcription from retained audio is intentionally unavailable.
 
 Permissions: **Screen Recording** (system audio + window-title polling for auto-detect), **Microphone** (local stream).

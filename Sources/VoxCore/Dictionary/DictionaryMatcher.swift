@@ -148,7 +148,18 @@ public enum DictionaryMatcher {
                 // window. Without this, "Andie," (with attached comma) would
                 // be replaced by just "Andy", losing the comma.
                 let leading = Self.leadingPunct(input[i])
-                let trailing = Self.trailingPunct(input[i + k - 1])
+                let replacementContainsAlphanumeric = entry.replacement.unicodeScalars.contains {
+                    CharacterSet.alphanumerics.contains($0)
+                }
+                // For a standalone symbol replacement, punctuation added by
+                // transcription is not part of the requested output. Example:
+                // "Tilde." should become exactly "~", not "~.". Keep the
+                // existing punctuation behavior for words and inline matches.
+                let isStandaloneSymbolReplacement =
+                    i == 0 && k == n && !replacementContainsAlphanumeric
+                let trailing = isStandaloneSymbolReplacement
+                    ? ""
+                    : Self.trailingPunct(input[i + k - 1])
                 let possessive = Self.possessiveSuffix(
                     input[i + k - 1],
                     spoken: spoken[k - 1],

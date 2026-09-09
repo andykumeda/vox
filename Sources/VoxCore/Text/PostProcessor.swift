@@ -39,7 +39,9 @@ public struct PostProcessor {
         case .prose:
             s = applyDictionary(.prose, s)
             s = capitalizeSentenceStarts(s)
-            s = ensureTrailingTerminator(s)
+            if s.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) {
+                s = ensureTrailingTerminator(s)
+            }
             // Send a Space keystroke after paste instead of appending " " to
             // the text. Some apps (notably Wave terminal) strip trailing
             // whitespace from pasted content; a discrete keystroke can't be

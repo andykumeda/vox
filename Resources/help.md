@@ -52,6 +52,8 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   Re-open the panel via hotkey or menu to see the running timer or stop.
 - When you click Stop, Vox transcribes via the configured meeting provider,
   interleaves segments by time, and opens the transcript browser.
+- Select a saved meeting and click **Copy Transcript** to put its plain-text
+  transcript on the clipboard. Use **Export…** to save plain or timestamped text.
 - Meeting audio is temporary and deleted after transcription and optional
   summarization finish. Raw provider segments, final displayed segments, and
   summaries are retained in authenticated encrypted transcript files.
