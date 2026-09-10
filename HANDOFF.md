@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-10
 
-## Unreleased 0.7.49 build 73: require literal prose transcription
+## Released 0.7.49 build 73: require literal prose transcription
 
 - The latest reported recording showed the disputed sentence in raw STT, before
   Smart Cleanup. Prose transcription was still receiving editorial guidance
@@ -17,8 +17,8 @@ Last updated: 2026-09-10
   `When I went to the store just now I saw Bob at the park` remained literal;
   the final text only added the expected comma. A second test with the spoken
   causal clause preserved `so he's in town` without inventing it.
-- The signed Sparkle DMG and appcast publication remain to be completed for
-  this build.
+- The signed Sparkle DMG is published in GitHub release `v0.7.49`, and both raw
+  GitHub and GitHub Pages appcasts expose the new item.
 
 ## MacBook Pro post-0.7.48 recovery: restore macOS trust grants
 
