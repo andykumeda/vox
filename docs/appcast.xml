@@ -6,6 +6,25 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.48</title>
+            <pubDate>Thu, 10 Sep 2026 03:52:00 +0000</pubDate>
+            <sparkle:version>72</sparkle:version>
+            <sparkle:shortVersionString>0.7.48</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Writing-voice export:</strong> Generated guides now learn style from raw dictation transcripts before cleanup, so the cleanup provider's wording does not become a user's inferred voice.</li>
+                    <li><strong>Dictation fidelity:</strong> Smart Cleanup rejects responses that introduce or repeat lexical content, preventing dictated questions and requests from becoming answers or explanations.</li>
+                    <li><strong>Currency:</strong> Approximate amounts such as "a few hundred dollars" retain conventional wording, while exact prices continue to use symbols.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.48/Vox.dmg"
+                sparkle:edSignature="v/UT9rocxcAHXmUQcG2q3Zt1BizG5eFMmGJnhMFDac0gsm8EBDEe+n8VJ1Utjbn8N9sF39CJCLO3P9JwI/+vBQ=="
+                length="2674767"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.45</title>
             <pubDate>Wed, 09 Sep 2026 21:14:38 +0000</pubDate>
             <sparkle:version>69</sparkle:version>
