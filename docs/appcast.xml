@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.49</title>
+            <pubDate>Thu, 10 Sep 2026 18:23:41 +0000</pubDate>
+            <sparkle:version>73</sparkle:version>
+            <sparkle:shortVersionString>0.7.49</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Dictation fidelity:</strong> Prose transcription now requests literal audio-supported wording and explicitly forbids inference, implied-thought completion, summaries, paraphrases, answers, and added conclusions.</li>
+                    <li><strong>Formatting:</strong> Sentence punctuation and number formatting remain downstream post-processing, keeping the transcription stage focused on what was actually spoken.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.49/Vox.dmg"
+                sparkle:edSignature="6LzQaJTomTSw2auQnS+t+Gi475X/lfsjofyppTX1dVWbVKALsThAsbS7dvBcd4lwq6R6ryOK3MnuzX5ELfW4Ag=="
+                length="2674388"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.48</title>
             <pubDate>Thu, 10 Sep 2026 03:52:00 +0000</pubDate>
             <sparkle:version>72</sparkle:version>
