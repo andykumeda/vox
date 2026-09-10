@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-09
 
-## Unreleased 0.7.48 build 72: infer exported writing style from raw dictation
+## Released 0.7.48 build 72: infer exported writing style from raw dictation
 
 - Writing-voice export now uses raw prose dictation transcripts as its primary
   style corpus. Final delivered text remains limited to raw-to-final cleanup
@@ -15,7 +15,9 @@ Last updated: 2026-09-09
 - Focused and full suites pass: 466 macOS tests plus 11 VoxCore tests. The
   dictation regression passes with quality score `1.0` and failure rate `0.0`.
 - `0.7.48` / build `72` is installed at `/Applications/Vox.app`, the LaunchAgent
-  is running it, and strict codesign verification passes.
+  is running it, and strict codesign verification passes. The signed DMG is
+  published in GitHub release `v0.7.48`, and both raw GitHub and GitHub Pages
+  appcasts expose the new item.
 
 ## Unreleased 0.7.47 build 71: preserve dictated meaning and approximate prices
 
