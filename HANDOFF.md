@@ -2,6 +2,24 @@
 
 Last updated: 2026-09-10
 
+## Unreleased 0.7.49 build 73: require literal prose transcription
+
+- The latest reported recording showed the disputed sentence in raw STT, before
+  Smart Cleanup. Prose transcription was still receiving editorial guidance
+  about sentence structure, numbers, and polished formatting.
+- The prose STT prompt now requires literal audio-supported wording and forbids
+  inference, implied-thought completion, summaries, paraphrases, answers, and
+  added conclusions. Formatting remains the responsibility of post-processing.
+- Added a regression for the non-interpretive prompt contract. Full suites pass:
+  466 macOS tests plus 12 VoxCore tests, and the dictation regression passes
+  with quality score `1.0` and failure rate `0.0`.
+- Build `73` was installed and manually smoke-tested. The raw history entry for
+  `When I went to the store just now I saw Bob at the park` remained literal;
+  the final text only added the expected comma. A second test with the spoken
+  causal clause preserved `so he's in town` without inventing it.
+- The signed Sparkle DMG and appcast publication remain to be completed for
+  this build.
+
 ## MacBook Pro post-0.7.48 recovery: restore macOS trust grants
 
 - After installing 0.7.48 / build 72 on the MacBook Pro, Vox launched and
