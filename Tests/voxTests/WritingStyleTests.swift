@@ -76,6 +76,23 @@ final class WritingStyleTests: XCTestCase {
         XCTAssertFalse(first.contains("Um I'm ready now."))
     }
 
+    func testExportInfersStyleFromRawDictationBeforeCleanup() {
+        let entry = DictationEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            mode: "prose",
+            durationSec: 2,
+            wordCount: 4,
+            text: "The plan is clear.",
+            rawText: "I think after the meeting we should probably wait until tomorrow because the current plan still depends on information that we do not have yet."
+        )
+
+        let result = WritingStyleExporter.markdown(dictations: [entry], meetings: [])
+
+        XCTAssertTrue(result.contains("medium-to-long sentences that accumulate context and qualifications"))
+        XCTAssertTrue(result.contains("raw prose dictation transcripts"))
+        XCTAssertTrue(result.contains("Final dictation text is used only for raw-to-final cleanup comparisons"))
+    }
+
     func testExportUsesOnlyAttributableMeetingSpeech() {
         let session = TranscriptSession(
             id: UUID(),

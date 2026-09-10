@@ -23,7 +23,12 @@ enum WritingStyleExporter {
         let allMeetingSegments = meetings.flatMap(\.segments)
         let localMeetingSegments = allMeetingSegments.filter { $0.source == .local }
         let excludedMeetingSegments = allMeetingSegments.count - localMeetingSegments.count
-        let texts = prose.map(\.text) + localMeetingSegments.map(\.text)
+        // Infer voice from the user's recorded dictation before cleanup. Using
+        // final text here would teach the cleanup provider's choices and create
+        // a feedback loop for users without a style guide. Final text remains
+        // available to CleanupSignals for raw-to-final comparison.
+        // Meeting segments are optional supplemental evidence.
+        let texts = prose.map(\.rawText) + localMeetingSegments.map(\.text)
         let corpus = StyleCorpus(texts: texts)
         let cleanup = CleanupSignals(dictations: prose)
 
@@ -79,7 +84,7 @@ enum WritingStyleExporter {
 
         # Personal Writing Voice
 
-        Use this skill when composing or editing in my voice. Do not use it for unrelated technical answers or generic writing unless my voice is requested. This skill was generated locally by Vox; it contains aggregate observations and instructions, not transcript excerpts.
+        Use this skill when composing or editing in my voice. Do not use it for unrelated technical answers or generic writing unless my voice is requested. This skill was generated locally by Vox from raw dictation transcripts before cleanup; it contains aggregate observations and instructions, not transcript excerpts.
 
         ## Before composing
 
@@ -278,7 +283,7 @@ enum WritingStyleExporter {
 
         ## Evidence and scope
 
-        This guide is based only on text attributable to the Vox user: \(prose.count) prose dictations and \(localMeetingSegments.count) explicitly local-speaker meeting segments, totaling \(corpus.wordCount) words across \(texts.count) text units\(period.map { " from \($0)" } ?? ""). \(commandCount) command-mode dictations were excluded from voice analysis. \(excludedMeetingSegments) remote or unattributed meeting segments were excluded because they may contain other people's words.
+        This guide is based only on text attributable to the Vox user: \(prose.count) raw prose dictation transcripts and \(localMeetingSegments.count) explicitly local-speaker meeting segments, totaling \(corpus.wordCount) words across \(texts.count) text units\(period.map { " from \($0)" } ?? ""). \(commandCount) command-mode dictations were excluded from voice analysis. \(excludedMeetingSegments) remote or unattributed meeting segments were excluded because they may contain other people's words. Final dictation text is used only for raw-to-final cleanup comparisons, not as the primary style corpus.
 
         Sample assessment: \(sampleAssessment)
 
