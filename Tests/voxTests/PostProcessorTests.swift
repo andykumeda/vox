@@ -36,6 +36,11 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(p.apply("it costs five dollars"), "It costs $5.")
     }
 
+    func testProseApproximateCurrencyStaysIdiomatic() {
+        let p = PostProcessor(mode: .prose)
+        XCTAssertEqual(p.apply("it costs a few hundred dollars"), "It costs a few hundred dollars.")
+    }
+
     func testProseTimeUsesDigits() {
         let p = PostProcessor(mode: .prose)
         XCTAssertEqual(p.apply("wait three hours"), "Wait 3 hours.")

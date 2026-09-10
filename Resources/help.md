@@ -8,12 +8,12 @@ Choose Settings → Microphone to pin dictation to a specific input device. A pi
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes
-- **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps. Uses digits for times, money, measurements, and option labels (`$5`, `3 hours`, `1 TB`, `option 1`); keeps small ordinary counts as words (`three apples`). Letter-spelled number output such as `F-I-F-T-Y feet` is normalized to `50 feet`. Empty short toggles are rejected before transcription.
+- **Prose** — natural sentences, capitalized, with terminal punctuation. Default for most apps. Uses digits for times, exact prices, measurements, and option labels (`$5`, `3 hours`, `1 TB`, `option 1`), while keeping approximate prices idiomatic (`a few hundred dollars`, not `a few $100`). Small ordinary counts remain words (`three apples`). Letter-spelled number output such as `F-I-F-T-Y feet` is normalized to `50 feet`. Empty short toggles are rejected before transcription.
 - **Command** — verbatim shell commands, no capitalization, no trailing punctuation. Auto-selected when the focused app is a terminal (Terminal, iTerm, Wave, etc.).
 Press your **Mode toggle** hotkey (default `⌃⌥M`) to switch directly between Always prose and Always command. Choose Auto again in Settings → Mode when you want app-based detection.
 
 ## Verbatim mode
-Smart Cleanup (Settings → Mode) polishes prose dictations conservatively — removes obvious false starts, fillers, self-corrections. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
+Smart Cleanup (Settings → Mode) removes obvious false starts, fillers, and self-corrections. It cannot add words: if the cleanup model introduces wording that was not dictated, Vox discards that cleanup and keeps the pre-cleanup transcription. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Sometimes you want the literal text instead. Two ways to bypass cleanup for a single recording:
 
 - **Hold Option while pressing Fn** — that recording is pasted raw, no cleanup, no trigger expansion.
 - **Say "verbatim" or "literal" as the first word** of the dictation. The prefix is stripped and the rest is pasted as Whisper transcribed it. Example: speaking *"verbatim he literally said um maybe yeah"* pastes `he literally said um maybe yeah`.

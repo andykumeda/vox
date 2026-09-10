@@ -85,6 +85,16 @@ final class NumberNormalizerTests: XCTestCase {
         XCTAssertEqual(n.normalize("twenty three dollars"), "$23")
     }
 
+    func testApproximateHundredsOfDollarsStayIdiomatic() {
+        XCTAssertEqual(n.normalize("a few hundred dollars"), "a few hundred dollars")
+        XCTAssertEqual(n.normalize("few hundred dollars"), "a few hundred dollars")
+        XCTAssertEqual(n.normalize("budget a few thousand dollars"), "budget a few thousand dollars")
+    }
+
+    func testExactHundredDollarAmountStillUsesCurrencySymbol() {
+        XCTAssertEqual(n.normalize("one hundred dollars"), "$100")
+    }
+
     func testCurrencyCentsToSymbol() {
         XCTAssertEqual(n.normalize("fifty cents"), "50¢")
         XCTAssertEqual(n.normalize("five cents"), "5¢")

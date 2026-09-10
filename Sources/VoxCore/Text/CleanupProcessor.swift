@@ -81,6 +81,17 @@ public struct CleanupProcessor {
                 dlog("Cleanup expanded response discarded (words \(cleanedWords) > input \(inputWords) + 2)")
                 return triggered
             }
+            // Smart Cleanup is intentionally deletion-only at the lexical
+            // boundary. It may remove fillers, false starts, or superseded
+            // wording and may adjust punctuation/capitalization, but any new
+            // word could be an answer, explanation, or invented fact. Fail
+            // open to the dictated text rather than trying to enumerate every
+            // shape an assistant-style response can take.
+            if introducesNewLexicalContent(trimmedCleaned, comparedWith: triggered) {
+                let metrics = textLogMetrics(label: "response", text: trimmedCleaned)
+                dlog("Cleanup novel content discarded (\(metrics))")
+                return triggered
+            }
             if looksLikeAssistantMetaResponse(trimmedCleaned),
                !looksLikeAssistantMetaResponse(triggered) {
                 let metrics = textLogMetrics(label: "response", text: trimmedCleaned)
@@ -245,6 +256,27 @@ public struct CleanupProcessor {
 
     private func wordCount(_ text: String) -> Int {
         text.split(whereSeparator: { $0.isWhitespace }).count
+    }
+
+    private func introducesNewLexicalContent(_ output: String, comparedWith input: String) -> Bool {
+        var available: [String: Int] = [:]
+        for token in lexicalTokens(input) {
+            available[token, default: 0] += 1
+        }
+
+        for token in lexicalTokens(output) {
+            guard let count = available[token], count > 0 else { return true }
+            available[token] = count - 1
+        }
+        return false
+    }
+
+    private func lexicalTokens(_ text: String) -> [String] {
+        text.lowercased().split(whereSeparator: { character in
+            !character.unicodeScalars.allSatisfy {
+                CharacterSet.alphanumerics.contains($0)
+            }
+        }).map(String.init)
     }
 
     private func splitSentences(_ input: String) -> [String] {

@@ -2,6 +2,37 @@
 
 Last updated: 2026-09-09
 
+## Unreleased 0.7.47 build 71: preserve dictated meaning and approximate prices
+
+- A live dictation asking for the 40th day after September 15 was transcribed
+  as an assistant answer. The existing cleanup defenses rejected large
+  expansions and recognizable refusal/meta-response phrases, but a concise
+  factual answer remained within the `input words + 2` allowance and passed.
+- Smart Cleanup now enforces a deletion-only lexical contract. It may remove or
+  rearrange dictated words and adjust punctuation/capitalization, but if the
+  cleanup response introduces any word—or repeats a word more times than it
+  appeared in the input—Vox discards the response and fails open to the
+  pre-cleanup transcription. The LLM prompt states the same constraint.
+- The exact question-to-answer regression first failed, then passed after the
+  guard was added. Focused cleanup tests pass, `swift test` passes 465 macOS
+  tests plus 11 VoxCore tests, and `./scripts/run-dictation-regression.sh`
+  passes with quality score `1.0` and failure rate `0.0`.
+- The reported question was repeated live with Smart Cleanup enabled on the
+  deployed `0.7.46` / build `70`; Vox pasted the question instead of answering
+  it, confirming that runtime gate.
+- Vox's prose number normalizer previously converted the approximate phrase
+  `a few hundred dollars` into the awkward `a few $100` because all currency
+  quantities shared the exact-price rule. Approximate `a few` dollar scales now
+  remain conventional words (`hundred`, `thousand`, `million`, or `billion`),
+  while exact amounts such as `one hundred dollars` still become `$100`. The
+  transcription prompt states the same distinction.
+- The focused number/postprocessor tests pass, including preservation of exact
+  `$100`; the full-suite and dictation-regression results above include this
+  currency fix.
+- `0.7.47` / build `71` is an unreleased production deployment. Live dictation
+  confirmed `It should cost a few hundred dollars.` remains in that idiomatic
+  form rather than becoming `a few $100`. Both runtime gates are complete.
+
 ## Released 0.7.45 build 69: pin dictation and remove recording delays
 
 - Settings now lists live Core Audio input devices and can persistently pin

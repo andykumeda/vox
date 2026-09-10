@@ -131,7 +131,29 @@ public struct NumberNormalizer {
             )
             output.append(contentsOf: result.parts)
         }
-        return output.joined()
+        return normalizeApproximateDollarAmounts(output.joined())
+    }
+
+    /// Exact prices read naturally as symbols ("one hundred dollars" →
+    /// "$100"), but an approximate quantifier describes a range rather than
+    /// an exact price. Restore that idiom after number collapsing so STT output
+    /// such as "few hundred dollars" does not become the awkward "few $100".
+    private func normalizeApproximateDollarAmounts(_ input: String) -> String {
+        let scales = [
+            (digits: "1000000000", word: "billion"),
+            (digits: "1000000", word: "million"),
+            (digits: "1000", word: "thousand"),
+            (digits: "100", word: "hundred"),
+        ]
+        var result = input
+        for scale in scales {
+            result = result.replacingOccurrences(
+                of: "(?i)\\b(?:a\\s+)?few\\s+\\$\(scale.digits)\\b",
+                with: "a few \(scale.word) dollars",
+                options: .regularExpression
+            )
+        }
+        return result
     }
 
     /// STT sometimes spells a number as individual letters separated by

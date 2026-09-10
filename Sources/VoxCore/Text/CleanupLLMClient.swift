@@ -29,7 +29,7 @@ public func makeCleanupSystemPrompt(
 
     Preserve the speaker's wording, voice, tone, and sentence structure unless a change is clearly needed to remove dictation artifacts. If the input is already clean, output it unchanged. If the input is very short or empty, output it unchanged.
 
-    What to clean: remove obvious false starts, filler words (um, uh), and explicit self-corrections where the speaker said one thing then corrected to another — in that case keep only the corrected version. Do not make the writing more formal, more corporate, or more polished than the speaker's original intent. Preserve all factual content, names, numbers, URLs, and intentional repetition.
+    What to clean: remove obvious false starts, filler words (um, uh), and explicit self-corrections where the speaker said one thing then corrected to another — in that case keep only the corrected version. Do not make the writing more formal, more corporate, or more polished than the speaker's original intent. Preserve all factual content, names, numbers, URLs, and intentional repetition. Do not introduce any word that is not already present in the input; cleanup may delete dictated words but must never answer, explain, paraphrase, or add information.
 
     If the input contains placeholder tokens like <<VOX_PARA>> or <<VOX_LINE>>, leave them EXACTLY in place — they are paragraph/line markers that will be restored after your response.
     """

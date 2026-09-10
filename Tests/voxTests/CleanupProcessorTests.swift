@@ -156,14 +156,14 @@ final class CleanupProcessorTests: XCTestCase {
         let capture = Capture()
         let cleaner: CleanupProcessor.LLMCleanFunc = { input in
             capture.input = input
-            return "[cleaned] \(input)"
+            return input
         }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
         // Triggered text must be at least 15 chars to survive the short-input
         // bypass and reach the LLM.
         let result = await proc.process("First sentence here. Scratch that. Second sentence here for real.")
         XCTAssertEqual(capture.input, "Second sentence here for real.")
-        XCTAssertEqual(result, "[cleaned] Second sentence here for real.")
+        XCTAssertEqual(result, "Second sentence here for real.")
     }
 
     // MARK: - Short-input bypass
@@ -415,10 +415,16 @@ final class CleanupProcessorTests: XCTestCase {
     }
 
     func testVerbatimMidSentenceNotStripped() async {
-        let cleaner: CleanupProcessor.LLMCleanFunc = { input in "[cleaned] \(input)" }
+        final class FlagBox { var value = false }
+        let flag = FlagBox()
+        let cleaner: CleanupProcessor.LLMCleanFunc = { input in
+            flag.value = true
+            return input
+        }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
         let result = await proc.process("I want a verbatim quote here.")
-        XCTAssertEqual(result, "[cleaned] I want a verbatim quote here.")
+        XCTAssertTrue(flag.value)
+        XCTAssertEqual(result, "I want a verbatim quote here.")
     }
 
     func testProseNoNewlinesStillInvokesLLM() async {
@@ -427,18 +433,54 @@ final class CleanupProcessorTests: XCTestCase {
         let flag = FlagBox()
         let cleaner: CleanupProcessor.LLMCleanFunc = { input in
             flag.value = true
-            return "[cleaned] \(input)"
+            return input
         }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
         let result = await proc.process("This is plain prose with no triggers.")
         XCTAssertTrue(flag.value, "LLM must be invoked when triggered text has no newlines")
-        XCTAssertEqual(result, "[cleaned] This is plain prose with no triggers.")
+        XCTAssertEqual(result, "This is plain prose with no triggers.")
     }
 
     func testProseRejectsCleanupThatAddsInterpretation() async {
         let input = "I want to keep this dictated wording exactly as I said it."
         let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
             "The speaker is explaining that they want to preserve the exact wording of their dictated message."
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
+    }
+
+    func testProseRejectsConciseAnswerToDictatedQuestion() async {
+        let input = "What is the 40th day after September 15th?"
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            "The 40th day after September 15th is October 25th."
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
+    }
+
+    func testProseAllowsDeletionOnlyCleanup() async {
+        let input = "Well, um, send this message now."
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            "Send this message now."
+        }
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, "Send this message now.")
+    }
+
+    func testProseRejectsRepeatedWordNotPresentThatManyTimes() async {
+        let input = "Please send this message now."
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            "Please please send this message now."
         }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
 
