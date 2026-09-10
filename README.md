@@ -338,6 +338,14 @@ of the release commit. A previous release attempt accidentally staged the
 entire accumulated worktree, which made the release scope ambiguous and was
 stopped before commit.
 
+Before publishing a Sparkle update, compare the candidate bundle's code-signing
+requirement with the currently installed release using the commands in
+`docs/UPDATING.md`. Treat a changed certificate authority, TeamIdentifier, or
+designated requirement as a release gate because macOS may invalidate Vox's
+Accessibility and Input Monitoring grants. After installation, perform a real
+Fn recording smoke on each target Mac and verify the `Fn press`, cue, recording,
+transcription, and paste log entries before calling the update complete.
+
 ```sh
 # 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist.
 #    These values must be newer than the latest appcast item, even for an

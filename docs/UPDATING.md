@@ -7,7 +7,7 @@ How to install a newer release of Vox over an existing install.
 The Mac mini may run an unreleased production deployment for live validation.
 Such a deployment must always use a new `CFBundleShortVersionString` and
 `CFBundleVersion` that are higher/distinct from the latest public appcast item.
-The current public identity is `0.7.38` build `58`; future unreleased builds
+The current public identity is `0.7.48` build `72`; future unreleased builds
 must use a newer identity. Do not reuse the public identity for changed code,
 and do not add an unreleased build to the public appcast.
 
@@ -26,9 +26,11 @@ will surface new releases. To check on demand:
    - **Microphone** → enable Vox
    - **Screen Recording** → enable Vox (only if you use Meeting transcription)
 
-Your API key, hotkeys, dictionary, and settings persist — they're stored
-in the Keychain and `~/Library/Preferences/com.andykumeda.vox.plist`,
-both keyed on bundle ID, not signature.
+Your API key, hotkeys, dictionary, and settings persist in the Keychain and
+`~/Library/Preferences/com.andykumeda.vox.plist`. macOS privacy grants are
+different: Accessibility and Input Monitoring are tied to the installed code
+identity and designated signing requirement, so a signed update can leave Vox
+listed as a new client even when the bundle ID is unchanged.
 
 ## Why an update can require permissions again
 
@@ -43,13 +45,31 @@ when an ad-hoc build's code hash changes, or after an OS/security update.
 
 Result: permissions may survive an update, but callers must be prepared to
 re-grant them. Vox can still launch while hotkeys, audio, paste, or meeting
-capture remain unavailable.
+capture remain unavailable. Treat a signing identity change as a release
+blocker until it has been deliberately reviewed and live-tested on every
+supported Mac.
 
 Inspect the installed requirement with:
 
 ```sh
 codesign -d -r- /Applications/Vox.app 2>&1
 ```
+
+Before publishing a Sparkle update, compare the current installed app with the
+candidate bundle on the release Mac:
+
+```sh
+codesign -d -r- /Applications/Vox.app > /tmp/vox-installed-requirement.txt 2>&1
+codesign -d -r- dist/Vox.app > /tmp/vox-candidate-requirement.txt 2>&1
+diff -u /tmp/vox-installed-requirement.txt /tmp/vox-candidate-requirement.txt
+```
+
+Review any change to the certificate authority, TeamIdentifier, or designated
+requirement before publishing. A changed requirement can invalidate existing
+Accessibility and Input Monitoring grants. After installing the candidate via
+Sparkle on each target Mac, verify the version, confirm Vox appears in both
+trust lists, and complete a real Fn recording that produces the start cue,
+stop cue, recording log entry, transcription, and paste.
 
 `TeamIdentifier=not set` alone does not distinguish an ad-hoc signature from
 Vox's self-signed development certificate. An Apple Development identity
@@ -154,7 +174,8 @@ is already running from a different location. Run `pgrep -fl vox` and
 
 **App appears in Input Monitoring but events still don't fire.** Toggle
 it off and back on, then quit and relaunch Vox. macOS sometimes caches
-a stale grant against an old `cdhash`.
+a stale grant against an old code-signing requirement. If the entry is absent,
+add `/Applications/Vox.app` again, then quit and relaunch Vox.
 
 **Fn key opens emoji picker instead of recording.** System Settings →
 Keyboard → "Press 🌐 key to" → set to *Do Nothing*. Otherwise macOS

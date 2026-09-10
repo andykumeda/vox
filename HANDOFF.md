@@ -1,6 +1,20 @@
 # Vox Handoff
 
-Last updated: 2026-09-09
+Last updated: 2026-09-10
+
+## MacBook Pro post-0.7.48 recovery: restore macOS trust grants
+
+- After installing 0.7.48 / build 72 on the MacBook Pro, Vox launched and
+  retained microphone access, but macOS had removed the app from Accessibility
+  and Input Monitoring. `AXIsProcessTrusted=false` and no `Fn press` events
+  reached the hotkey monitor; this made recording cues and dictation appear
+  dead.
+- Resetting the stale Accessibility and `ListenEvent` approvals, adding
+  `/Applications/Vox.app` back to both System Settings → Privacy & Security →
+  Accessibility and Input Monitoring, then restarting Vox restored dictation.
+- For future signed updates on this MacBook, verify both trust-list entries
+  before investigating audio. A real Fn recording completed successfully after
+  the grants were restored.
 
 ## Released 0.7.48 build 72: infer exported writing style from raw dictation
 
