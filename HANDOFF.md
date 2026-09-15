@@ -1,6 +1,6 @@
 # Vox Handoff
 
-## 0.7.54 build 78 release candidate: survive output-device changes before dictation
+## Released 0.7.54 build 78: survive output-device changes before dictation
 
 - Changing the macOS output device and immediately pressing the record hotkey
   could crash Vox in `AVAudioNode.installTap`; launchd then restarted Vox and
@@ -28,6 +28,9 @@
   regression reports quality `1.0` and failure rate `0.0`; strict codesign and
   `hdiutil verify` pass. The 2,677,072-byte DMG is signed for Sparkle with EdDSA
   signature `QN3Es5t8dusd6TlCVc4sJlKI9C0R6GbZYY9ck25Bsw67vPZF6vTLm0Uih1pEWGbNWgFwnaz8euue1uMvzFMnBg==`.
+- GitHub release `v0.7.54`, the raw GitHub appcast, and the GitHub Pages Sparkle
+  feed all expose build 78. The hosted DMG SHA-256 is
+  `ed1083949fa4347dc9291aea3514cab3e9adb446c3913fe3550b58253802398d`.
 
 ## Unreleased 0.7.50 build 74: enforce pinned input and preserve dictated words
 
@@ -39,7 +42,7 @@
 - Build 74 is installed and running locally. `swift test` passes; live input
   route and transcription smoke remain required on the affected Mac.
 
-Last updated: 2026-09-10
+Last updated: 2026-09-14
 
 ## Released 0.7.49 build 73: require literal prose transcription
 
