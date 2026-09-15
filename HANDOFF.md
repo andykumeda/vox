@@ -6,6 +6,8 @@
   transcription if the cleanup model introduces a new one. The base prompt
   states the same preference because semicolons are extremely rare in the
   user's pre-2025 writing corpus.
+- Smart Cleanup also fails open if it creates a new sentence beginning with
+  “And”; an existing sentence-initial “And” remains literal.
 - Focused regressions cover both rejection of an invented semicolon and
   preservation of an existing one. No deployment was performed per request.
 

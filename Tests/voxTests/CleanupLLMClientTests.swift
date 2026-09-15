@@ -41,6 +41,12 @@ final class CleanupLLMClientTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Do not introduce semicolons unless the input already contains one"))
     }
 
+    func testPromptDiscouragesNewSentenceInitialAnd() {
+        let prompt = makeCleanupSystemPrompt()
+
+        XCTAssertTrue(prompt.contains("Do not begin a new sentence with \u{201c}And\u{201d} unless the input already does"))
+    }
+
     func testPromptIncludesActiveProseDictionaryEntries() {
         let prompt = makeCleanupSystemPrompt(
             dictionaryEntries: [

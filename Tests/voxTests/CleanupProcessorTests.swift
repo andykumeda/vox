@@ -224,6 +224,19 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, input)
     }
 
+    func testCleanupRejectsNewSentenceInitialAnd() async {
+        let input = "We should ship this. Then review it."
+        let proc = CleanupProcessor(
+            mode: .prose,
+            enabled: true,
+            llmCleaner: { _ in "We should ship this. And then review it." }
+        )
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
+    }
+
     // MARK: - Short-input bypass
 
     func testProseShortInputSkipsLLM() async {

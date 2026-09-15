@@ -79,6 +79,10 @@ public struct CleanupProcessor {
                 dlog("Cleanup introduced semicolon; keeping dictated text")
                 return triggered
             }
+            if introducesNewSentenceInitialAnd(trimmedCleaned, comparedWith: triggered) {
+                dlog("Cleanup introduced sentence-initial And; keeping dictated text")
+                return triggered
+            }
             let inputWords = wordCount(triggered)
             let cleanedWords = wordCount(trimmedCleaned)
             if cleanedWords > inputWords + 2 {
@@ -123,6 +127,18 @@ public struct CleanupProcessor {
 
     private func introducesNewSemicolons(_ candidate: String, comparedWith input: String) -> Bool {
         candidate.filter { $0 == ";" }.count > input.filter { $0 == ";" }.count
+    }
+
+    private func introducesNewSentenceInitialAnd(_ candidate: String, comparedWith input: String) -> Bool {
+        sentenceInitialAndCount(candidate) > sentenceInitialAndCount(input)
+    }
+
+    private func sentenceInitialAndCount(_ text: String) -> Int {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?i)(?:^|[.!?]\s+|\n\s*)[“\"'\(\[]*and\b"#
+        ) else { return 0 }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.numberOfMatches(in: text, range: range)
     }
 
     // MARK: - Verbatim prefix
