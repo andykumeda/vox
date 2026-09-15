@@ -9,7 +9,9 @@
 - Smart Cleanup also fails open if it creates a new sentence beginning with
   “And”; an existing sentence-initial “And” remains literal.
 - Focused regressions cover both rejection of an invented semicolon and
-  preservation of an existing one. No deployment was performed per request.
+  preservation of an existing one, plus rejection of a cleanup-introduced
+  sentence-initial “And”. Build 81 / version 0.7.57 is the unreleased local
+  production deployment; it is not in the public appcast.
 
 Last updated: 2026-09-15
 
