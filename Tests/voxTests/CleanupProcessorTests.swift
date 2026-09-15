@@ -60,6 +60,42 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, "Goodbye.")
     }
 
+    func testScratchThatAfterEllipsisReplacesOnlyUnfinishedClause() async {
+        let proc = makeProseProc()
+        let result = await proc.process(
+            "If so, how would I be able to communicate with my Hermes instance on my Mac mini, for example, if I wanted to reach... scratch that, if I wanted to perform a task locally on my Mac?"
+        )
+
+        XCTAssertEqual(
+            result,
+            "If so, how would I be able to communicate with my Hermes instance on my Mac mini, for example, if I wanted to perform a task locally on my Mac?"
+        )
+    }
+
+    func testScratchThatBetweenCommasReplacesOnlyUnfinishedClause() async {
+        let proc = makeProseProc()
+        let result = await proc.process(
+            "If so, how would I communicate with my Mac Mini, for example, if I wanted to reach, scratch that, if I wanted to perform a task locally on my Mac?"
+        )
+
+        XCTAssertEqual(
+            result,
+            "If so, how would I communicate with my Mac Mini, for example, if I wanted to perform a task locally on my Mac?"
+        )
+    }
+
+    func testScratchThatBetweenDashesReplacesOnlyUnfinishedClause() async {
+        let proc = makeProseProc()
+        let result = await proc.process(
+            "If so, how would I communicate with my Mac Mini? For example, if I wanted to reach—scratch that—if I wanted to perform a task locally on my Mac?"
+        )
+
+        XCTAssertEqual(
+            result,
+            "If so, how would I communicate with my Mac Mini? For example, if I wanted to perform a task locally on my Mac?"
+        )
+    }
+
     func testCustomRatherTriggerWipesPrecedingSentence() async {
         let proc = CleanupProcessor(
             mode: .prose,

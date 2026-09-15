@@ -189,7 +189,8 @@ public struct CleanupProcessor {
     }
 
     private func applyTriggersProse(_ input: String) -> String {
-        let customTriggered = applyCustomScratchThatTriggers(input)
+        let inlineCorrected = applyInlineUnfinishedCorrections(input)
+        let customTriggered = applyCustomScratchThatTriggers(inlineCorrected)
         let sentences = splitSentences(customTriggered)
         var output: [String] = []
 
@@ -222,6 +223,51 @@ public struct CleanupProcessor {
         }
 
         return joinSentences(output)
+    }
+
+    /// A pause rendered as a comma, dash, or ellipsis immediately before
+    /// "scratch that, <replacement>" marks an unfinished clause, not a request
+    /// to discard the entire sentence. Roll back to the nearest earlier clause
+    /// boundary while preserving the sentence's established context.
+    private func applyInlineUnfinishedCorrections(_ input: String) -> String {
+        guard let marker = try? NSRegularExpression(
+            pattern: "(?i)(?:\\.{3,}|…|[,—–])[ \\t]*(?:scratch|delete) that[ \\t]*[,!?—–][ \\t]*"
+        ) else { return input }
+
+        var result = input
+        while true {
+            let ns = result as NSString
+            guard let match = marker.firstMatch(
+                in: result,
+                range: NSRange(location: 0, length: ns.length)
+            ) else { return result }
+
+            let beforeEllipsis = ns.substring(to: match.range.location) as NSString
+            let boundaries = CharacterSet(charactersIn: ".!?;:,—–\n")
+            var clauseStart = 0
+            let boundary = beforeEllipsis.rangeOfCharacter(
+                from: boundaries,
+                options: .backwards,
+                range: NSRange(location: 0, length: beforeEllipsis.length)
+            )
+            if boundary.location != NSNotFound {
+                clauseStart = boundary.location + boundary.length
+                while clauseStart < beforeEllipsis.length {
+                    let whitespace = beforeEllipsis.rangeOfCharacter(
+                        from: .whitespaces,
+                        range: NSRange(location: clauseStart, length: 1)
+                    )
+                    guard whitespace.location == clauseStart else { break }
+                    clauseStart += whitespace.length
+                }
+            }
+
+            let removal = NSRange(
+                location: clauseStart,
+                length: match.range.location + match.range.length - clauseStart
+            )
+            result = ns.replacingCharacters(in: removal, with: "")
+        }
     }
 
     private func scratchThatRemainder(_ trimmed: String) -> String? {

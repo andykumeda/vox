@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.56</title>
+            <pubDate>Tue, 15 Sep 2026 18:35:31 +0000</pubDate>
+            <sparkle:version>80</sparkle:version>
+            <sparkle:shortVersionString>0.7.56</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Spoken corrections:</strong> When an unfinished phrase is followed by <code>scratch that</code>, Vox now replaces only that phrase back to the nearest clause boundary while preserving the established sentence context.</li>
+                    <li><strong>Transcription variants:</strong> The correction works when the speech pause is rendered as a comma, dash, or ellipsis, while ordinary whole-sentence <code>scratch that</code> behavior remains unchanged.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.56/Vox.dmg"
+                sparkle:edSignature="oyXSu1CDkmJDgWfFxP+dA4XpK/Xbvh0uceXBTxsfqU6VCQ/W1+Rej94KUSKzE50EHZJmIdGDUzbkmxOZM78NBQ=="
+                length="2677640"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.54</title>
             <pubDate>Tue, 15 Sep 2026 00:00:22 +0000</pubDate>
             <sparkle:version>78</sparkle:version>

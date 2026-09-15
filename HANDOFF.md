@@ -1,5 +1,35 @@
 # Vox Handoff
 
+## Release candidate 0.7.56 build 80: preserve context around unfinished corrections
+
+- A live 37-word dictation containing an unfinished clause followed by
+  `scratch that, …` was delivered as only the 11-word replacement. The running
+  process predated the installed 0.7.54 executable, so it had not loaded the
+  newer omitted-word guard even though the installed binary contained it.
+- Prose correction handling now treats a comma, dash, or ellipsis immediately
+  before `scratch that, …` as an unfinished clause marker. It rolls back only
+  to the nearest earlier clause boundary and retains the established sentence
+  context; ordinary whole-sentence `scratch that` behavior is unchanged.
+- The exact retained raw transcript is covered through the public cleanup
+  interface. The first build 79 live smoke transcribed the pause as commas and
+  therefore preserved the correction words; that exact production variant and
+  an em-dash variant are now regressions in build 80.
+- The required second installed build 80 spoken-correction smoke passed and is
+  accepted as the manual pre-commit gate. Full verification passes: 471 macOS
+  tests and 12 VoxCore tests, plus dictation-regression quality `1.0` and
+  failure rate `0.0`.
+- The candidate and installed app share Apple Development team `852LS98PQ9`
+  and the same designated requirement. Strict codesign and `hdiutil verify`
+  pass. The 2,677,640-byte DMG has Sparkle EdDSA signature
+  `oyXSu1CDkmJDgWfFxP+dA4XpK/Xbvh0uceXBTxsfqU6VCQ/W1+Rej94KUSKzE50EHZJmIdGDUzbkmxOZM78NBQ==`
+  and SHA-256 `7db312823429d3d62dc16f05c42cbe62fd0e5bca1835a7bd042e02dcd925e0a3`.
+- Real-time inline typing is intentionally deferred to the next phase. Its
+  hybrid preview/final architecture, fail-closed Accessibility ownership,
+  fallbacks, privacy rules, and acceptance matrix are recorded in
+  `docs/realtime-typing-next-phase.md`; no realtime behavior ships in 0.7.56.
+
+Last updated: 2026-09-15
+
 ## Released 0.7.54 build 78: survive output-device changes before dictation
 
 - Changing the macOS output device and immediately pressing the record hotkey
