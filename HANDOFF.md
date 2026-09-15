@@ -1,6 +1,6 @@
 # Vox Handoff
 
-## Release candidate 0.7.56 build 80: preserve context around unfinished corrections
+## Released 0.7.56 build 80: preserve context around unfinished corrections
 
 - A live 37-word dictation containing an unfinished clause followed by
   `scratch that, …` was delivered as only the 11-word replacement. The running
@@ -18,7 +18,7 @@
   accepted as the manual pre-commit gate. Full verification passes: 471 macOS
   tests and 12 VoxCore tests, plus dictation-regression quality `1.0` and
   failure rate `0.0`.
-- The candidate and installed app share Apple Development team `852LS98PQ9`
+- The packaged and installed app share Apple Development team `852LS98PQ9`
   and the same designated requirement. Strict codesign and `hdiutil verify`
   pass. The 2,677,640-byte DMG has Sparkle EdDSA signature
   `oyXSu1CDkmJDgWfFxP+dA4XpK/Xbvh0uceXBTxsfqU6VCQ/W1+Rej94KUSKzE50EHZJmIdGDUzbkmxOZM78NBQ==`
@@ -27,6 +27,13 @@
   hybrid preview/final architecture, fail-closed Accessibility ownership,
   fallbacks, privacy rules, and acceptance matrix are recorded in
   `docs/realtime-typing-next-phase.md`; no realtime behavior ships in 0.7.56.
+- Release commit `77023fd` and tag `v0.7.56` are pushed. GitHub release,
+  raw appcast, and GitHub Pages appcast expose `0.7.56` build `80`; the
+  anonymous DMG download returns HTTP 200 with the expected 2,677,640-byte
+  length and hosted SHA-256 digest. The installed app was restarted from
+  `/Applications/Vox.app`; its executable matches the packaged app, the
+  AT2020 input remains pinned, and hotkey startup, microphone permission, and
+  Accessibility trust all verify.
 
 Last updated: 2026-09-15
 
