@@ -1,5 +1,16 @@
 # Vox Handoff
 
+## Unreleased: reject invented semicolons in Smart Cleanup
+
+- Smart Cleanup now preserves an existing semicolon but fails open to the raw
+  transcription if the cleanup model introduces a new one. The base prompt
+  states the same preference because semicolons are extremely rare in the
+  user's pre-2025 writing corpus.
+- Focused regressions cover both rejection of an invented semicolon and
+  preservation of an existing one. No deployment was performed per request.
+
+Last updated: 2026-09-15
+
 ## Released 0.7.56 build 80: preserve context around unfinished corrections
 
 - A live 37-word dictation containing an unfinished clause followed by

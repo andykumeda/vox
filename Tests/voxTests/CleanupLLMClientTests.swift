@@ -35,6 +35,12 @@ final class CleanupLLMClientTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Keep my casual wording."))
     }
 
+    func testPromptDiscouragesInventedSemicolons() {
+        let prompt = makeCleanupSystemPrompt()
+
+        XCTAssertTrue(prompt.contains("Do not introduce semicolons unless the input already contains one"))
+    }
+
     func testPromptIncludesActiveProseDictionaryEntries() {
         let prompt = makeCleanupSystemPrompt(
             dictionaryEntries: [

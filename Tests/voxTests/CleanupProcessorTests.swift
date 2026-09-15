@@ -202,6 +202,28 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, "Second sentence here for real.")
     }
 
+    func testCleanupRejectsIntroducedSemicolon() async {
+        let input = "Proceed to commit. There's no reason to deploy, obviously."
+        let proc = CleanupProcessor(
+            mode: .prose,
+            enabled: true,
+            llmCleaner: { _ in "Proceed to commit; there's no reason to deploy, obviously." }
+        )
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
+    }
+
+    func testCleanupPreservesExistingSemicolon() async {
+        let input = "Proceed to commit; there's no reason to deploy, obviously."
+        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: { $0 })
+
+        let result = await proc.process(input)
+
+        XCTAssertEqual(result, input)
+    }
+
     // MARK: - Short-input bypass
 
     func testProseShortInputSkipsLLM() async {

@@ -75,6 +75,10 @@ public struct CleanupProcessor {
                 dlog("Cleanup malformed response (length \(trimmedCleaned.count) < 3 for input length \(triggered.count))")
                 return triggered
             }
+            if introducesNewSemicolons(trimmedCleaned, comparedWith: triggered) {
+                dlog("Cleanup introduced semicolon; keeping dictated text")
+                return triggered
+            }
             let inputWords = wordCount(triggered)
             let cleanedWords = wordCount(trimmedCleaned)
             if cleanedWords > inputWords + 2 {
@@ -115,6 +119,10 @@ public struct CleanupProcessor {
             dlog("Cleanup error: \(error)")
             return triggered
         }
+    }
+
+    private func introducesNewSemicolons(_ candidate: String, comparedWith input: String) -> Bool {
+        candidate.filter { $0 == ";" }.count > input.filter { $0 == ";" }.count
     }
 
     // MARK: - Verbatim prefix
