@@ -92,6 +92,15 @@ public struct CleanupProcessor {
                 dlog("Cleanup novel content discarded (\(metrics))")
                 return triggered
             }
+            // Cleanup must preserve every dictated word. Removing a false start
+            // is no longer safe because the model can mistake intentional text
+            // for an editing artifact; punctuation and capitalization remain
+            // the only allowed lexical-neutral changes.
+            if omitsLexicalContent(trimmedCleaned, comparedWith: triggered) {
+                let metrics = textLogMetrics(label: "response", text: trimmedCleaned)
+                dlog("Cleanup omitted dictated content discarded (\(metrics))")
+                return triggered
+            }
             if looksLikeAssistantMetaResponse(trimmedCleaned),
                !looksLikeAssistantMetaResponse(triggered) {
                 let metrics = textLogMetrics(label: "response", text: trimmedCleaned)
@@ -265,6 +274,16 @@ public struct CleanupProcessor {
         }
 
         for token in lexicalTokens(output) {
+            guard let count = available[token], count > 0 else { return true }
+            available[token] = count - 1
+        }
+        return false
+    }
+
+    private func omitsLexicalContent(_ output: String, comparedWith input: String) -> Bool {
+        var available: [String: Int] = [:]
+        for token in lexicalTokens(output) { available[token, default: 0] += 1 }
+        for token in lexicalTokens(input) {
             guard let count = available[token], count > 0 else { return true }
             available[token] = count - 1
         }

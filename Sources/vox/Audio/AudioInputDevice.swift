@@ -59,6 +59,28 @@ enum AudioInputDevices {
         available().first(where: { $0.uid == uid })?.id
     }
 
+    /// Make the pinned microphone the macOS default input as well as the
+    /// AVAudioEngine input. Bluetooth hands-free profiles can otherwise move
+    /// the global default behind Vox's back when their output wakes.
+    @discardableResult
+    static func setDefaultInputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var id = deviceID
+        let status = AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            UInt32(MemoryLayout<AudioDeviceID>.size),
+            &id
+        )
+        return status == noErr
+    }
+
     static func hardwareInputFormat(for deviceID: AudioDeviceID) -> AVAudioFormat? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyNominalSampleRate,

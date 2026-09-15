@@ -6,6 +6,25 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.54</title>
+            <pubDate>Tue, 15 Sep 2026 00:00:22 +0000</pubDate>
+            <sparkle:version>78</sparkle:version>
+            <sparkle:shortVersionString>0.7.54</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Audio reliability:</strong> Changing the macOS output device immediately before dictation no longer crashes Vox or reopens the Dashboard. Transient Core Audio tap failures are recovered by resetting the graph and reselecting the pinned microphone.</li>
+                    <li><strong>Microphone routing:</strong> A pinned input is reasserted as the macOS default at launch and before every recording, preventing Bluetooth output changes from silently replacing the selected microphone.</li>
+                    <li><strong>Dictation fidelity:</strong> Smart Cleanup now preserves every dictated word and is limited to punctuation and capitalization; responses that add, remove, or repeat words fail open to the original transcription.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.54/Vox.dmg"
+                sparkle:edSignature="QN3Es5t8dusd6TlCVc4sJlKI9C0R6GbZYY9ck25Bsw67vPZF6vTLm0Uih1pEWGbNWgFwnaz8euue1uMvzFMnBg=="
+                length="2677072"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.49</title>
             <pubDate>Thu, 10 Sep 2026 18:23:41 +0000</pubDate>
             <sparkle:version>73</sparkle:version>

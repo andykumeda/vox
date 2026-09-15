@@ -465,7 +465,7 @@ final class CleanupProcessorTests: XCTestCase {
         XCTAssertEqual(result, input)
     }
 
-    func testProseAllowsDeletionOnlyCleanup() async {
+    func testProseRejectsCleanupThatDeletesDictatedFillers() async {
         let input = "Well, um, send this message now."
         let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
             "Send this message now."
@@ -474,7 +474,7 @@ final class CleanupProcessorTests: XCTestCase {
 
         let result = await proc.process(input)
 
-        XCTAssertEqual(result, "Send this message now.")
+        XCTAssertEqual(result, input)
     }
 
     func testProseRejectsRepeatedWordNotPresentThatManyTimes() async {

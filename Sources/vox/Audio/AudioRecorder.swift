@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioTapShim
 import AudioToolbox
 import CoreAudio
 import Foundation
@@ -23,7 +24,7 @@ protocol AudioEngineControlling: AnyObject {
         bufferSize: AVAudioFrameCount,
         format: AVAudioFormat?,
         handler: @escaping AVAudioNodeTapBlock
-    )
+    ) throws
     func removeInputTap()
     func prepare()
     func start() throws
@@ -70,8 +71,15 @@ private final class SystemAudioEngine: AudioEngineControlling {
         bufferSize: AVAudioFrameCount,
         format: AVAudioFormat?,
         handler: @escaping AVAudioNodeTapBlock
-    ) {
-        engine.inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: format, block: handler)
+    ) throws {
+        var error: NSError?
+        guard VoxInstallInputTap(engine.inputNode, bufferSize, format, handler, &error) else {
+            throw error ?? NSError(
+                domain: "com.andykumeda.vox.audio-tap",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Core Audio rejected the input tap format"]
+            )
+        }
     }
 
     func removeInputTap() {
@@ -179,6 +187,7 @@ public final class AudioRecorder {
         engine.reset()
 
         var pinnedFormat: AVAudioFormat?
+        var pinnedSelection: (uid: String, deviceID: AudioDeviceID)?
         if let uid = selectedInputDeviceUID() {
             guard let deviceID = resolveInputDevice(uid) else {
                 throw AudioRecorderError.inputDeviceUnavailable(uid)
@@ -193,6 +202,7 @@ public final class AudioRecorder {
                 throw AudioRecorderError.inputDeviceFormatUnavailable(uid)
             }
             pinnedFormat = format
+            pinnedSelection = (uid, deviceID)
         }
 
         guard let targetFormat = AVAudioFormat(
@@ -247,8 +257,29 @@ public final class AudioRecorder {
             // and then fail because the hardware input settles at 48 kHz. Once
             // the failed start returns, query the now-settled format and rebuild
             // the converter/tap exactly once.
-            let settledInputFormat = engine.inputFormat()
-            guard Self.inputFormatChanged(from: initialInputFormat, to: settledInputFormat) else {
+            let settledInputFormat: AVAudioFormat
+            if let pinnedSelection {
+                do {
+                    try engine.selectInputDevice(pinnedSelection.deviceID)
+                    dlog(
+                        "AudioRecorder.start reselected pinned input uid=\(pinnedSelection.uid) "
+                            + "deviceID=\(pinnedSelection.deviceID) after route change"
+                    )
+                } catch {
+                    cleanUpFailedStart(handle: handle, url: url)
+                    throw AudioRecorderError.inputDeviceSelectionFailed(pinnedSelection.uid, error)
+                }
+                guard let format = hardwareInputFormat(pinnedSelection.deviceID) else {
+                    cleanUpFailedStart(handle: handle, url: url)
+                    throw AudioRecorderError.inputDeviceFormatUnavailable(pinnedSelection.uid)
+                }
+                settledInputFormat = format
+            } else {
+                settledInputFormat = engine.inputFormat()
+            }
+            guard pinnedSelection != nil
+                    || Self.inputFormatChanged(from: initialInputFormat, to: settledInputFormat)
+            else {
                 cleanUpFailedStart(handle: handle, url: url)
                 throw AudioRecorderError.engineStartFailed(initialError)
             }
@@ -261,7 +292,7 @@ public final class AudioRecorder {
             do {
                 try configureAndStart(
                     inputFormat: settledInputFormat,
-                    tapFormat: nil,
+                    tapFormat: pinnedFormat,
                     targetFormat: targetFormat
                 )
             } catch {
@@ -322,7 +353,7 @@ public final class AudioRecorder {
         // Use the input node's native format. Supplying the earlier snapshot
         // here can raise an Objective-C exception if the route changes between
         // querying the node and installing the tap.
-        engine.installInputTap(bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
+        try engine.installInputTap(bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
             self?.handle(buffer: buffer, targetFormat: targetFormat)
         }
         engine.prepare()

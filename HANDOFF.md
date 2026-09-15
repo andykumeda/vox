@@ -1,5 +1,44 @@
 # Vox Handoff
 
+## 0.7.54 build 78 release candidate: survive output-device changes before dictation
+
+- Changing the macOS output device and immediately pressing the record hotkey
+  could crash Vox in `AVAudioNode.installTap`; launchd then restarted Vox and
+  the normal launch-time Dashboard made the failure look like a Dashboard
+  hotkey action.
+- The pinned-input path must pass the selected USB device's hardware format to
+  `installTap`; using the output graph's live native format avoids the exception
+  but fails engine startup when the USB input is 48 kHz and Bluetooth output is
+  44.1 kHz.
+- Live testing of intermediate builds 75 and 76 proved that native tap-format
+  selection prevented the crash and Dashboard relaunch, but AVAudioEngine could
+  not start the 48 kHz USB input against the Bluetooth output's 44.1 kHz graph.
+  The pinned hardware format is therefore still required.
+- A small Objective-C boundary now converts AVAudioNode's otherwise-uncatchable
+  `installTap` format-mismatch exception into a normal Swift error. Vox can
+  safely reset the engine, reselect the pinned USB input, and retry with that
+  device's authoritative hardware format instead of aborting the process.
+- Focused regressions cover the exact first-tap rejection and pinned-device
+  reselection. Intermediate build 77 passed the literal BenQ output switch →
+  immediate Fn recording gate with the AT2020 pinned: the PID remained stable,
+  audio reached the tap, and transcription/paste completed. Build 78 contains
+  the same runtime code plus synchronized user Help and passed a post-install
+  AT2020 recording smoke with OontZ restored as the default output.
+- Verification: 468 macOS tests and 12 VoxCore tests pass; the dictation
+  regression reports quality `1.0` and failure rate `0.0`; strict codesign and
+  `hdiutil verify` pass. The 2,677,072-byte DMG is signed for Sparkle with EdDSA
+  signature `QN3Es5t8dusd6TlCVc4sJlKI9C0R6GbZYY9ck25Bsw67vPZF6vTLm0Uih1pEWGbNWgFwnaz8euue1uMvzFMnBg==`.
+
+## Unreleased 0.7.50 build 74: enforce pinned input and preserve dictated words
+
+- A pinned microphone is now reasserted as macOS's default input at Vox launch
+  and immediately before each dictation, in addition to AVAudioEngine binding.
+- Smart Cleanup now fails open whenever its response removes any dictated word;
+  punctuation and capitalization changes remain allowed. This prevents the
+  observed raw 14-word transcript from becoming an 8-word delivered result.
+- Build 74 is installed and running locally. `swift test` passes; live input
+  route and transcription smoke remain required on the affected Mac.
+
 Last updated: 2026-09-10
 
 ## Released 0.7.49 build 73: require literal prose transcription

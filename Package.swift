@@ -16,6 +16,11 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "AudioTapShim",
+            path: "Sources/AudioTapShim",
+            publicHeadersPath: "include"
+        ),
+        .target(
             name: "VoxCore",
             path: "Sources/VoxCore",
             exclude: ["Package.swift"],
@@ -24,6 +29,7 @@ let package = Package(
         .executableTarget(
             name: "vox",
             dependencies: [
+                "AudioTapShim",
                 "VoxCore",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
