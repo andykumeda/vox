@@ -1,6 +1,6 @@
 # Vox Handoff
 
-## Release candidate 0.7.59 build 83: recover route changes and low pinned-mic gain
+## Released 0.7.59 build 83: recover route changes and low pinned-mic gain
 
 - Switching the macOS output to the 44.1 kHz OontZ Bluetooth device and then
   pressing Fn reproduced a recorder failure while the AT2020USB-X remained the
@@ -34,6 +34,9 @@
   pass. The 2,684,511-byte DMG has Sparkle EdDSA signature
   `tjxvMGhC75yzh/tIlKsnH91pa09M0CFWh6bUu7FLvFAZo9kLLuX7x5mkFgygzq46PwAL94fAOJxtdWlYhuj3DQ==`
   and SHA-256 `a40faf07b851bae32207e21e3ea18330d3d2fccbb06cb1407cc74c2dfd68eb78`.
+- Tag `v0.7.59`, the GitHub release, and the public GitHub Pages appcast are
+  published. An anonymous download reproduced the expected byte length and
+  SHA-256, and `hdiutil verify` passed on that downloaded asset.
 
 Last updated: 2026-09-18
 
