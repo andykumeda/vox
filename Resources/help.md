@@ -4,7 +4,7 @@
 Hold **Fn** (default) and speak. Release to transcribe.
 Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-tap-start, one-tap-stop.
 A start sound plays before the microphone opens; a stop sound plays after you release. Vox prepares the start cue silently after launch so the first recording does not wait for a sleeping audio output. Change or silence either cue in Settings → Sounds.
-Choose Settings → Microphone to pin dictation to a specific input device. A pinned USB mic will not silently fall back to Bluetooth.
+Choose Settings → Microphone to pin dictation to a specific input device. A pinned USB mic will not silently fall back to Bluetooth. If another app leaves its writable macOS input level below 70%, Vox restores it to 75% before recording; normal levels and devices without software volume controls are unchanged.
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes

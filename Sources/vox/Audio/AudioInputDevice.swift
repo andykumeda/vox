@@ -106,6 +106,61 @@ enum AudioInputDevices {
         )
     }
 
+    /// Returns the system input-volume scalar for a microphone when Core Audio
+    /// exposes one. USB microphones commonly publish it on channel 1 rather
+    /// than on the main element.
+    static func inputVolumeScalar(for deviceID: AudioDeviceID) -> Float32? {
+        for element in [kAudioObjectPropertyElementMain, AudioObjectPropertyElement(1)] {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeInput,
+                mElement: element
+            )
+            var value: Float32 = 0
+            var size = UInt32(MemoryLayout<Float32>.size)
+            if AudioObjectGetPropertyData(
+                deviceID,
+                &address,
+                0,
+                nil,
+                &size,
+                &value
+            ) == noErr {
+                return value
+            }
+        }
+        return nil
+    }
+
+    /// Updates the system input-volume scalar when the microphone exposes a
+    /// writable control. Unsupported devices are left untouched.
+    @discardableResult
+    static func setInputVolumeScalar(_ requested: Float32, for deviceID: AudioDeviceID) -> Bool {
+        var value = min(max(requested, 0), 1)
+        for element in [kAudioObjectPropertyElementMain, AudioObjectPropertyElement(1)] {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeInput,
+                mElement: element
+            )
+            var settable = DarwinBoolean(false)
+            guard AudioObjectIsPropertySettable(deviceID, &address, &settable) == noErr,
+                  settable.boolValue
+            else { continue }
+            if AudioObjectSetPropertyData(
+                deviceID,
+                &address,
+                0,
+                nil,
+                UInt32(MemoryLayout<Float32>.size),
+                &value
+            ) == noErr {
+                return true
+            }
+        }
+        return false
+    }
+
     private static func defaultInputDeviceID() -> AudioDeviceID {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,

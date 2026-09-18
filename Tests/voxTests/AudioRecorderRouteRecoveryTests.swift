@@ -101,7 +101,8 @@ final class AudioRecorderRouteRecoveryTests: XCTestCase {
             resolveInputDevice: { uid in uid == "usb-mic-uid" ? 42 : nil },
             hardwareInputFormat: { _ in
                 AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)
-            }
+            },
+            routeRecoverySleep: { _ in }
         )
 
         try recorder.start()
@@ -111,6 +112,95 @@ final class AudioRecorderRouteRecoveryTests: XCTestCase {
         XCTAssertEqual(engine.tapInstallAttempts, 2)
         XCTAssertEqual(engine.selectedDeviceIDs, [42, 42])
         XCTAssertEqual(engine.startAttempts, 1)
+    }
+
+    func testPinnedInputRecoversWhenFirstDeviceSelectionIsRejectedDuringOutputRouteChange() throws {
+        let engine = RouteChangingAudioEngine(
+            initialSampleRate: 48_000,
+            settledSampleRate: 48_000,
+            failFirstStart: false,
+            failFirstSelection: true
+        )
+        let recorder = AudioRecorder(
+            mode: "prose",
+            engine: engine,
+            selectedInputDeviceUID: { "usb-mic-uid" },
+            resolveInputDevice: { uid in uid == "usb-mic-uid" ? 42 : nil },
+            hardwareInputFormat: { _ in
+                AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)
+            }
+        )
+
+        try recorder.start()
+        let recordingURL = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: recordingURL) }
+
+        XCTAssertEqual(engine.selectedDeviceIDs, [42, 42])
+        XCTAssertEqual(engine.tapInstallAttempts, 1)
+        XCTAssertEqual(engine.startAttempts, 1)
+    }
+
+    func testPinnedInputRestoresSafeGainWhenAnotherAppLeavesItTooLow() throws {
+        let engine = RouteChangingAudioEngine(
+            initialSampleRate: 48_000,
+            settledSampleRate: 48_000,
+            failFirstStart: false
+        )
+        var inputVolume: Float32 = 0.25
+        var requestedVolumes: [Float32] = []
+        let recorder = AudioRecorder(
+            mode: "prose",
+            engine: engine,
+            selectedInputDeviceUID: { "usb-mic-uid" },
+            resolveInputDevice: { uid in uid == "usb-mic-uid" ? 42 : nil },
+            hardwareInputFormat: { _ in
+                AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)
+            },
+            inputVolumeScalar: { _ in inputVolume },
+            setInputVolumeScalar: { _, requested in
+                requestedVolumes.append(requested)
+                inputVolume = requested
+                return true
+            }
+        )
+
+        try recorder.start()
+        let recordingURL = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: recordingURL) }
+
+        XCTAssertEqual(requestedVolumes.count, 1)
+        let requestedVolume = try XCTUnwrap(requestedVolumes.first)
+        XCTAssertEqual(requestedVolume, 0.75, accuracy: 0.001)
+        XCTAssertEqual(inputVolume, 0.75, accuracy: 0.001)
+    }
+
+    func testPinnedInputPreservesExistingHealthyGain() throws {
+        let engine = RouteChangingAudioEngine(
+            initialSampleRate: 48_000,
+            settledSampleRate: 48_000,
+            failFirstStart: false
+        )
+        var requestedVolumes: [Float32] = []
+        let recorder = AudioRecorder(
+            mode: "prose",
+            engine: engine,
+            selectedInputDeviceUID: { "usb-mic-uid" },
+            resolveInputDevice: { uid in uid == "usb-mic-uid" ? 42 : nil },
+            hardwareInputFormat: { _ in
+                AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)
+            },
+            inputVolumeScalar: { _ in 0.80 },
+            setInputVolumeScalar: { _, requested in
+                requestedVolumes.append(requested)
+                return true
+            }
+        )
+
+        try recorder.start()
+        let recordingURL = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: recordingURL) }
+
+        XCTAssertTrue(requestedVolumes.isEmpty)
     }
 
     func testStartFailsInsteadOfFallingBackWhenPinnedInputIsUnavailable() {
@@ -140,6 +230,7 @@ final class AudioRecorderRouteRecoveryTests: XCTestCase {
 private enum RouteChangingAudioEngineError: Error {
     case firstStartFailed
     case firstTapFailed
+    case firstSelectionFailed
 }
 
 private final class RouteChangingAudioEngine: AudioEngineControlling {
@@ -154,13 +245,15 @@ private final class RouteChangingAudioEngine: AudioEngineControlling {
     private(set) var operations: [String] = []
     private let failFirstStart: Bool
     private let failFirstTap: Bool
+    private let failFirstSelection: Bool
     var isRunning = false
 
     init(
         initialSampleRate: Double,
         settledSampleRate: Double,
         failFirstStart: Bool,
-        failFirstTap: Bool = false
+        failFirstTap: Bool = false,
+        failFirstSelection: Bool = false
     ) {
         initialFormat = AVAudioFormat(
             standardFormatWithSampleRate: initialSampleRate,
@@ -172,6 +265,7 @@ private final class RouteChangingAudioEngine: AudioEngineControlling {
         )!
         self.failFirstStart = failFirstStart
         self.failFirstTap = failFirstTap
+        self.failFirstSelection = failFirstSelection
     }
 
     func inputFormat() -> AVAudioFormat {
@@ -184,6 +278,9 @@ private final class RouteChangingAudioEngine: AudioEngineControlling {
     func selectInputDevice(_ deviceID: AudioDeviceID) throws {
         operations.append("select")
         selectedDeviceIDs.append(deviceID)
+        if failFirstSelection && selectedDeviceIDs.count == 1 {
+            throw RouteChangingAudioEngineError.firstSelectionFailed
+        }
     }
 
     func installInputTap(

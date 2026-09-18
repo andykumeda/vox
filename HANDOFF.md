@@ -1,5 +1,42 @@
 # Vox Handoff
 
+## Release candidate 0.7.59 build 83: recover route changes and low pinned-mic gain
+
+- Switching the macOS output to the 44.1 kHz OontZ Bluetooth device and then
+  pressing Fn reproduced a recorder failure while the AT2020USB-X remained the
+  pinned 48 kHz input. This occurrence did not crash: Core Audio rejected the
+  first `kAudioOutputUnitProperty_CurrentDevice` selection with OSStatus
+  `1852797029` (`'nope'`), Vox played the error cue, and the same PID remained
+  running.
+- The existing route recovery handled transient tap-install and engine-start
+  failures only after pinned-device selection succeeded. Selection now gets
+  two bounded retries after 50 ms and 150 ms engine-settling intervals. Vox
+  still fails safely instead of falling back to another microphone.
+- The failed live retry exposed a separate cause: the AT2020USB-X system input
+  level was 25%, producing a valid but floor-level recording that Vox correctly
+  rejected as silence. Webex can mask that condition with automatic gain during
+  a meeting while the underlying system level remains too low afterward.
+- Before recording with a pinned microphone, Vox now checks its writable Core
+  Audio input-volume control. A level below 70% is restored to 75%; a healthy
+  level or a device without software gain remains untouched. The same guard is
+  applied if route recovery has to reselect the microphone.
+- Focused regressions cover initial pinned-device rejection, low-gain recovery,
+  and preservation of an existing healthy level. `swift test` passes with 479
+  macOS tests and 12 VoxCore tests; dictation regression passes with quality
+  `1.0` and failure rate `0.0`.
+- Build 83 / version 0.7.59 passed the decisive low-gain smoke after setting the
+  AT2020USB-X to 25%: Vox read 24.7%, restored it to 74.5%, captured 4.64 s with
+  RMS 1627 and 3.1 voiced seconds, received HTTP 200 transcription, and pasted
+  13 words in 2.97 s. A second dictation succeeded without changing the
+  now-healthy level. PID 97947 remained stable throughout.
+- The candidate and installed app share Apple Development team `852LS98PQ9`
+  and the same designated requirement. Strict codesign and `hdiutil verify`
+  pass. The 2,684,511-byte DMG has Sparkle EdDSA signature
+  `tjxvMGhC75yzh/tIlKsnH91pa09M0CFWh6bUu7FLvFAZo9kLLuX7x5mkFgygzq46PwAL94fAOJxtdWlYhuj3DQ==`
+  and SHA-256 `a40faf07b851bae32207e21e3ea18330d3d2fccbb06cb1407cc74c2dfd68eb78`.
+
+Last updated: 2026-09-18
+
 ## Unreleased: reject invented semicolons in Smart Cleanup
 
 - Smart Cleanup now preserves an existing semicolon but fails open to the raw

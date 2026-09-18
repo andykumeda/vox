@@ -99,6 +99,9 @@ private final class SystemAudioEngine: AudioEngineControlling {
 /// until `stop()` patches them; see `RecordingArchive.repairOrphans` for the
 /// crash-recovery path.
 public final class AudioRecorder {
+    private static let minimumPinnedInputVolume: Float32 = 0.70
+    private static let restoredPinnedInputVolume: Float32 = 0.75
+
     /// Single long-lived engine, reused across recordings. The 0.6.0 build
     /// recreated this on every `start()` to clear post-meeting silent-buffer
     /// state, but that pattern deadlocked AVAudioEngine internally
@@ -111,6 +114,9 @@ public final class AudioRecorder {
     private let selectedInputDeviceUID: () -> String?
     private let resolveInputDevice: (String) -> AudioDeviceID?
     private let hardwareInputFormat: (AudioDeviceID) -> AVAudioFormat?
+    private let inputVolumeScalar: (AudioDeviceID) -> Float32?
+    private let setInputVolumeScalar: (AudioDeviceID, Float32) -> Bool
+    private let routeRecoverySleep: (TimeInterval) -> Void
     private var converter: AVAudioConverter?
     private let targetSampleRate: Double = 16_000
     private let lock = NSLock()
@@ -127,7 +133,9 @@ public final class AudioRecorder {
             engine: SystemAudioEngine(),
             selectedInputDeviceUID: { AppSettings.audioInputDeviceUID },
             resolveInputDevice: { AudioInputDevices.deviceID(forUID: $0) },
-            hardwareInputFormat: { AudioInputDevices.hardwareInputFormat(for: $0) }
+            hardwareInputFormat: { AudioInputDevices.hardwareInputFormat(for: $0) },
+            inputVolumeScalar: { AudioInputDevices.inputVolumeScalar(for: $0) },
+            setInputVolumeScalar: { AudioInputDevices.setInputVolumeScalar($1, for: $0) }
         )
     }
 
@@ -136,13 +144,19 @@ public final class AudioRecorder {
         engine: AudioEngineControlling,
         selectedInputDeviceUID: @escaping () -> String? = { nil },
         resolveInputDevice: @escaping (String) -> AudioDeviceID? = { _ in nil },
-        hardwareInputFormat: @escaping (AudioDeviceID) -> AVAudioFormat? = { _ in nil }
+        hardwareInputFormat: @escaping (AudioDeviceID) -> AVAudioFormat? = { _ in nil },
+        inputVolumeScalar: @escaping (AudioDeviceID) -> Float32? = { _ in nil },
+        setInputVolumeScalar: @escaping (AudioDeviceID, Float32) -> Bool = { _, _ in false },
+        routeRecoverySleep: @escaping (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) {
         self.mode = mode
         self.engine = engine
         self.selectedInputDeviceUID = selectedInputDeviceUID
         self.resolveInputDevice = resolveInputDevice
         self.hardwareInputFormat = hardwareInputFormat
+        self.inputVolumeScalar = inputVolumeScalar
+        self.setInputVolumeScalar = setInputVolumeScalar
+        self.routeRecoverySleep = routeRecoverySleep
     }
 
     public func requestPermission() async -> Bool {
@@ -192,12 +206,39 @@ public final class AudioRecorder {
             guard let deviceID = resolveInputDevice(uid) else {
                 throw AudioRecorderError.inputDeviceUnavailable(uid)
             }
-            do {
-                try engine.selectInputDevice(deviceID)
-                dlog("AudioRecorder.start pinned input uid=\(uid) deviceID=\(deviceID)")
-            } catch {
-                throw AudioRecorderError.inputDeviceSelectionFailed(uid, error)
+            var selectionError: Error?
+            let retryDelays: [TimeInterval] = [0, 0.05, 0.15]
+            for (attempt, delay) in retryDelays.enumerated() {
+                if delay > 0 {
+                    engine.stop()
+                    engine.removeInputTap()
+                    engine.reset()
+                    routeRecoverySleep(delay)
+                }
+                do {
+                    try engine.selectInputDevice(deviceID)
+                    if attempt > 0 {
+                        dlog(
+                            "AudioRecorder.start recovered pinned input selection uid=\(uid) "
+                                + "deviceID=\(deviceID) attempt=\(attempt + 1)"
+                        )
+                    } else {
+                        dlog("AudioRecorder.start pinned input uid=\(uid) deviceID=\(deviceID)")
+                    }
+                    selectionError = nil
+                    break
+                } catch {
+                    selectionError = error
+                    dlog(
+                        "AudioRecorder.start pinned input selection rejected uid=\(uid) "
+                            + "deviceID=\(deviceID) attempt=\(attempt + 1)"
+                    )
+                }
             }
+            if let selectionError {
+                throw AudioRecorderError.inputDeviceSelectionFailed(uid, selectionError)
+            }
+            restorePinnedInputVolumeIfNeeded(uid: uid, deviceID: deviceID)
             guard let format = hardwareInputFormat(deviceID) else {
                 throw AudioRecorderError.inputDeviceFormatUnavailable(uid)
             }
@@ -261,6 +302,10 @@ public final class AudioRecorder {
             if let pinnedSelection {
                 do {
                     try engine.selectInputDevice(pinnedSelection.deviceID)
+                    restorePinnedInputVolumeIfNeeded(
+                        uid: pinnedSelection.uid,
+                        deviceID: pinnedSelection.deviceID
+                    )
                     dlog(
                         "AudioRecorder.start reselected pinned input uid=\(pinnedSelection.uid) "
                             + "deviceID=\(pinnedSelection.deviceID) after route change"
@@ -304,6 +349,23 @@ public final class AudioRecorder {
             }
         }
         isRecording = true
+    }
+
+    private func restorePinnedInputVolumeIfNeeded(uid: String, deviceID: AudioDeviceID) {
+        guard let current = inputVolumeScalar(deviceID),
+              current < Self.minimumPinnedInputVolume
+        else { return }
+
+        let success = setInputVolumeScalar(deviceID, Self.restoredPinnedInputVolume)
+        let readback = inputVolumeScalar(deviceID)
+        let currentText = String(format: "%.3f", current)
+        let targetText = String(format: "%.3f", Self.restoredPinnedInputVolume)
+        let readbackText = readback.map { String(format: "%.3f", $0) } ?? "unavailable"
+        dlog(
+            "AudioRecorder.start restored low pinned input volume uid=\(uid) "
+                + "deviceID=\(deviceID) from=\(currentText) target=\(targetText) "
+                + "success=\(success) readback=\(readbackText)"
+        )
     }
 
     /// Stops capture, finalises the WAV header on disk, and returns the URL.
