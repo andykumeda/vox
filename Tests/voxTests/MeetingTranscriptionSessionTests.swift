@@ -744,7 +744,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             transcribe: { _, _, _ in [] },
             provider: { .deepgram },
             apiKey: { nil },
-            deepgramAPIKey: { "dg-test" },
+            deepgramAPIKey: { "dg-test" }
         )
 
         try await session.start()
@@ -758,7 +758,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             transcribe: { _, _, _ in [] },
             provider: { .deepgram },
             apiKey: { "sk-openai-only" },
-            deepgramAPIKey: { nil },
+            deepgramAPIKey: { nil }
         )
         do {
             try await missingDeepgramKey.start()

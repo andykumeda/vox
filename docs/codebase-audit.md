@@ -37,6 +37,9 @@ Allowed states: `Not started`, `In progress`, `Blocked`, `Verified`, `Deployed`.
   changes and found no integration blockers. The existing Sendable capture
   warning and async test-lock warnings remain; this is a Swift 5 language-mode
   package, not a completed Swift 6 concurrency migration.
+- The first GitHub Dictation Regression run exposed two trailing argument-list
+  commas accepted by Xcode 27 but rejected by the workflow's Swift 6.0.3
+  compiler. The test syntax was corrected and the workflow rerun.
 - Public Sparkle remains `0.7.59` / `83`. The cleanup is installed and running
   locally as unreleased `0.7.61` / `85`; its executable and bundled Help match
   the built app, strict code-signature verification passes, Accessibility and

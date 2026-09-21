@@ -14,6 +14,10 @@
   test-only paths. Fixed first-use dictionary persistence, number overflow, and
   Unicode capitalization crashes. `swift test` passes 458 macOS + 12 VoxCore
   tests; the seven-fixture dictation regression and generic iOS build pass.
+- GitHub's Swift 6.0.3 runner initially rejected two trailing argument-list
+  commas accepted by the local Xcode 27 compiler. The compatibility syntax was
+  corrected in the meeting-session tests and the Dictation Regression workflow
+  was rerun rather than treating the failed check as a product regression.
 - The ledger records open paste-concurrency, silent-meeting upload, provider
   stream, and iOS lifecycle findings. These were not silently treated as fixed.
 - iOS remains a Focused MVP with the physical Notes keyboard → host → return →
