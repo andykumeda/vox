@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Creates a persistent self-signed code-signing identity named "vox-dev" in
-# the login keychain. Signing every rebuild with the same identity keeps
-# macOS TCC (Accessibility / Input Monitoring / Microphone) permissions
-# sticky across rebuilds — instead of being revoked each time the ad-hoc
-# CDHash changes.
+# the login keychain as a fallback when no Apple team identity is available.
+# The build script pins its designated requirement to help retain TCC grants,
+# but macOS may still require permissions or Keychain access after a rebuild.
+# Prefer Apple Development or Developer ID for stable Keychain authorization.
 #
 # Run ONCE per machine. Idempotent: if the identity already exists, prints
 # a note and exits 0.
@@ -41,16 +41,15 @@ if sudo -n true 2>/dev/null; then
         done
 fi
 
-TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+CERT_WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$CERT_WORK_DIR"' EXIT
 
-KEY="$TMPDIR/key.pem"
-CSR="$TMPDIR/req.csr"
-CRT="$TMPDIR/cert.pem"
-P12="$TMPDIR/cert.p12"
+KEY="$CERT_WORK_DIR/key.pem"
+CRT="$CERT_WORK_DIR/cert.pem"
+P12="$CERT_WORK_DIR/cert.p12"
 P12_PASS="vox"
 
-CONFIG="$TMPDIR/openssl.cnf"
+CONFIG="$CERT_WORK_DIR/openssl.cnf"
 cat > "$CONFIG" <<EOF
 [ req ]
 distinguished_name = req_dn
@@ -109,5 +108,5 @@ fi
 
 echo
 echo "✓ identity '$IDENT_NAME' created."
-echo "  Rerun ./scripts/build-app.sh — it will now sign with this identity."
-echo "  Grant TCC permissions once; they persist across rebuilds."
+echo "  Rerun ./scripts/build-app.sh — it uses this identity when no Apple team identity is available."
+echo "  Verify TCC permissions and Keychain access after each rebuild."

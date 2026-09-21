@@ -1,13 +1,15 @@
 # Remote Dictation Status
 
-Last reviewed: 2026-08-09.
+Source audit: 2026-09-20. This audit did not rerun live remote-client insertion.
 
 ## Current Status
 
-Remote dictation inserts the current recording through formatting-preserving
-paths. Paste is asynchronous so remote clipboard waits do not block the main
-actor or menu flow. Paste operations (fresh dictation and Paste Last) are
-serialized.
+Remote dictation has target-specific insertion paths intended to preserve
+formatting. Paste is asynchronous so remote clipboard waits do not block the
+main actor or menu flow. Fresh dictation and Paste Last share `PasteGate`, but
+its actor awaits each operation and permits reentrancy: overlapping operations
+are not guaranteed to serialize. Rapid completed dictations and Paste Last
+therefore remain a clipboard/interleaving caveat requiring live validation.
 
 Current behavior:
 
@@ -47,7 +49,7 @@ shifted characters instead of Caps Lock mangling.
   physical fallback.
 - `.parsec` System Events text first; then wait + remote `Cmd+V`; Unicode-backed
   physical fallback.
-- `.remoteControl` Shift-modified physical typing for ordinary local apps only
+- `.remoteControl` physical typing for ordinary local apps only
   (not when a specialized viewer is frontmost).
 - `ignoreRecordHotkey` disables only the record hotkey on that Mac.
 
@@ -55,6 +57,16 @@ Remote targets skip restoring the previous clipboard:
 `.screenSharing`, `.rustDesk`, `.parsec`, `.remoteControl`.
 
 Remote Control Mode key: `UserDefaults` `remoteControlModeEnabled`.
+
+## Verification boundary
+
+Target-selection and helper tests do not prove delivery to a remote editor.
+For any future insertion change, repeat literal capitalization and punctuation
+(including `?`), two successive dictations, Paste Last, clipboard lag, and focus
+changes on each affected viewer. Check the inserted text, not just a successful
+AppleScript or event-posting return. Suffix-key events are scheduled separately
+from the text paste; a paste abort does not prove those later events were
+suppressed.
 
 ## Historical Failure Modes (do not re-debug blindly)
 

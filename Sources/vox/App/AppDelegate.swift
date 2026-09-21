@@ -19,8 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Relocator.offerMoveToApplicationsIfNeeded()
         AutoRelaunch.installAndHandOffIfNeeded()
-        // Patch headers on any dictation WAVs left half-finished by a prior crash.
-        RecordingArchive.repairOrphans()
         let transcriptStore = MeetingTranscriptStore()
         transcriptStore.recoverInFlightSessions()
         let dictDeleted = RecordingArchive.purgeOlderThan(.distantFuture)

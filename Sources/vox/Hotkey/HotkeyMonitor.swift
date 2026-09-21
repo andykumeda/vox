@@ -7,7 +7,7 @@ import Foundation
 /// Emits press / release / mode-toggle callbacks on the main queue.
 public final class HotkeyMonitor {
     /// `verbatim` is true when the user pressed the record hotkey while
-    /// holding Option — signals "skip cleanup, paste raw transcript".
+    /// holding Option — skips Smart Cleanup while preserving mode formatting.
     public var onRecordPress: ((_ verbatim: Bool) -> Void)?
     public var onRecordRelease: (() -> Void)?
     public var onModeToggle: (() -> Void)?
@@ -24,7 +24,6 @@ public final class HotkeyMonitor {
 
     private var isRecordActive = false            // pressHold-held or tapToggle-on
     private var pressedKeycode: UInt16?           // captured at keyDown, used at keyUp
-    private var pressedVerbatim = false           // captured at press, replayed for telemetry only
     private var lastModeToggleAt: CFAbsoluteTime = 0
     private var lastMeetingToggleAt: CFAbsoluteTime = 0
     private var lastPasteLastAt: CFAbsoluteTime = 0
@@ -201,19 +200,16 @@ public final class HotkeyMonitor {
             }()
             if isMatch && !isRecordActive {
                 isRecordActive = true
-                pressedVerbatim = verbatim
                 DispatchQueue.main.async { [weak self] in self?.onRecordPress?(verbatim) }
             } else if !isMatch && isRecordActive && isModifierKey {
                 isRecordActive = false
                 pressedKeycode = nil
-                pressedVerbatim = false
                 DispatchQueue.main.async { [weak self] in self?.onRecordRelease?() }
             }
         case .keyDown:
             if isMatch && !isRecordActive {
                 isRecordActive = true
                 pressedKeycode = keycode
-                pressedVerbatim = verbatim
                 DispatchQueue.main.async { [weak self] in self?.onRecordPress?(verbatim) }
             }
         case .keyUp:
@@ -222,7 +218,6 @@ public final class HotkeyMonitor {
             if let kc = keycode, kc == pressedKeycode, isRecordActive {
                 isRecordActive = false
                 pressedKeycode = nil
-                pressedVerbatim = false
                 DispatchQueue.main.async { [weak self] in self?.onRecordRelease?() }
             }
         default:
@@ -255,16 +250,14 @@ public final class HotkeyMonitor {
         let verbatim = flags.contains(.maskAlternate)
         isRecordActive.toggle()
         if isRecordActive {
-            pressedVerbatim = verbatim
             DispatchQueue.main.async { [weak self] in self?.onRecordPress?(verbatim) }
         } else {
-            pressedVerbatim = false
             DispatchQueue.main.async { [weak self] in self?.onRecordRelease?() }
         }
     }
 
 
-    // MARK: - Static helper (kept from HK3)
+    // MARK: - Binding matching
 
     public static func matches(keycode: UInt16?, flags: CGEventFlags, hotkey: Hotkey) -> Bool {
         guard hotkey.enabled else { return false }

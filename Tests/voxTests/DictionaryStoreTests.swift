@@ -36,6 +36,23 @@ final class DictionaryStoreTests: XCTestCase {
             atPath: tempDir.appendingPathComponent("dictionary.json").path))
     }
 
+    func testFirstUserEntryCreatesMissingDictionaryDirectory() throws {
+        let url = tempDir.appendingPathComponent("Dictionary/dictionary.json")
+        let store = DictionaryStore(fileURL: url, bundledDefaults: [])
+        store.load()
+        let entry = DictionaryEntry(
+            id: "first-mobile-entry", spoken: "box", replacement: "Vox", mode: .prose
+        )
+
+        store.add(entry)
+
+        XCTAssertNil(store.saveError)
+        let reloaded = DictionaryStore(fileURL: url, bundledDefaults: [])
+        reloaded.load()
+        XCTAssertNil(reloaded.loadError)
+        XCTAssertEqual(reloaded.entries, [entry])
+    }
+
     func testUpgradeAddsMissingBuiltinIds() throws {
         // Pre-populate file with only one of two defaults.
         let url = tempDir.appendingPathComponent("dictionary.json")

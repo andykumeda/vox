@@ -190,14 +190,14 @@ struct SettingsView: View {
                 Text("Auto: dictation in Terminal/iTerm/Wave/etc gets command formatting (no period, no caps, dash/NATO/control); other apps get prose with sentence punctuation. Always prose: every dictation is formatted as prose. Always command: every dictation is formatted as a shell command. The mode-toggle hotkey switches directly between Always prose and Always command.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Smart cleanup (prose mode): remove false starts and self-corrections via gpt-4o-mini", isOn: Binding(
+                Toggle("Smart Cleanup (prose mode): apply spoken corrections and refine punctuation", isOn: Binding(
                     get: { smartCleanup },
                     set: { newValue in
                         smartCleanup = newValue
                         AppSettings.smartCleanupEnabled = newValue
                     }
                 ))
-                Text("Adds ~$0.0001 and ~1s latency per dictation. Triggers ('scratch that', 'new paragraph', 'new line') also activate when enabled.")
+                Text("Spoken corrections and layout commands run first. Then gpt-4o-mini may adjust punctuation and capitalization while preserving every remaining word. Adds a small API cost and processing delay.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -223,7 +223,7 @@ struct SettingsView: View {
                         meetingBackendStatus = MeetingPreflight.backendStatusProvider()
                     }
                 ))
-                Text("Adds Start/Stop Meeting Transcript actions to the menu bar. Off by default. Does not affect dictation.")
+                Text("Enables recording from the Meeting panel. Open Meeting from the menu or use the meeting hotkey, then click Record or Stop. Off by default.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -298,7 +298,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Recordings storage")
                     .font(.headline)
-                Text("Audio is temporary. Dictation and meeting recordings are deleted when processing reaches a terminal state; encrypted transcript history is retained according to the history setting.")
+                Text("Audio is temporary. Dictation and meeting recordings are deleted when processing finishes, fails, or is cancelled. Dictation history follows the retention setting below; meeting transcripts stay until you delete them.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 6) {
@@ -357,7 +357,7 @@ struct SettingsView: View {
                         DictationHistoryStore.shared.clear()
                     }
                 }
-                Text("Older entries are pruned automatically. \"Forever\" never prunes.")
+                Text("Older entries are pruned when the next dictation is saved. \"Forever\" never prunes. This setting does not delete meeting transcripts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -950,25 +950,4 @@ private func keyName(forKeycode kc: UInt16) -> String {
         UInt16(kVK_Tab): "Tab", UInt16(kVK_Escape): "Esc",
     ]
     return map[kc] ?? "key(\(kc))"
-}
-
-final class SettingsWindowController: NSWindowController {
-    convenience init(keychain: KeychainStore) {
-        let hosting = NSHostingController(rootView: SettingsView(keychain: keychain))
-        let window = NSWindow(contentViewController: hosting)
-        window.title = "Vox"
-        window.styleMask = [.titled, .closable]
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        window.level = .floating
-        self.init(window: window)
-    }
-
-    func show() {
-        NSApp.activate(ignoringOtherApps: true)
-        showWindow(nil)
-        window?.center()
-        window?.orderFrontRegardless()
-        window?.makeKeyAndOrderFront(nil)
-    }
 }

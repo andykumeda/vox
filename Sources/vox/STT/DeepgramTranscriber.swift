@@ -18,9 +18,9 @@ public enum DeepgramError: Error, CustomStringConvertible {
     }
 }
 
-/// Submits a single mixed meeting audio file to Deepgram with diarization
-/// enabled. The whole meeting is one request so speaker IDs are stable
-/// across the entire transcript (chunking would reset numbering per call).
+/// Submits one meeting audio stream to Deepgram with diarization enabled.
+/// Each stream is a whole-meeting request so remote speaker IDs remain stable;
+/// the session transcribes local mic audio separately and labels it as You.
 public struct DeepgramTranscriber {
     public static let endpoint = URL(string:
         "https://api.deepgram.com/v1/listen?model=nova-3&diarize=true" +

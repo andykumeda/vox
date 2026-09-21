@@ -4,9 +4,8 @@ import Foundation
 
 /// Pollable meeting auto-detector. Watches running apps + their on-screen
 /// window titles, fires `onMeetingStarted` when a known meeting app shows
-/// a meeting-pattern window. Fires `onMeetingEnded` when no meeting signal
-/// has been seen for several consecutive polls (hysteresis prevents
-/// flicker during window switches).
+/// a meeting-pattern window. Resets detection after several consecutive
+/// polls without a meeting signal so a later call can show the panel again.
 ///
 /// Detection is title-based and heuristic. False positives are tolerable
 /// because the only consequence is the floating Meeting panel showing —
@@ -20,7 +19,6 @@ public final class MeetingDetector {
     public typealias Callback = () -> Void
 
     public var onMeetingStarted: Callback?
-    public var onMeetingEnded: Callback?
 
     private var timer: Timer?
     private var inMeeting: Bool = false
@@ -49,8 +47,6 @@ public final class MeetingDetector {
         inMeeting = false
         missCount = 0
     }
-
-    public var isInMeeting: Bool { inMeeting }
 
     private func tick() {
         let runningApps = NSWorkspace.shared.runningApplications
@@ -92,7 +88,6 @@ public final class MeetingDetector {
                 inMeeting = false
                 missCount = 0
                 dlog("MeetingDetector: ended (hysteresis cleared)")
-                onMeetingEnded?()
             }
         }
     }
@@ -190,13 +185,6 @@ public final class MeetingDetector {
         "/_#/meetingjoin/",
         "/l/meetup-join/",
     ]
-
-    static func detectActiveMeeting(
-        runningApps: [NSRunningApplication],
-        windows: [(owner: String, title: String)]
-    ) -> Bool {
-        firstMatchingWindow(runningApps: runningApps, windows: windows) != nil
-    }
 
     /// Returns the first window whose owner is a known meeting app and
     /// whose title matches a meeting pattern, or nil. Window titles may

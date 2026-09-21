@@ -59,14 +59,6 @@ public enum SoundCue: String, CaseIterable, Sendable {
     case start
     case stop
     case error
-
-    public var defaultSound: SystemAlertSound {
-        switch self {
-        case .start: return .startDefault
-        case .stop: return .stopDefault
-        case .error: return .errorDefault
-        }
-    }
 }
 
 public final class SoundPlayer: @unchecked Sendable {

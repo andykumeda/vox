@@ -40,7 +40,7 @@ public struct CleanupProcessor {
         // dictations as chat requests ("Sure, please provide the text…")
         // because the system prompt looks like a meta-instruction in
         // isolation. Skip the LLM for snippets too short to need cleanup —
-        // there's nothing meaningful to remove at this scale anyway.
+        // there's little punctuation or capitalization to adjust at this scale.
         if trimmed.count < 15 {
             return triggered
         }
@@ -55,17 +55,8 @@ public struct CleanupProcessor {
 
         guard let cleaner = llmCleaner else { return triggered }
 
-        // Placeholder swap kept for any future case where input arrives with
-        // newlines that didn't come from triggers (currently unreachable because
-        // triggers are the only newline source — cheap insurance).
-        let paraToken = "<<VOX_PARA>>"
-        let lineToken = "<<VOX_LINE>>"
-        let prepared = triggered
-            .replacingOccurrences(of: "\n\n", with: paraToken)
-            .replacingOccurrences(of: "\n", with: lineToken)
-
         do {
-            let cleaned = try await cleaner(prepared)
+            let cleaned = try await cleaner(triggered)
             let trimmedCleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
             // Suspicious-small-output guard: if the LLM returns far less than we sent,
             // treat it as a malformed completion and fail open. Threshold tuned to allow
@@ -89,12 +80,9 @@ public struct CleanupProcessor {
                 dlog("Cleanup expanded response discarded (words \(cleanedWords) > input \(inputWords) + 2)")
                 return triggered
             }
-            // Smart Cleanup is intentionally deletion-only at the lexical
-            // boundary. It may remove fillers, false starts, or superseded
-            // wording and may adjust punctuation/capitalization, but any new
-            // word could be an answer, explanation, or invented fact. Fail
-            // open to the dictated text rather than trying to enumerate every
-            // shape an assistant-style response can take.
+            // Cleanup may adjust punctuation and capitalization, but any new
+            // word could be an answer, explanation, or invented fact. The
+            // following omission guard also preserves every dictated word.
             if introducesNewLexicalContent(trimmedCleaned, comparedWith: triggered) {
                 let metrics = textLogMetrics(label: "response", text: trimmedCleaned)
                 dlog("Cleanup novel content discarded (\(metrics))")
@@ -115,10 +103,7 @@ public struct CleanupProcessor {
                 dlog("Cleanup assistant response discarded (\(metrics))")
                 return triggered
             }
-            let restored = trimmedCleaned
-                .replacingOccurrences(of: paraToken, with: "\n\n")
-                .replacingOccurrences(of: lineToken, with: "\n")
-            return restored
+            return trimmedCleaned
         } catch {
             dlog("Cleanup error: \(error)")
             return triggered

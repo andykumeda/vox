@@ -123,15 +123,6 @@ public final class DictationHistoryStore {
         }
     }
 
-    public func purgeOlderThan(_ date: Date) {
-        queue.async { [weak self] in
-            guard let self else { return }
-            guard case .success(let entries) = self.readAll() else { return }
-            let kept = entries.filter { $0.timestamp >= date }
-            self.writeAll(kept)
-        }
-    }
-
     private func readAll() -> ReadResult {
         if !FileManager.default.fileExists(atPath: fileURL.path),
            let legacyURL,

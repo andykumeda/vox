@@ -3,18 +3,6 @@ import XCTest
 
 final class MeetingDetectorTests: XCTestCase {
 
-    private struct StubApp {
-        let name: String
-    }
-
-    private func runningWith(_ names: [String]) -> [NSRunningApplication] {
-        // We can't construct NSRunningApplication; tests directly call the
-        // pure detection function with a custom shape. Detector accepts
-        // [NSRunningApplication], so we exercise pattern-matching via the
-        // helper `matchesAny` and the pattern lists themselves.
-        return []
-    }
-
     // MARK: - matchesAny
 
     func testMatchesAnyHitsSingleSubstring() {

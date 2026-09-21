@@ -9,8 +9,8 @@ public enum MainWindowNavigationSource: String, Equatable {
 }
 
 /// Primary window for Vox. Sidebar nav with Home / Meeting / Settings /
-/// Personalization / Help. Auto-opens on launch and reappears on menu-bar icon
-/// click. Closing the window
+/// Personalization / Help. Auto-opens on launch and opens from menu commands.
+/// Closing the window
 /// hides it (does not quit) so dictation hotkeys keep working in the background.
 @MainActor
 public final class MainWindowController: NSObject, NSWindowDelegate {
@@ -34,12 +34,6 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
     }
     public func showMeeting() { showWindow(section: .meeting, source: .programmatic) }
     public func showHelp()    { showWindow(section: .help, source: .programmatic) }
-
-    public func showDictionary() {
-        selection.selectDictionary()
-        showWindow()
-        handleSelectionChange(.personalization, source: .programmatic)
-    }
 
     public func showSettings(source: MainWindowNavigationSource) {
         guard Self.allowsSettingsNavigation(from: source) else {
@@ -143,11 +137,6 @@ final class SidebarSelection: ObservableObject {
     func selectSettings() {
         current = .settings
     }
-
-    func selectDictionary() {
-        personalizationDestination = .dictionary
-        current = .personalization
-    }
 }
 
 private struct MainWindowRootView: View {
@@ -248,7 +237,7 @@ enum PersonalizationDestination: String, Hashable, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Destination placeholders (filled in by subsequent migrations)
+// MARK: - Sidebar destinations
 
 private struct HomeView: View {
     @State private var totals: UsageTotals = UsageTracker.totals()
@@ -460,17 +449,4 @@ private struct PersonalizationDestinationView: View {
 
 private struct HelpDestinationView: View {
     var body: some View { HelpView() }
-}
-
-private struct Placeholder: View {
-    let title: String
-    let note: String
-    var body: some View {
-        VStack(spacing: 12) {
-            Text(title).font(.title)
-            Text(note).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-    }
 }

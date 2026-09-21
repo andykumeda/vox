@@ -144,22 +144,24 @@ public struct PostProcessor {
     }
 
     private func capitalizeSentenceStarts(_ input: String) -> String {
-        var chars = Array(input)
+        var result = ""
         var capitalizeNext = true
-        for i in chars.indices {
-            let ch = chars[i]
+        for ch in input {
             if ch.isLetter {
-                if capitalizeNext {
-                    chars[i] = Character(ch.uppercased())
+                // Unicode uppercase mappings can expand to multiple characters
+                // (for example, ß → SS). Preserve the whole mapped spelling.
+                result.append(contentsOf: capitalizeNext ? ch.uppercased() : String(ch))
+                capitalizeNext = false
+            } else {
+                result.append(ch)
+                if ch == "." || ch == "!" || ch == "?" {
+                    capitalizeNext = true
+                } else if !ch.isWhitespace {
                     capitalizeNext = false
                 }
-            } else if ch == "." || ch == "!" || ch == "?" {
-                capitalizeNext = true
-            } else if !ch.isWhitespace {
-                capitalizeNext = false
             }
         }
-        return String(chars)
+        return result
     }
 
     private func lowercaseFirstLetter(_ input: String) -> String {

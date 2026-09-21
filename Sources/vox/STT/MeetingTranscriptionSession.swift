@@ -2,14 +2,14 @@ import AVFoundation
 import Foundation
 
 /// Coordinates a single end-to-end meeting capture: record system audio + local mic in
-/// parallel, slice each into chunks, upload chunks to Whisper with infinite retry on
-/// transport failures, persist segments tagged by source.
+/// parallel, transcribe each stream with the selected provider, and persist
+/// segments tagged by source. Whisper transport retries have a bounded budget.
 /// Singleton via `.shared` for the app; tests instantiate directly with mocks.
 public final class MeetingTranscriptionSession {
     public typealias Chunker = (URL, URL) async throws -> [URL]
     public typealias Transcribe = (URL, Double, SegmentSource) async throws -> [TranscriptSegment]
-    /// Mixed-audio diarized transcribe (Deepgram). Receives a single mixed
-    /// m4a covering the whole meeting; returns segments tagged with speakerID.
+    /// Transcribes one whole-meeting audio stream with Deepgram diarization.
+    /// The session assigns local/remote source labels and timeline offsets.
     public typealias DeepgramTranscribe = (URL) async throws -> [TranscriptSegment]
     /// Optional post-completion summarizer. Returns the summary markdown
     /// or throws. Tests inject a mock; production injects the live OpenAI
@@ -32,16 +32,15 @@ public final class MeetingTranscriptionSession {
                 fileURL: url, offsetSeconds: offset, apiKey: key, source: source
             )
         },
-        deepgramTranscribe: { mixedURL in
+        deepgramTranscribe: { streamURL in
             let key = KeychainStore(account: "deepgram-api-key").read() ?? ""
             return try await DeepgramTranscriber.transcribeMeeting(
-                fileURL: mixedURL, apiKey: key
+                fileURL: streamURL, apiKey: key
             )
         },
         provider: { AppSettings.meetingProvider },
         apiKey: { KeychainStore().read() },
         deepgramAPIKey: { KeychainStore(account: "deepgram-api-key").read() },
-        retainAudio: { false },
         summarize: { segments in
             try await MeetingSummarizer(
                 apiKeyProvider: { KeychainStore().read() }
@@ -58,7 +57,6 @@ public final class MeetingTranscriptionSession {
     private let transcribe: Transcribe
     private let deepgramTranscribe: DeepgramTranscribe?
     private let providerProvider: () -> MeetingProvider
-    private let retainAudioProvider: () -> Bool
     private let summarize: Summarize?
     private let summarizeEnabledProvider: () -> Bool
     private let saveSession: (TranscriptSession) throws -> Void
@@ -109,7 +107,6 @@ public final class MeetingTranscriptionSession {
         deepgramAPIKey: @escaping () -> String? = {
             KeychainStore(account: "deepgram-api-key").read()
         },
-        retainAudio: @escaping () -> Bool,
         summarize: Summarize? = nil,
         summarizeEnabled: @escaping () -> Bool = { false },
         preflight: (() -> Result<Void, MeetingGateError>)? = nil,
@@ -149,7 +146,6 @@ public final class MeetingTranscriptionSession {
         self.transcribe = transcribe
         self.deepgramTranscribe = deepgramTranscribe
         self.providerProvider = provider
-        self.retainAudioProvider = retainAudio
         self.summarize = summarize
         self.summarizeEnabledProvider = summarizeEnabled
         self.saveSession = saveSession ?? { try store.save($0) }
@@ -194,8 +190,7 @@ public final class MeetingTranscriptionSession {
 
     public func start() async throws {
         // Preflight: enforce Meeting Mode + consent + API key + backend gate.
-        // This guards against entry points that bypass the menu-bar wrapper
-        // (the floating HUD's Record button calls start() directly).
+        // The floating HUD's Record button calls start() directly.
         if case .failure(let err) = preflight() {
             throw SessionError.preflight(err)
         }
@@ -448,9 +443,8 @@ public final class MeetingTranscriptionSession {
                 }
             }
         }
-        // Deepgram path: mix mic+system (+ phone-tap) into one m4a, single batch
-        // request, diarized speaker IDs across the whole meeting. Falls through
-        // to the OpenAI per-source pipeline if Deepgram isn't wired or fails preflight.
+        // Deepgram sends a separate whole-meeting request for each source.
+        // Use the OpenAI chunked pipeline when Deepgram is not selected or wired.
         if providerProvider() == .deepgram, let dg = deepgramTranscribe {
             await runDeepgramPipeline(
                 systemURL: systemURL, micURL: micURL, phoneURL: phoneURL,
@@ -510,7 +504,7 @@ public final class MeetingTranscriptionSession {
 
                 let segments: [TranscriptSegment]
                 do {
-                    segments = try await transcribeWithInfiniteRetry(
+                    segments = try await transcribeWithRetry(
                         url: chunkURL, offset: offset, source: source
                     )
                 } catch is CancellationError {
@@ -621,46 +615,6 @@ public final class MeetingTranscriptionSession {
         } catch {
             dlog("Meeting summary failed: \(error)")
         }
-    }
-
-    /// Returns the fraction of 100ms windows in `url` whose RMS is above the
-    /// SilenceTrim threshold. Used as a pre-upload gate so we don't waste API
-    /// calls (and don't ingest hallucinations) on chunks that are mostly silent.
-    /// Returns 1.0 on read failure to fail open — better to send than drop real audio.
-    static func audibleFraction(url: URL) -> Double {
-        guard let file = try? AVAudioFile(forReading: url) else { return 1.0 }
-        let format = file.processingFormat
-        let sampleRate = format.sampleRate
-        let channels = Int(format.channelCount)
-        let totalFrames = file.length
-        guard sampleRate > 0, channels > 0, totalFrames > 0 else { return 1.0 }
-        let windowFrames = AVAudioFrameCount(max(1, Int(sampleRate * SilenceTrim.windowSec)))
-        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: windowFrames) else {
-            return 1.0
-        }
-        var pos: Int64 = 0
-        var windows = 0
-        var audibleWindows = 0
-        while pos < totalFrames {
-            do {
-                try file.read(into: buf, frameCount: windowFrames)
-            } catch { break }
-            let n = Int(buf.frameLength)
-            if n == 0 { break }
-            windows += 1
-            guard let data = buf.floatChannelData else { pos += Int64(n); continue }
-            var sumSq: Float = 0
-            for f in 0..<n {
-                for c in 0..<channels {
-                    let s = data[c][f]
-                    sumSq += s * s
-                }
-            }
-            let rms = sqrt(sumSq / Float(n * channels))
-            if rms > SilenceTrim.rmsThreshold { audibleWindows += 1 }
-            pos += Int64(n)
-        }
-        return windows > 0 ? Double(audibleWindows) / Double(windows) : 0
     }
 
     /// Drops runs of `minRun` or more consecutive segments whose normalised text
@@ -810,9 +764,8 @@ public final class MeetingTranscriptionSession {
         return (trimmedURL, baseShift + leadingTrim, trimmedDuration)
     }
 
-    /// Deepgram path: silence-trim each stream, mix into one composition with
-    /// per-stream wall-clock alignment, send the mixed m4a to Deepgram in a
-    /// single request so speaker IDs are stable across the whole meeting.
+    /// Deepgram path: silence-trim each stream, send it in a separate request,
+    /// and align the resulting segments on the shared meeting timeline.
     private func runDeepgramPipeline(
         systemURL: URL?, micURL: URL?, phoneURL: URL? = nil,
         systemShift: Double, micShift: Double, phoneShift: Double = 0,
@@ -912,74 +865,12 @@ public final class MeetingTranscriptionSession {
         await runSummarizationIfEnabled(sessionID: sessionID)
     }
 
-    /// Re-run an existing meeting through the Deepgram pipeline using the
-    /// retained audio on disk. Replaces the session's segments + summary.
-    /// No-op if audio has already been purged.
-    public func reTranscribeWithDeepgram(sessionID: UUID) async {
-        guard let dg = deepgramTranscribe else {
-            dlog("reTranscribeWithDeepgram: deepgram closure not configured")
-            return
-        }
-        guard var s = store.load(id: sessionID) else {
-            dlog("reTranscribeWithDeepgram: no session \(sessionID)")
-            return
-        }
-        let systemURL = store.audioFile(id: sessionID)
-        let micURL = store.micFile(id: sessionID)
-        let phoneURL = store.phoneFile(id: sessionID)
-        let fm = FileManager.default
-        let systemExists = fm.fileExists(atPath: systemURL.path)
-        let micExists = fm.fileExists(atPath: micURL.path)
-        let phoneExists = fm.fileExists(atPath: phoneURL.path)
-        guard systemExists || micExists || phoneExists else {
-            dlog("reTranscribeWithDeepgram: no audio retained for \(sessionID)")
-            return
-        }
-
-        // Fail loudly if another session is mid-run; we'd otherwise fight
-        // over the lock-managed `session` field.
-        let claimedSession = withSessionLock { () -> Bool in
-            if let existing = session, existing.id != sessionID,
-               [TranscriptSession.Status.recording, .chunking, .transcribing]
-                .contains(existing.status) {
-                return false
-            }
-            // Keep the existing transcript and summary durable until every
-            // Deepgram job succeeds and the pipeline commits their replacement.
-            s.status = .transcribing
-            s.failureReason = nil
-            s.chunksTotal = 1
-            s.chunksCompleted = 0
-            session = s
-            return true
-        }
-        guard claimedSession else {
-            dlog("reTranscribeWithDeepgram: another session is active")
-            return
-        }
-        do {
-            try saveSession(s)
-        } catch {
-            dlog("reTranscribeWithDeepgram: session save failed: \(error)")
-            clearSession(ifMatching: sessionID)
-            return
-        }
-
-        await runDeepgramPipeline(
-            systemURL: systemExists ? systemURL : nil,
-            micURL: micExists ? micURL : nil,
-            phoneURL: phoneExists ? phoneURL : nil,
-            systemShift: 0, micShift: 0, phoneShift: 0,
-            sessionID: sessionID, deepgram: dg
-        )
-    }
-
     /// Caps transport retries so a prolonged outage cannot block new meetings
     /// via `.alreadyActive` forever. Matches the last backoff step (30s) for
     /// roughly twenty minutes of attempts before failing the chunk.
     private static let maxTransportRetryDuration: TimeInterval = 20 * 60
 
-    private func transcribeWithInfiniteRetry(
+    private func transcribeWithRetry(
         url: URL, offset: Double, source: SegmentSource
     ) async throws -> [TranscriptSegment] {
         var attempt = 0

@@ -41,7 +41,6 @@ public struct NumberNormalizer {
     private static let forceDigitUnits: Set<String> = [
         "hour", "hours", "minute", "minutes", "second", "seconds",
         "am", "pm",
-        "percent", "percentage",
         "degree", "degrees",
         "mile", "miles", "kilometer", "kilometers", "kilometre", "kilometres",
         "meter", "meters", "metre", "metres",
@@ -238,8 +237,7 @@ public struct NumberNormalizer {
         if !aggressive && words.count == 1 && n < 10 {
             return (tokens.map { $0.original }, 0)
         }
-        let trailing = tokens.last.map { String($0.trailingWhitespace) } ?? ""
-        return ([leading + String(n) + trailing], 0)
+        return ([leading + String(n)], 0)
     }
 
     private func peekUnit(_ following: [Token]) -> FollowingUnit? {
@@ -335,32 +333,36 @@ public struct NumberNormalizer {
         var total = 0
         var current = 0
         for w in words {
-            if let v = Self.units[w] {
-                current += v
-            } else if let v = Self.tens[w] {
-                current += v
+            if let v = Self.units[w] ?? Self.tens[w] {
+                let sum = current.addingReportingOverflow(v)
+                guard !sum.overflow else { return nil }
+                current = sum.partialValue
             } else if let scale = Self.scales[w] {
                 if current == 0 { current = 1 }
+                let scaled = current.multipliedReportingOverflow(by: scale)
+                guard !scaled.overflow else { return nil }
                 if scale == 100 {
-                    current *= 100
+                    current = scaled.partialValue
                 } else {
-                    total += current * scale
+                    let sum = total.addingReportingOverflow(scaled.partialValue)
+                    guard !sum.overflow else { return nil }
+                    total = sum.partialValue
                     current = 0
                 }
             } else {
                 return nil
             }
         }
-        return total + current
+        let sum = total.addingReportingOverflow(current)
+        return sum.overflow ? nil : sum.partialValue
     }
 
     // MARK: - Tokenization
 
     private struct Token {
-        let original: String          // exact substring including surrounding whitespace
+        let original: String          // exact substring including leading whitespace
         let word: String              // the word itself (letters/hyphens)
         let leadingWhitespace: Substring
-        let trailingWhitespace: Substring
     }
 
     private func tokenize(_ input: String) -> [Token] {
@@ -377,7 +379,7 @@ public struct NumberNormalizer {
 
             if idx >= scalars.count {
                 if !leading.isEmpty {
-                    tokens.append(Token(original: leading, word: "", leadingWhitespace: Substring(leading), trailingWhitespace: ""))
+                    tokens.append(Token(original: leading, word: "", leadingWhitespace: Substring(leading)))
                 }
                 break
             }
@@ -390,8 +392,7 @@ public struct NumberNormalizer {
                 tokens.append(Token(
                     original: leading + word,
                     word: word,
-                    leadingWhitespace: Substring(leading),
-                    trailingWhitespace: ""
+                    leadingWhitespace: Substring(leading)
                 ))
             } else {
                 let ch = String(scalars[idx])
@@ -399,8 +400,7 @@ public struct NumberNormalizer {
                 tokens.append(Token(
                     original: leading + ch,
                     word: ch,
-                    leadingWhitespace: Substring(leading),
-                    trailingWhitespace: ""
+                    leadingWhitespace: Substring(leading)
                 ))
             }
         }

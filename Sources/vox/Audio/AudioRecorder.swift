@@ -94,10 +94,9 @@ private final class SystemAudioEngine: AudioEngineControlling {
 
 /// Records microphone input as 16kHz mono 16-bit PCM and streams the WAV to disk
 /// while capture is in progress. The output URL lives under
-/// `RecordingArchive.directory()` so the recording survives crashes, silence
-/// gating, transcription failure, or replays. Header sizes are placeholders
-/// until `stop()` patches them; see `RecordingArchive.repairOrphans` for the
-/// crash-recovery path.
+/// `RecordingArchive.directory()`. Header sizes are placeholders until `stop()`
+/// finalizes them. Terminal dictation processing deletes the file, and launch
+/// cleanup deletes leftovers from interrupted captures.
 public final class AudioRecorder {
     private static let minimumPinnedInputVolume: Float32 = 0.70
     private static let restoredPinnedInputVolume: Float32 = 0.75
@@ -176,9 +175,7 @@ public final class AudioRecorder {
         }
     }
 
-    /// Begins capture and opens the on-disk WAV stream. The file is created
-    /// immediately with a placeholder header so that even an instant crash
-    /// leaves a recoverable file behind.
+    /// Begins capture and opens a temporary WAV stream with a placeholder header.
     public func start(mode modeOverride: String? = nil) throws {
         lock.lock()
         defer { lock.unlock() }
@@ -412,9 +409,9 @@ public final class AudioRecorder {
         }
         self.converter = converter
 
-        // Use the input node's native format. Supplying the earlier snapshot
-        // here can raise an Objective-C exception if the route changes between
-        // querying the node and installing the tap.
+        // Unpinned input uses the node's native format. Pinned input uses its
+        // authoritative hardware format; the Objective-C shim turns route-change
+        // exceptions into errors that the bounded recovery path can handle.
         try engine.installInputTap(bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
             self?.handle(buffer: buffer, targetFormat: targetFormat)
         }
@@ -487,7 +484,7 @@ public final class AudioRecorder {
                 pcmBytesWritten = UInt32(min(nextTotal, UInt64(UInt32.max)))
             } catch {
                 // Don't crash the audio thread; the next stop() will still
-                // patch what we did write so far. Repair sweep handles header.
+                // finalize the bytes that were written before the failure.
             }
         }
         lock.unlock()

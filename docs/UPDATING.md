@@ -4,12 +4,22 @@ How to install a newer release of Vox over an existing install.
 
 ## Development production deployments
 
-The Mac mini may run an unreleased production deployment for live validation.
+A development Mac may run an unreleased production deployment for live validation.
 Such a deployment must always use a new `CFBundleShortVersionString` and
 `CFBundleVersion` that are higher/distinct from the latest public appcast item.
-The current public identity is `0.7.59` build `83`; future unreleased builds
-must use a newer identity. Do not reuse the public identity for changed code,
-and do not add an unreleased build to the public appcast.
+Check `docs/appcast.xml`, `Resources/Info.plist`, and the installed bundle
+before choosing the next identity. Do not reuse any prior public or unreleased
+identity for changed code, and do not add an unreleased build to the public
+appcast. Record the current deployment and its verification in `HANDOFF.md`.
+After `./scripts/build-app.sh`, restart the installed app with:
+
+```sh
+launchctl kickstart -k "gui/$(id -u)/com.andykumeda.vox"
+# On the first launch, before the agent exists:
+# open /Applications/Vox.app
+```
+
+An installed bundle version alone does not prove the running process loaded it.
 
 ## In-app update (Sparkle, recommended)
 
@@ -26,15 +36,16 @@ will surface new releases. To check on demand:
    - **Microphone** → enable Vox
    - **Screen Recording** → enable Vox (only if you use Meeting transcription)
 
-Your API key, hotkeys, dictionary, and settings persist in the Keychain and
-`~/Library/Preferences/com.andykumeda.vox.plist`. macOS privacy grants are
+API keys remain in Keychain, hotkeys and preferences in
+`~/Library/Preferences/com.andykumeda.vox.plist`, and dictionary, style fallback,
+and encrypted history in `~/Library/Application Support/Vox/`. macOS privacy grants are
 different: Accessibility and Input Monitoring are tied to the installed code
 identity and designated signing requirement, so a signed update can leave Vox
 listed as a new client even when the bundle ID is unchanged.
 
 ## Why an update can require permissions again
 
-Vox is not yet signed and notarized with an Apple Developer ID. Builds prefer
+Public releases are not yet Developer ID-notarized. Builds prefer
 an installed Developer ID Application or Apple Development identity so macOS
 Keychain records a stable team partition. Without an Apple team identity, the
 build falls back to the local self-signed `vox-dev` identity, then ad-hoc
@@ -74,7 +85,8 @@ stop cue, recording log entry, transcription, and paste.
 `TeamIdentifier=not set` alone does not distinguish an ad-hoc signature from
 Vox's self-signed development certificate. An Apple Development identity
 provides stable local team trust; a future Developer ID-notarized release is
-still the durable distribution fix for Gatekeeper and permission churn.
+still the intended distribution improvement. It does not guarantee that macOS
+will preserve every permission across updates.
 
 ## Manual fallback (if Sparkle fails)
 
@@ -86,41 +98,44 @@ Sparkle relies on:
 
 If any of those break, fall back to manual install.
 
-### TL;DR (manual)
+### Manual install
 
-1. Quit Vox from Activity Monitor, or run `killall vox` in Terminal.
+1. Stop any active recording and choose **Quit Vox** from its menu. Do not
+   force-kill the supervised process: its LaunchAgent can restart abnormal exits.
 2. Download the latest `Vox.dmg` from
    [Releases](https://github.com/andykumeda/vox/releases/latest).
 3. Open the DMG, drag `Vox.app` into `/Applications`,
    replacing the previous copy.
 4. Eject the DMG, launch Vox.
-5. Re-grant permissions (same list as above).
+5. Re-grant any missing permissions and verify an actual dictation (same list
+   as above).
 
 ### Scripted manual update (CLI)
 
 ```sh
-# 1. Quit any running instance
-killall vox 2>/dev/null
+# Run after stopping recordings and choosing Quit Vox from the Vox menu.
+# 1. Unload supervision while replacing the bundle; no job on a first install is OK.
+launchctl bootout "gui/$(id -u)/com.andykumeda.vox" 2>/dev/null || true
 
-# 2. Download latest release DMG (requires `gh`)
+# 2. Download the latest release DMG (requires gh)
 gh release download --repo andykumeda/vox --pattern Vox.dmg --dir ~/Downloads --clobber
+hdiutil verify ~/Downloads/Vox.dmg
 
-# 3. Mount, replace, eject
+# 3. Mount, verify, replace, eject. Use the actual mount path if it differs.
 hdiutil attach ~/Downloads/Vox.dmg -nobrowse
+codesign --verify --deep --strict "/Volumes/Vox/Vox.app"
+# Remove the old bundle only after the downloaded bundle verifies.
 rm -rf /Applications/Vox.app
 ditto "/Volumes/Vox/Vox.app" /Applications/Vox.app
 hdiutil detach /Volumes/Vox
 
-# 4. Strip Gatekeeper quarantine and launch
-xattr -dr com.apple.quarantine /Applications/Vox.app
+# 4. Launch; Vox installs/starts its LaunchAgent again.
 open /Applications/Vox.app
-
-# 5. Re-grant permissions
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"      # Input Monitoring
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"    # Accessibility
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"       # Microphone
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"    # Screen Recording (meetings only)
 ```
+
+Run each stage only after the preceding stage succeeds. If Gatekeeper blocks
+the first open, review the downloaded release and use **Open Anyway** in
+System Settings → Privacy & Security.
 
 If the volume mounts as `/Volumes/Vox 1` (because a stale `/Volumes/Vox`
 exists), adjust the path or eject the older one first with
@@ -132,17 +147,22 @@ exists), adjust the path or eject the older one first with
 # Bundle version
 /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
   /Applications/Vox.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+  /Applications/Vox.app/Contents/Info.plist
+
+# LaunchAgent process and running executable
+launchctl print "gui/$(id -u)/com.andykumeda.vox"
 
 # Process is the new bundle (not a stale one)
 pgrep -fl vox
 
-# Live log — hold Fn briefly, you should see a "Fn press" line
+# Live log — dictate a short sentence and verify it appears in the target app
 tail -f ~/Library/Logs/vox.log
 ```
 
 If `Fn press` does not appear after holding Fn, **Input Monitoring** is
 the most likely missing grant. The startup banner in `~/Library/Logs/vox.log`
-shows `AXIsProcessTrusted=true/false` for Accessibility and `mic permission
+includes `AXIsProcessTrusted=true/false` for Accessibility and `mic permission
 granted=true/false` for Microphone — but it does **not** log Input
 Monitoring status, so a missing IM grant is silent. Check the pane
 manually.
@@ -150,27 +170,40 @@ manually.
 ## Troubleshooting
 
 **Sparkle says "An error occurred in retrieving update information."**
-Either GitHub Pages is disabled (re-enable in repo settings → Pages, source `main` / `/docs`) or the appcast hasn't propagated yet. Verify with:
+Check the network and the actual feed. The repository uses GitHub Pages from
+`main` / `/docs`; a Pages configuration or propagation problem can make it
+unavailable. Verify that the response is a valid appcast containing the expected
+version, not merely a successful HTTP status:
 
 ```sh
-curl -sI https://andykumeda.github.io/vox/appcast.xml | head
+curl --fail --silent --show-error --location \
+  https://andykumeda.github.io/vox/appcast.xml -o /tmp/vox-appcast.xml
+xmllint --noout /tmp/vox-appcast.xml
+rg 'sparkle:(shortVersionString|version)' /tmp/vox-appcast.xml
 ```
 
-A 200 means it's live; a 404 means Pages is off.
+A 404 can also mean the feed path is wrong or a deployment has not propagated.
+A 200 response alone does not verify XML, the advertised release, or its asset.
 
 **Sparkle downloads but install fails.** Check that the DMG asset is
 anonymously downloadable:
 
 ```sh
-curl -sIL https://github.com/andykumeda/vox/releases/download/v<version>/Vox.dmg | head
+# Replace VERSION with the version advertised in the appcast.
+curl --fail --silent --show-error --location --head \
+  'https://github.com/andykumeda/vox/releases/download/vVERSION/Vox.dmg'
 ```
 
-A 302 → S3 means it's reachable. A 404 means either the asset isn't
-attached to the release or the repo is private.
+Follow redirects through to the final response. A successful download still
+needs to match the appcast length and Sparkle signature; for release validation,
+compare the downloaded SHA-256 with the packaged DMG and run `hdiutil verify`.
+A 404 can mean the version or asset is missing, or the repository is private.
 
 **App launches but the menu bar icon doesn't appear.** Another instance
-is already running from a different location. Run `pgrep -fl vox` and
-`killall vox`, then relaunch.
+may be running from a different location. Inspect `pgrep -fl vox` and the
+LaunchAgent state above. Quit the old app normally, then open
+`/Applications/Vox.app`; for the installed supervised app, restart it with
+`launchctl kickstart -k "gui/$(id -u)/com.andykumeda.vox"`.
 
 **App appears in Input Monitoring but events still don't fire.** Toggle
 it off and back on, then quit and relaunch Vox. macOS sometimes caches

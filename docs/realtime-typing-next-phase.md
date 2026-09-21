@@ -5,7 +5,7 @@ Status: planned; not implemented.
 This document defines the next dictation phase for Vox: show provisional words
 at the actual cursor while recording, then replace only those words with Vox's
 normal final result. It is intentionally narrower than universal live typing.
-The first implementation is available only in local editors where Vox can
+The planned first implementation will be available only in local editors where Vox can
 prove ownership of an editable Accessibility range for the entire transaction.
 
 ## Architecture
@@ -31,13 +31,15 @@ Realtime output is preview data only. The initial phase does not replace the
 completed-file transcription, silence guards, post-processing, Smart Cleanup,
 or established record-then-paste path.
 
-Before implementation, validate the exact OpenAI session protocol against the
-current official documentation for `gpt-live-transcribe`. Record the event
+Before implementation, select a supported realtime transcription model and
+validate the exact session protocol against current official OpenAI documentation.
+The earlier `gpt-live-transcribe` proposal is a design candidate, not a shipped
+dependency or a promise of current model availability. Record the event
 ordering, delta accumulation rules, stop/flush behavior, error events, and
 whether an authoritative completion event exists. Do not infer a final
-transcript contract from partial deltas. See the [OpenAI model
-documentation](https://developers.openai.com/api/docs/models/gpt-live-transcribe)
-and the current Live API reference.
+transcript contract from partial deltas. Start with the [official OpenAI
+documentation](https://developers.openai.com/api/docs/) and the current realtime
+transcription reference when this phase is authorized.
 
 ## Provisional-Range Transaction
 

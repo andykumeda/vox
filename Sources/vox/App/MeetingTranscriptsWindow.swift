@@ -112,7 +112,7 @@ private final class MeetingTranscriptsModel: ObservableObject {
     func delete(_ id: UUID) {
         let alert = NSAlert()
         alert.messageText = "Delete this transcript?"
-        alert.informativeText = "This permanently removes the transcript and any kept audio."
+        alert.informativeText = "This permanently removes the saved transcript and summary."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
@@ -275,7 +275,7 @@ struct MeetingTranscriptsView: View {
             VStack(spacing: 8) {
                 Text("No meeting transcripts yet.")
                     .foregroundStyle(.secondary)
-                Text("Use the menu bar or Cmd+Shift+M to start a meeting recording.")
+                Text("Open Meeting from the menu bar, then click Record in the floating panel.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

@@ -80,28 +80,3 @@ struct HelpView: View {
         return result
     }
 }
-
-public final class HelpWindowController {
-    private var window: NSWindow?
-
-    public init() {}
-
-    @MainActor
-    public func show() {
-        if let w = window {
-            w.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let hosting = NSHostingController(rootView: HelpView())
-        let w = NSWindow(contentViewController: hosting)
-        w.title = "Vox Help"
-        w.styleMask = [.titled, .closable, .miniaturizable]
-        w.minSize = NSSize(width: 480, height: 400)
-        w.center()
-        w.isReleasedWhenClosed = false
-        window = w
-        w.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-}

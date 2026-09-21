@@ -146,15 +146,6 @@ public struct TextInjector {
     ///     prior clipboard contents after ~1.5s — long enough that even slow
     ///     apps (Slack, Electron, web inputs) read the transcript before the
     ///     restore lands.
-    public func paste(
-        _ text: String,
-        keepOnClipboard: Bool = false
-    ) {
-        let operation = preparePasteOperation(text, keepOnClipboard: keepOnClipboard)
-        performPasteOperation(operation)
-        restorePasteboardIfNeeded(after: operation)
-    }
-
     public func pasteAsync(
         _ text: String,
         keepOnClipboard: Bool = false
@@ -190,47 +181,6 @@ public struct TextInjector {
             targetProcessID: processID,
             targetBundleID: bundleID
         )
-    }
-
-    private func performPasteOperation(_ operation: PasteOperation) {
-        guard ensurePasteFocus(operation, stage: "start") else { return }
-        let fallbackMode = Self.physicalTypingFallbackMode(for: operation.target)
-        switch operation.target {
-        case .standard:
-            sendKeyCombo(keycode: UInt16(kVK_ANSI_V), modifiers: [.maskCommand])
-        case .screenSharing:
-            dlog("paste remote fallback: VNC/Screen Sharing System Events text first \(operation.textToInsert.count) chars")
-            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
-                dlog("VNC/Screen Sharing System Events keystroke failed; trying exact clipboard Cmd+V")
-                guard ensurePasteFocus(operation, stage: "screenSharing-clipboard") else { return }
-                if !pasteWithScreenSharingSharedClipboard(operation) {
-                    dlog("VNC/Screen Sharing exact clipboard Cmd+V failed; falling back to physical typing")
-                    guard ensurePasteFocus(operation, stage: "screenSharing-physical") else { return }
-                    typePhysicalText(operation.textToInsert, mode: fallbackMode)
-                }
-            }
-        case .rustDesk:
-            dlog("paste remote fallback: RustDesk exact clipboard Cmd+V \(operation.textToInsert.count) chars")
-            if !pasteWithRustDeskSharedClipboard(operation) {
-                dlog("RustDesk exact clipboard Cmd+V failed; falling back to physical typing")
-                guard ensurePasteFocus(operation, stage: "rustDesk-physical") else { return }
-                typePhysicalText(operation.textToInsert, mode: fallbackMode)
-            }
-        case .parsec:
-            dlog("paste remote fallback: Parsec System Events text first \(operation.textToInsert.count) chars")
-            if !typeWithSystemEventsKeystroke(operation.textToInsert) {
-                dlog("Parsec System Events keystroke failed; trying exact clipboard Cmd+V")
-                guard ensurePasteFocus(operation, stage: "parsec-clipboard") else { return }
-                if !pasteWithParsecSharedClipboard(operation) {
-                    dlog("Parsec exact clipboard Cmd+V failed; falling back to physical typing")
-                    guard ensurePasteFocus(operation, stage: "parsec-physical") else { return }
-                    typePhysicalText(operation.textToInsert, mode: fallbackMode)
-                }
-            }
-        case .remoteControl:
-            dlog("paste remote-control fallback: direct physical typing \(operation.textToInsert.count) chars")
-            typePhysicalText(operation.textToInsert, mode: .withShiftModifiers)
-        }
     }
 
     private func performPasteOperationAsync(_ operation: PasteOperation) async {
@@ -402,41 +352,6 @@ public struct TextInjector {
         return true
     }
 
-    static func usesPhysicalTypingFallback(for target: PasteTarget) -> Bool {
-        switch target {
-        case .screenSharing, .rustDesk, .parsec, .remoteControl: true
-        case .standard: false
-        }
-    }
-
-    static func requiresExactPaste(for target: PasteTarget) -> Bool {
-        switch target {
-        case .screenSharing, .rustDesk, .parsec: true
-        case .remoteControl, .standard: false
-        }
-    }
-
-    static func usesMenuPasteFallback(for target: PasteTarget) -> Bool {
-        switch target {
-        case .screenSharing: true
-        case .rustDesk, .parsec, .remoteControl, .standard: false
-        }
-    }
-
-    static func usesSystemEventsTextFirst(for target: PasteTarget) -> Bool {
-        switch target {
-        case .screenSharing, .parsec: true
-        case .rustDesk, .remoteControl, .standard: false
-        }
-    }
-
-    static func usesRemoteCommandVPaste(for target: PasteTarget) -> Bool {
-        switch target {
-        case .screenSharing, .rustDesk, .parsec: true
-        case .remoteControl, .standard: false
-        }
-    }
-
     static func prePasteDelay(for target: PasteTarget) -> TimeInterval {
         switch target {
         case .standard, .remoteControl:
@@ -450,15 +365,6 @@ public struct TextInjector {
 
     static let systemEventsTextChunkLimit = 24
     static let systemEventsTextChunkDelay = 0.04
-
-    static func pushesRemoteClipboardAfterPasteboardWrite(for target: PasteTarget) -> Bool {
-        switch target {
-        case .screenSharing:
-            return true
-        case .standard, .rustDesk, .parsec, .remoteControl:
-            return false
-        }
-    }
 
     static func continuesPasteWhenRemoteClipboardPushFails(for target: PasteTarget) -> Bool {
         switch target {
@@ -507,19 +413,14 @@ public struct TextInjector {
     enum PhysicalTypingMode: Equatable {
         case unicodeBackedShiftedCharacters
         case withShiftModifiers
-        case capsLockForUppercase
         case unmodifiedOnly
     }
 
     private func typePhysicalText(_ text: String, mode: PhysicalTypingMode) {
         let source = CGEventSource(stateID: .hidSystemState)
-        let initialCapsLockActive = CGEventSource
-            .flagsState(.hidSystemState)
-            .contains(.maskAlphaShift)
         for stroke in Self.physicalKeystrokes(
             for: text,
-            mode: mode,
-            initialCapsLockActive: initialCapsLockActive
+            mode: mode
         ) {
             postKeystroke(stroke, source: source)
             usleep(3_000)
@@ -530,97 +431,11 @@ public struct TextInjector {
         for text: String,
         mode: PhysicalTypingMode
     ) -> [PhysicalKeystroke] {
-        physicalKeystrokes(
-            for: text,
-            mode: mode,
-            initialCapsLockActive: false
-        )
-    }
-
-    static func physicalKeystrokes(
-        for text: String,
-        mode: PhysicalTypingMode,
-        initialCapsLockActive: Bool
-    ) -> [PhysicalKeystroke] {
-        if mode == .capsLockForUppercase {
-            return capsLockPhysicalKeystrokes(
-                for: text,
-                initialCapsLockActive: initialCapsLockActive
-            )
-        }
         var strokes: [PhysicalKeystroke] = []
         for character in text {
             appendPhysicalKeystrokes(for: character, mode: mode, to: &strokes)
         }
         return strokes
-    }
-
-    private static func capsLockPhysicalKeystrokes(
-        for text: String,
-        initialCapsLockActive: Bool
-    ) -> [PhysicalKeystroke] {
-        var strokes: [PhysicalKeystroke] = []
-        var capsLockActive = initialCapsLockActive
-        for character in text {
-            appendCapsLockPhysicalKeystrokes(
-                for: character,
-                initialCapsLockActive: initialCapsLockActive,
-                capsLockActive: &capsLockActive,
-                to: &strokes
-            )
-        }
-        if capsLockActive != initialCapsLockActive {
-            strokes.append(capsLockToggleStroke)
-        }
-        return strokes
-    }
-
-    private static let capsLockToggleStroke = PhysicalKeystroke(
-        code: CGKeyCode(kVK_CapsLock),
-        flags: []
-    )
-
-    private static func appendCapsLockPhysicalKeystrokes(
-        for character: Character,
-        initialCapsLockActive: Bool,
-        capsLockActive: inout Bool,
-        to strokes: inout [PhysicalKeystroke]
-    ) {
-        if let letter = letterKeyCodeAndCase(for: character) {
-            if capsLockActive != letter.isUppercase {
-                strokes.append(capsLockToggleStroke)
-                capsLockActive.toggle()
-            }
-            strokes.append(PhysicalKeystroke(code: letter.code, flags: []))
-            return
-        }
-        if let code = unmodifiedPhysicalKeyCode(for: character) {
-            strokes.append(PhysicalKeystroke(code: code, flags: []))
-            return
-        }
-        let expansion = physicalExpansion(for: character)
-        guard expansion != String(character) else { return }
-        for expanded in expansion {
-            appendCapsLockPhysicalKeystrokes(
-                for: expanded,
-                initialCapsLockActive: initialCapsLockActive,
-                capsLockActive: &capsLockActive,
-                to: &strokes
-            )
-        }
-    }
-
-    private static func letterKeyCodeAndCase(for character: Character) -> (
-        code: CGKeyCode,
-        isUppercase: Bool
-    )? {
-        let string = String(character)
-        guard string.lowercased() != string.uppercased(),
-              let lower = string.lowercased().first else {
-            return nil
-        }
-        guard let code = letterKeyCodes[lower] else { return nil }
-        return (code, string == string.uppercased())
     }
 
     private static func appendPhysicalKeystrokes(
@@ -806,11 +621,6 @@ public struct TextInjector {
     }
 
     private func postKeystroke(_ stroke: PhysicalKeystroke, source: CGEventSource?) {
-        if stroke.code == CGKeyCode(kVK_CapsLock) {
-            postKeycode(stroke.code, source: source)
-            usleep(40_000)
-            return
-        }
         if stroke.flags.contains(.maskShift) {
             let shiftDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Shift), keyDown: true)
             shiftDown?.flags = .maskShift
@@ -860,34 +670,6 @@ public struct TextInjector {
         }
     }
 
-    private func pasteWithScreenSharingSharedClipboard(_ operation: PasteOperation) -> Bool {
-        let sharedClipboardReady = enableScreenSharingSharedClipboard(processID: operation.targetProcessID)
-        if !sharedClipboardReady {
-            dlog("VNC/Screen Sharing shared clipboard control was unavailable")
-        }
-
-        ensurePasteboardContains(operation.textToInsert)
-        let pushed = pushScreenSharingClipboard(processID: operation.targetProcessID)
-        if !pushed && !Self.continuesPasteWhenRemoteClipboardPushFails(for: .screenSharing) {
-            dlog("VNC/Screen Sharing Send Clipboard failed; skipping remote Cmd+V")
-            return false
-        }
-        dlog("VNC/Screen Sharing waiting \(Self.prePasteDelay(for: .screenSharing))s for shared clipboard sync")
-        waitForRemoteClipboardSyncSync(
-            target: .screenSharing,
-            processID: operation.targetProcessID,
-            bundleIdentifier: operation.targetBundleID
-        )
-
-        guard ensurePasteFocus(operation, stage: "screenSharing-cmdv") else { return false }
-        dlog("VNC/Screen Sharing exact paste via remote Cmd+V")
-        if pasteWithSystemEventsKeyCode() {
-            return true
-        }
-        dlog("VNC/Screen Sharing remote Cmd+V failed; trying Edit > Paste menu")
-        return pasteWithScreenSharingMenu(processID: operation.targetProcessID)
-    }
-
     private func pasteWithScreenSharingSharedClipboardAsync(_ operation: PasteOperation) async -> Bool {
         let sharedClipboardReady = enableScreenSharingSharedClipboard(processID: operation.targetProcessID)
         if !sharedClipboardReady {
@@ -918,17 +700,6 @@ public struct TextInjector {
         return pasteWithScreenSharingMenu(processID: operation.targetProcessID)
     }
 
-    private func pasteWithRustDeskSharedClipboard(_ operation: PasteOperation) -> Bool {
-        dlog("RustDesk waiting \(Self.prePasteDelay(for: .rustDesk))s for shared clipboard sync")
-        waitForRemoteClipboardSyncSync(
-            target: .rustDesk,
-            processID: operation.targetProcessID,
-            bundleIdentifier: operation.targetBundleID
-        )
-        guard ensurePasteFocus(operation, stage: "rustDesk-cmdv") else { return false }
-        return pasteWithSystemEventsKeyCode()
-    }
-
     private func pasteWithRustDeskSharedClipboardAsync(_ operation: PasteOperation) async -> Bool {
         dlog("RustDesk waiting \(Self.prePasteDelay(for: .rustDesk))s for shared clipboard sync")
         await waitForRemoteClipboardSync(
@@ -937,17 +708,6 @@ public struct TextInjector {
             bundleIdentifier: operation.targetBundleID
         )
         guard ensurePasteFocus(operation, stage: "rustDesk-cmdv") else { return false }
-        return pasteWithSystemEventsKeyCode()
-    }
-
-    private func pasteWithParsecSharedClipboard(_ operation: PasteOperation) -> Bool {
-        dlog("Parsec waiting \(Self.prePasteDelay(for: .parsec))s for shared clipboard sync")
-        waitForRemoteClipboardSyncSync(
-            target: .parsec,
-            processID: operation.targetProcessID,
-            bundleIdentifier: operation.targetBundleID
-        )
-        guard ensurePasteFocus(operation, stage: "parsec-cmdv") else { return false }
         return pasteWithSystemEventsKeyCode()
     }
 
@@ -984,23 +744,6 @@ public struct TextInjector {
                 return
             }
             try? await Task.sleep(nanoseconds: slice)
-        }
-    }
-
-    private func waitForRemoteClipboardSyncSync(
-        target: PasteTarget,
-        processID: pid_t,
-        bundleIdentifier: String?
-    ) {
-        let delay = Self.prePasteDelay(for: target)
-        guard delay > 0 else { return }
-        let deadline = Date().addingTimeInterval(delay)
-        while Date() < deadline {
-            if !Self.frontmostMatches(processID: processID, bundleIdentifier: bundleIdentifier) {
-                dlog("remote clipboard wait interrupted: focus drifted from pid=\(processID)")
-                return
-            }
-            Thread.sleep(forTimeInterval: 0.05)
         }
     }
 

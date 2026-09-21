@@ -64,7 +64,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 )]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
 
@@ -96,7 +95,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return [TranscriptSegment(startTime: offset, endTime: offset + 1, text: "ok")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) },
             backoffSchedule: [0.01, 0.01, 0.01]
         )
@@ -128,7 +126,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return [TranscriptSegment(startTime: offset, endTime: offset+1, text: "x")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
         try await session.start()
@@ -156,7 +153,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
         try await session.start()
@@ -178,7 +174,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
         try await session.start()
@@ -207,7 +202,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "session A")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             summarize: { _ in
                 await summaryStarted.signal()
                 await releaseSummary.wait()
@@ -252,7 +246,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "deleted session")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             summarize: { _ in
                 await summaryStarted.signal()
                 await releaseSummary.wait()
@@ -296,7 +289,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [chunkURL] },
             transcribe: { _, _, _ in originalSegments },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             summarize: { segments in
                 XCTAssertEqual(segments, originalSegments)
                 await summaryStarted.signal()
@@ -325,53 +317,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertNil(reloaded.summary)
     }
 
-    func testFailedDeepgramRetranscriptionPreservesExistingTranscript() async throws {
-        let sessionID = UUID()
-        let originalSegments = [
-            TranscriptSegment(
-                startTime: 0,
-                endTime: 2,
-                text: "Original transcript",
-                source: .remote
-            ),
-        ]
-        let original = TranscriptSession(
-            id: sessionID,
-            title: "Existing meeting",
-            startedAt: Date(timeIntervalSince1970: 1_000),
-            endedAt: Date(timeIntervalSince1970: 1_100),
-            status: .completed,
-            chunksTotal: 1,
-            chunksCompleted: 1,
-            segments: originalSegments,
-            audioRetained: true,
-            summary: "Original summary"
-        )
-        try store.save(original)
-        try Data([0xFA, 0xCE]).write(to: store.audioFile(id: sessionID))
-
-        let session = MeetingTranscriptionSession(
-            store: store,
-            recorder: MockRecorder(),
-            chunker: { _, _ in [] },
-            transcribe: { _, _, _ in [] },
-            deepgramTranscribe: { _ in
-                throw TranscriptionError.transportError(URLError(.timedOut))
-            },
-            apiKey: { "sk-test" },
-            retainAudio: { true },
-            preflight: { .success(()) }
-        )
-
-        await session.reTranscribeWithDeepgram(sessionID: sessionID)
-
-        let stored = try XCTUnwrap(store.load(id: sessionID))
-        XCTAssertEqual(stored.status, .failed)
-        XCTAssertEqual(stored.segments, originalSegments)
-        XCTAssertEqual(stored.summary, "Original summary")
-        XCTAssertTrue(stored.failureReason?.contains("Deepgram transcription failed") == true)
-    }
-
     func testCanStartAfterPriorFailure() async throws {
         let recorder = MockRecorder()
         let url = tempRoot.appendingPathComponent("c.m4a")
@@ -389,7 +334,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return [TranscriptSegment(startTime: 0, endTime: 1, text: "x")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
         try await session.start()
@@ -409,7 +353,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [] },
             transcribe: { _, _, _ in [] },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
         try await session.start()
@@ -421,7 +364,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         }
     }
 
-    func testAudioIsDeletedEvenWhenLegacyRetentionProviderReturnsTrue() async throws {
+    func testCompletedMeetingDeletesAudioAndPreservesRawAndFinalTranscript() async throws {
         let recorder = MockRecorder()
         let url = tempRoot.appendingPathComponent("c.m4a")
         try Data([0]).write(to: url)
@@ -431,7 +374,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
-            retainAudio: { true },
             preflight: { .success(()) }
         )
         try await session.start()
@@ -477,7 +419,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 return []
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
 
@@ -508,7 +449,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "ok", source: source)]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
 
@@ -564,7 +504,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
 
@@ -592,7 +531,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [] },
             transcribe: { _, _, _ in [] },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) },
             saveSession: { candidate in
                 if failNextSave {
@@ -651,7 +589,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) }
         )
         try await session.start()
@@ -677,7 +614,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [] },
             transcribe: { _, _, _ in [] },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) },
             systemRecorderFactory: {
                 let block: Bool = {
@@ -740,7 +676,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
                 [TranscriptSegment(startTime: 0, endTime: 1, text: "recovered")]
             },
             apiKey: { "sk-test" },
-            retainAudio: { false },
             preflight: { .success(()) },
             saveSession: { candidate in
                 if candidate.status == .chunking {
@@ -775,7 +710,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             chunker: { _, _ in [url] },
             transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "x")] },
             apiKey: { nil },
-            retainAudio: { false },
             preflight: { .failure(.missingAPIKey) }
         )
         do {
@@ -811,7 +745,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             provider: { .deepgram },
             apiKey: { nil },
             deepgramAPIKey: { "dg-test" },
-            retainAudio: { false }
         )
 
         try await session.start()
@@ -826,7 +759,6 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             provider: { .deepgram },
             apiKey: { "sk-openai-only" },
             deepgramAPIKey: { nil },
-            retainAudio: { false }
         )
         do {
             try await missingDeepgramKey.start()

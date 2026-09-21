@@ -248,35 +248,6 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         )
     }
 
-    func testRetentionSweepRecoversLeakedAudioWhenSessionFlagIsAlreadyFalse() throws {
-        let endedAt = Date(timeIntervalSince1970: 1_000)
-        let session = makeSession(
-            endedAt: endedAt,
-            status: .completed,
-            audioRetained: false
-        )
-        try store.save(session)
-        let leakedFile = store.sessionDirectory(id: session.id)
-            .appendingPathComponent("audio-trimmed.m4a")
-        let leakedChunk = store.chunksDirectory(id: session.id)
-            .appendingPathComponent("000.m4a")
-        try writeFixture(byteCount: 7, to: leakedFile)
-        try writeFixture(byteCount: 11, to: leakedChunk)
-
-        let purged = store.purgeAudioOlderThan(
-            Date(timeIntervalSince1970: 2_000)
-        )
-
-        XCTAssertEqual(purged, 1)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: leakedFile.path))
-        XCTAssertFalse(
-            FileManager.default.fileExists(
-                atPath: store.chunksDirectory(id: session.id).path
-            )
-        )
-        XCTAssertFalse(try XCTUnwrap(store.load(id: session.id)).audioRetained)
-    }
-
     func testStartupSweepPurgesOrphanAudioWithoutDecryptingTranscript() throws {
         let id = UUID()
         let directory = store.sessionDirectory(id: id)
@@ -358,46 +329,6 @@ final class MeetingTranscriptStoreTests: XCTestCase {
             XCTAssertNotNil(store.load(id: id)?.endedAt)
         }
         XCTAssertEqual(store.load(id: completed.id)?.status, .completed)
-    }
-
-    func testPurgeAudioOlderThanRemovesOldKeepsRecent() throws {
-        let now = Date()
-        let oldSession = TranscriptSession(
-            id: UUID(), title: "old", startedAt: now.addingTimeInterval(-100_000),
-            endedAt: now.addingTimeInterval(-90_000), status: .completed,
-            chunksTotal: 0, chunksCompleted: 0, segments: [], audioRetained: true
-        )
-        let recent = TranscriptSession(
-            id: UUID(), title: "recent", startedAt: now.addingTimeInterval(-100),
-            endedAt: now.addingTimeInterval(-50), status: .completed,
-            chunksTotal: 0, chunksCompleted: 0, segments: [], audioRetained: true
-        )
-        try store.save(oldSession)
-        try store.save(recent)
-        try Data([0]).write(to: store.audioFile(id: oldSession.id))
-        try Data([0]).write(to: store.audioFile(id: recent.id))
-
-        let purged = store.purgeAudioOlderThan(now.addingTimeInterval(-1000))
-        XCTAssertEqual(purged, 1)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.audioFile(id: oldSession.id).path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioFile(id: recent.id).path))
-        // Transcript JSON for purged session is preserved.
-        XCTAssertNotNil(store.load(id: oldSession.id))
-        XCTAssertEqual(store.load(id: oldSession.id)?.audioRetained, false)
-    }
-
-    func testPurgeAudioOlderThanSkipsInFlight() throws {
-        let now = Date()
-        let inflight = TranscriptSession(
-            id: UUID(), title: "inflight", startedAt: now.addingTimeInterval(-100_000),
-            endedAt: now.addingTimeInterval(-90_000), status: .recording,
-            chunksTotal: 0, chunksCompleted: 0, segments: [], audioRetained: true
-        )
-        try store.save(inflight)
-        try Data([0]).write(to: store.audioFile(id: inflight.id))
-        let purged = store.purgeAudioOlderThan(now.addingTimeInterval(-1000))
-        XCTAssertEqual(purged, 0)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioFile(id: inflight.id).path))
     }
 
     func testListReturnsEmptyWhenRootMissing() {

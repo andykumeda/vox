@@ -1,9 +1,8 @@
 import Foundation
 
-/// Filesystem helpers for the on-disk dictation recording archive.
-/// `AudioRecorder` streams WAV bytes into this directory while capturing.
-/// Files written here survive transcription failures, silence gating,
-/// hallucination guards, and process crashes (see `repairOrphans`).
+/// Filesystem helpers for temporary dictation audio.
+/// `AudioRecorder` streams WAV bytes here while capturing. Terminal processing
+/// deletes each recording; launch cleanup deletes any crash leftovers.
 public enum RecordingArchive {
     public static func directory() -> URL {
         let support = FileManager.default
@@ -22,48 +21,6 @@ public enum RecordingArchive {
         let stamp = formatter.string(from: date).replacingOccurrences(of: ":", with: "-")
         let shortID = UUID().uuidString.prefix(8)
         return dir.appendingPathComponent("\(stamp)_\(mode)_\(shortID).wav")
-    }
-
-    /// Patches WAV size fields on any file in the archive whose RIFF/data chunk
-    /// sizes are still zero. Such files were left behind by a crash mid-recording.
-    /// Without this, decoders see a zero-length file even though the PCM bytes
-    /// are present on disk. Safe to call repeatedly; idempotent.
-    public static func repairOrphans() {
-        let dir = directory()
-        let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else {
-            return
-        }
-        for url in entries where url.pathExtension.lowercased() == "wav" {
-            repairWAVHeaderIfNeeded(at: url)
-        }
-    }
-
-    /// Inspects a WAV file's header. If RIFF/data chunk sizes are zero but the
-    /// file actually has PCM bytes on disk, rewrites the size fields based on
-    /// the real file size. Leaves correctly-finalised files alone.
-    static func repairWAVHeaderIfNeeded(at url: URL) {
-        guard let handle = try? FileHandle(forUpdating: url) else { return }
-        defer { try? handle.close() }
-        guard let header = try? handle.read(upToCount: 44), header.count == 44 else { return }
-        // Validate it's a WAV we wrote ("RIFF....WAVE...")
-        let riff = header.subdata(in: 0..<4)
-        let wave = header.subdata(in: 8..<12)
-        guard riff == Data("RIFF".utf8), wave == Data("WAVE".utf8) else { return }
-
-        let dataChunkSize = header.subdata(in: 40..<44).withUnsafeBytes { $0.load(as: UInt32.self).littleEndian }
-        if dataChunkSize != 0 { return }  // already finalised
-
-        let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64) ?? 0
-        guard fileSize > 44 else { return }
-        let pcmBytes = UInt32(min(fileSize - 44, UInt64(UInt32.max)))
-        let riffSize = UInt32(min(fileSize - 8, UInt64(UInt32.max)))
-
-        try? handle.seek(toOffset: 4)
-        try? handle.write(contentsOf: littleEndianBytes(riffSize))
-        try? handle.seek(toOffset: 40)
-        try? handle.write(contentsOf: littleEndianBytes(pcmBytes))
-        dlog("RecordingArchive: repaired orphan \(url.lastPathComponent) (\(pcmBytes) PCM bytes)")
     }
 
     static func littleEndianBytes(_ v: UInt32) -> [UInt8] {

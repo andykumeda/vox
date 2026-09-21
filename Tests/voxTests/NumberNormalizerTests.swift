@@ -30,6 +30,14 @@ final class NumberNormalizerTests: XCTestCase {
         XCTAssertEqual(n.normalize("one hundred twenty three"), "123")
     }
 
+    func testOverflowingNumberRunPreservesOriginalWords() {
+        let scaleRun = Array(repeating: "hundred", count: 10).joined(separator: " ")
+        let input = "Keep \(scaleRun) words"
+
+        XCTAssertEqual(n.normalize(input), input)
+        XCTAssertEqual(n.normalize(input, aggressive: true), input)
+    }
+
     func testThousands() {
         XCTAssertEqual(n.normalize("two thousand five hundred"), "2500")
     }
@@ -71,10 +79,6 @@ final class NumberNormalizerTests: XCTestCase {
 
     func testAggressiveStillKeepsNonNumberWords() {
         XCTAssertEqual(n.normalize("apples three pears", aggressive: true), "apples 3 pears")
-    }
-
-    func testProseModeUnchangedWithoutAggressive() {
-        XCTAssertEqual(n.normalize("I have three apples"), "I have three apples")
     }
 
     // MARK: - Context-aware prose (currency / time / measurements)

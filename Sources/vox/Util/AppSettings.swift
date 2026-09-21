@@ -77,14 +77,6 @@ public enum ModeOverride: String, CaseIterable, Sendable {
         case .command: return "Always command"
         }
     }
-
-    public func next() -> ModeOverride {
-        switch self {
-        case .auto:    return .prose
-        case .prose:   return .command
-        case .command: return .auto
-        }
-    }
 }
 
 enum AppSettings {
@@ -200,8 +192,6 @@ enum AppSettings {
         }
     }
 
-    /// Generate an LLM summary of every completed meeting transcript.
-    /// Default ON. Cost is ~$0.0005 per meeting on gpt-4o-mini.
     /// Selects the STT provider for meeting transcription.
     /// Smart default: Deepgram if a key is configured, else OpenAI. Once the
     /// user picks explicitly, the choice is honored on subsequent reads.
@@ -218,6 +208,7 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: meetingProviderKey) }
     }
 
+    /// Generate a gpt-4o-mini summary of each completed meeting. Default ON.
     static var meetingSummaryEnabled: Bool {
         get {
             // Default to true on first read so users get summaries by default.

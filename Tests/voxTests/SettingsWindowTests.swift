@@ -23,19 +23,9 @@ final class SettingsWindowTests: XCTestCase {
     }
 
     @MainActor
-    func testSelectingDictionaryRoutesThroughPersonalization() {
-        let selection = SidebarSelection()
-
-        selection.selectDictionary()
-
-        XCTAssertEqual(selection.current, .personalization)
-        XCTAssertEqual(selection.personalizationDestination, .dictionary)
-    }
-
-    @MainActor
     func testSelectingSettingsRoutesToGeneralSettingsDestination() {
         let selection = SidebarSelection()
-        selection.selectDictionary()
+        selection.selectSidebarItem(.personalization)
 
         selection.selectSidebarItem(.settings)
 

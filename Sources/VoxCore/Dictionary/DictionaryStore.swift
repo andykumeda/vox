@@ -21,7 +21,6 @@ public final class DictionaryStore: ObservableObject {
     @Published public private(set) var saveError: String?
 
     private var watchSource: DispatchSourceFileSystemObject?
-    private var watchFD: Int32 = -1
     private var debounceTimer: DispatchSourceTimer?
     private let watchQueue = DispatchQueue(label: "vox.dictionary.watch")
 
@@ -41,7 +40,6 @@ public final class DictionaryStore: ObservableObject {
         src.setCancelHandler { [watchFD = fd] in
             if watchFD >= 0 { close(watchFD) }
         }
-        watchFD = fd
         watchSource = src
         src.resume()
     }
@@ -221,6 +219,10 @@ public final class DictionaryStore: ObservableObject {
     }
 
     private func write(entries: [DictionaryEntry]) throws {
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         let envelope = DictionaryFileV1(schemaVersion: 1, entries: entries)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

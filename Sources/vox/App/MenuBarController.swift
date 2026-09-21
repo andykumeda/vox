@@ -2,16 +2,6 @@ import AppKit
 import ApplicationServices
 import Sparkle
 
-/// Mutex hook: returns true when something else (currently only meeting recording)
-/// has taken over the audio path and dictation hotkey must be ignored.
-/// Production resolves to `MeetingTranscriptionSession.shared.isRecording`.
-/// Tests swap this for a stub.
-public enum DictationMutex {
-    public static var isBlocked: () -> Bool = {
-        MeetingTranscriptionSession.shared.isRecording
-    }
-}
-
 enum MenuIconState {
     case idle, recording, transcribing, error
 
@@ -69,7 +59,9 @@ enum MenuBarCommand: CaseIterable {
 final class MenuBarController: NSObject {
     static let pasteLastFocusSettleDelay: TimeInterval = 0.20
 
-    /// Serializes dictation paste and Paste Last so clipboard/remote waits cannot interleave.
+    /// Shared entry point for dictation paste and Paste Last.
+    /// The awaited body permits actor reentrancy, so this does not serialize
+    /// overlapping clipboard operations; see docs/codebase-audit.md.
     private actor PasteGate {
         func run(_ body: @Sendable () async -> Void) async {
             await body()
@@ -106,7 +98,6 @@ final class MenuBarController: NSObject {
         UpdaterAccess.controller = c
         return c
     }()
-    private var helpWindowController: HelpWindowController?
     private let meetingDetector = MeetingDetector()
 
     private var currentMode: TranscriptionMode = .prose
@@ -413,38 +404,6 @@ final class MenuBarController: NSObject {
         }
     }
 
-    private func whiteBackgroundIcon() -> NSImage? {
-        let size = NSSize(width: 18, height: 18)
-        let result = NSImage(size: size)
-        result.lockFocus()
-        NSColor.white.setFill()
-        let path = NSBezierPath(roundedRect: NSRect(origin: .zero, size: size),
-                                xRadius: 4, yRadius: 4)
-        path.fill()
-        let candidates = ["text.bubble", "bubble.left", "bubble.left.fill", "waveform"]
-        if let glyph = candidates.lazy
-            .compactMap({ NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") })
-            .first {
-            let cfg = NSImage.SymbolConfiguration(paletteColors: [.black])
-            let tinted = glyph.withSymbolConfiguration(cfg) ?? glyph
-            tinted.draw(in: NSRect(x: 2, y: 2, width: 14, height: 14))
-        }
-        result.unlockFocus()
-        result.isTemplate = false
-        return result
-    }
-
-    private func tintedSymbol(color: NSColor) -> NSImage? {
-        let candidates = ["text.bubble.fill", "bubble.left.fill", "waveform", "mic.fill"]
-        let base = candidates.lazy
-            .compactMap { NSImage(systemSymbolName: $0, accessibilityDescription: "Vox") }
-            .first
-        let cfg = NSImage.SymbolConfiguration(paletteColors: [color])
-        let tinted = base?.withSymbolConfiguration(cfg)
-        tinted?.isTemplate = false
-        return tinted
-    }
-
     private func refreshIcon() {
         guard let button = statusItem.button else { return }
 
@@ -458,7 +417,7 @@ final class MenuBarController: NSObject {
             switch status {
             case .recording:
                 symbol = "record.circle.fill"; color = .systemRed
-                tooltip = "Vox — MEETING RECORDING (click menu → Stop Meeting Transcript)"
+                tooltip = "Vox — MEETING RECORDING (open Meeting → Stop)"
             case .chunking, .transcribing:
                 symbol = "waveform.circle.fill"; color = .systemOrange
                 tooltip = "Vox — meeting transcribing…"
@@ -523,67 +482,6 @@ final class MenuBarController: NSObject {
         }()
     }
 
-    public func showHelp() {
-        if helpWindowController == nil {
-            helpWindowController = HelpWindowController()
-        }
-        let controller = helpWindowController
-        Task { @MainActor in
-            controller?.show()
-        }
-    }
-
-    @objc private func showHelpAction(_ sender: Any?) {
-        showHelp()
-    }
-
-    @objc private func startMeetingTranscript() {
-        let result = MeetingPreflight.gate(hasAPIKey: keychain.read()?.isEmpty == false)
-        if case .failure(let err) = result {
-            dlog("meeting gate denied: \(err)")
-            presentMeetingError(err.userMessage)
-            return
-        }
-        if state == .recording {
-            presentMeetingError("Finish current dictation before starting a meeting.")
-            return
-        }
-        Task { @MainActor in
-            do {
-                try await MeetingTranscriptionSession.shared.start()
-                MeetingHUDPanel.shared.show()
-            } catch {
-                self.presentMeetingError("Could not start meeting: \(error)")
-            }
-        }
-    }
-
-    @objc private func stopMeetingTranscript() {
-        Task { @MainActor in
-            do {
-                try await MeetingTranscriptionSession.shared.stop()
-                MeetingTranscriptsWindow.shared.show()
-            } catch {
-                self.presentMeetingError("Could not stop meeting: \(error)")
-            }
-        }
-    }
-
-    @objc private func showMeetingTranscripts() {
-        Task { @MainActor in
-            MeetingTranscriptsWindow.shared.show()
-        }
-    }
-
-    private func presentMeetingError(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = "Meeting Transcription"
-        alert.informativeText = message
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
-
     private func handleModeToggle() {
         // Toggle directly between prose and command based on the currently effective mode.
         // Skipping .auto means a single press is always visible (was: auto→prose→command
@@ -629,7 +527,7 @@ final class MenuBarController: NSObject {
             dlog("dictation Fn ignored — record hotkey disabled on this Mac")
             return
         }
-        if DictationMutex.isBlocked() {
+        if MeetingTranscriptionSession.shared.isRecording {
             dlog("dictation Fn ignored — meeting recording active")
             // Audible cue so the user notices their dictation isn't going through.
             sound.play(.error)
@@ -680,8 +578,8 @@ final class MenuBarController: NSObject {
 
         // Silence gate: skip the transcription API on clearly empty clips.
         // Whisper / gpt-4o-transcribe hallucinate or echo the prompt on silence
-        // (e.g. prose pangram, command-mode "ls -l"). Tiered by duration so
-        // quiet-but-real longer recordings still transcribe.
+        // (e.g. prose pangram, command-mode "ls -l"). Sustained frame-level
+        // speech is required even when handling noise raises aggregate RMS.
         let (durationSec, rms) = wavStats(wav)
         let voicedSec = voicedDurationSec(wav)
         dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) voiced=\(voicedSec)s mode=\(mode)")
@@ -742,8 +640,8 @@ final class MenuBarController: NSObject {
                 }
                 dlog("dictation timing postprocess=\(Self.elapsedString(since: postprocessStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s")
 
-                // Verbatim modifier (Fn+Option) bypasses smart cleanup so the
-                // raw transcribed text is pasted as-is. Setting `enabled: false`
+                // Verbatim modifier (Fn+Option) bypasses smart cleanup after
+                // normal mode formatting. Setting `enabled: false`
                 // also skips trigger phrases ("scratch that", "new paragraph"),
                 // which is intentional — verbatim means literal.
                 let cleanupEnabled = AppSettings.smartCleanupEnabled && !verbatimMode

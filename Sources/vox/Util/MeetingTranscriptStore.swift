@@ -301,33 +301,6 @@ public final class MeetingTranscriptStore {
         )
     }
 
-    /// Deletes all m4a artifacts and chunk directories for every completed session
-    /// whose `endedAt` is older than `cutoff`. Transcript JSON is preserved.
-    /// Returns the number of sessions whose audio was purged.
-    @discardableResult
-    public func purgeAudioOlderThan(_ cutoff: Date) -> Int {
-        var purged = 0
-        for session in list() {
-            guard let endedAt = session.endedAt, endedAt < cutoff else { continue }
-            // Only purge terminal-state sessions.
-            switch session.status {
-            case .completed, .cancelled, .failed:
-                break
-            case .recording, .chunking, .transcribing:
-                continue
-            }
-            // Older Vox builds sometimes flipped this flag after deleting only
-            // the three primary files, leaving trimmed/mixed/chunk artifacts.
-            // Inspect disk when the flag is false so the retention sweep repairs
-            // those historical partial purges instead of skipping them forever.
-            guard session.audioRetained || hasAudioArtifacts(for: session.id) else {
-                continue
-            }
-            if (try? purgeAudio(for: session.id)) != nil { purged += 1 }
-        }
-        return purged
-    }
-
     /// Startup privacy sweep independent of transcript decryption. A new app
     /// process has no live meeting jobs, so audio found under any session
     /// directory is terminal/orphaned even when its transcript is corrupt or
@@ -360,10 +333,6 @@ public final class MeetingTranscriptStore {
             total += UInt64(size)
         }
         return total
-    }
-
-    private func hasAudioArtifacts(for id: UUID) -> Bool {
-        hasAudioArtifacts(in: sessionDirectory(id: id))
     }
 
     private func hasAudioArtifacts(in directory: URL) -> Bool {

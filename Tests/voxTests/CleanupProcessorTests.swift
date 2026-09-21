@@ -309,27 +309,35 @@ final class CleanupProcessorTests: XCTestCase {
 
     func testNoLLMInjectedSkipsLLM() async {
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: nil)
-        let result = await proc.process("Hello world.")
-        XCTAssertEqual(result, "Hello world.")
+        let result = await proc.process("This sentence has no cleanup provider.")
+        XCTAssertEqual(result, "This sentence has no cleanup provider.")
     }
 
     // MARK: - Fail-open
 
     func testLLMThrowsReturnsTriggeredText() async {
         struct DummyError: Error {}
-        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in throw DummyError() }
+        let invoked = expectation(description: "Cleanup provider throws")
+        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            invoked.fulfill()
+            throw DummyError()
+        }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
-        let result = await proc.process("Hello. Scratch that. World.")
-        XCTAssertEqual(result, "World.")
+        let result = await proc.process("Hello. Scratch that. This replacement sentence must survive.")
+        XCTAssertEqual(result, "This replacement sentence must survive.")
+        await fulfillment(of: [invoked], timeout: 1)
     }
 
     func testLLMHTTPErrorReturnsTriggeredText() async {
+        let invoked = expectation(description: "Cleanup provider reports HTTP error")
         let cleaner: CleanupProcessor.LLMCleanFunc = { _ in
+            invoked.fulfill()
             throw NSError(domain: "test", code: 500, userInfo: [NSLocalizedDescriptionKey: "boom"])
         }
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
-        let result = await proc.process("Goodbye world.")
-        XCTAssertEqual(result, "Goodbye world.")
+        let result = await proc.process("This sentence must survive an HTTP failure.")
+        XCTAssertEqual(result, "This sentence must survive an HTTP failure.")
+        await fulfillment(of: [invoked], timeout: 1)
     }
 
     func testLLMRefusalReturnsTriggeredText() async {
@@ -377,14 +385,6 @@ final class CleanupProcessorTests: XCTestCase {
         let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
         let result = await proc.process("This is a complete sentence with several words.")
         XCTAssertEqual(result, "This is a complete sentence with several words.")
-    }
-
-    func testLLMShortInputAllowsShortOutput() async {
-        // If input is short, a short output is fine — guard only kicks in when input is long.
-        let cleaner: CleanupProcessor.LLMCleanFunc = { _ in return "Hi." }
-        let proc = CleanupProcessor(mode: .prose, enabled: true, llmCleaner: cleaner)
-        let result = await proc.process("Hi.")
-        XCTAssertEqual(result, "Hi.")
     }
 
     // MARK: - Command mode triggers (substring-based, tolerant of missing punct)

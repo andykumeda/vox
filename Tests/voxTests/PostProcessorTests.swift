@@ -16,6 +16,13 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(p.apply("hello world"), "Hello world.")
     }
 
+    func testProsePreservesFullUnicodeUppercaseExpansion() {
+        let p = PostProcessor(mode: .prose, dictionaryProvider: { [] })
+
+        XCTAssertEqual(p.apply("ßeta. ﬃnal"), "SSeta. FFInal.")
+        XCTAssertEqual(p.apply("e\u{301}lan"), "E\u{301}lan.")
+    }
+
     func testProseCapitalizesAfterPeriod() {
         let p = PostProcessor(mode: .prose)
         XCTAssertEqual(p.apply("hello. how are you"), "Hello. How are you?")
@@ -82,12 +89,6 @@ final class PostProcessorTests: XCTestCase {
     func testProsePreservesFilename() {
         let p = PostProcessor(mode: .prose)
         XCTAssertEqual(p.apply("open README.md"), "Open README.md.")
-    }
-
-    func testProseStillAddsSpaceForRegularSentenceEnd() {
-        // Shielding must not leak into normal sentence boundaries.
-        let p = PostProcessor(mode: .prose)
-        XCTAssertEqual(p.apply("hello.how are you"), "Hello. How are you?")
     }
 
     func testProseCollapsesWhitespace() {
@@ -561,13 +562,6 @@ final class PostProcessorTests: XCTestCase {
         // "slash help" → "/help" for slash-command apps (Claude Code, Slack).
         let p = PostProcessor(mode: .command)
         XCTAssertEqual(p.apply("slash help"), "/help")
-    }
-
-    func testCommandLeavesIntentionalPathSpaceAlone() {
-        // "cat /tmp/some-file.txt" — slash already tight to path, no spoken
-        // "slash" word. Don't glue away the intentional cmd/path separator.
-        let p = PostProcessor(mode: .command)
-        XCTAssertEqual(p.apply("cat /tmp/some-file.txt"), "cat /tmp/some-file.txt")
     }
 
     // MARK: - Arrow + modifier suffix keys

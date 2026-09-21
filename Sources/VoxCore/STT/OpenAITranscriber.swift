@@ -313,8 +313,8 @@ public struct OpenAITranscriber {
 
     /// Transcribe one meeting audio chunk via Whisper `verbose_json` and stitch each
     /// segment's start/end onto an absolute meeting timeline using `offsetSeconds`.
-    /// Caller (`MeetingTranscriptionSession`) is responsible for the outer infinite-retry
-    /// loop on transport errors.
+    /// Caller (`MeetingTranscriptionSession`) owns the outer bounded retry loop
+    /// for transport errors.
     public static func transcribeMeetingChunk(
         fileURL: URL,
         offsetSeconds: Double,

@@ -28,9 +28,6 @@ final class SoundPlayerTests: XCTestCase {
         XCTAssertEqual(SystemAlertSound.startDefault, .tink)
         XCTAssertEqual(SystemAlertSound.stopDefault, .pop)
         XCTAssertEqual(SystemAlertSound.errorDefault, .funk)
-        XCTAssertEqual(SoundCue.start.defaultSound, .tink)
-        XCTAssertEqual(SoundCue.stop.defaultSound, .pop)
-        XCTAssertEqual(SoundCue.error.defaultSound, .funk)
     }
 
     func testLoadSoundUsesIndependentFileInstance() {

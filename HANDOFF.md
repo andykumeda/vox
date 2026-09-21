@@ -1,5 +1,32 @@
 # Vox Handoff
 
+## Current state — unreleased 0.7.61 build 85 (2026-09-21)
+
+- Project root: `/Users/andy/Dev/vox` on `AKsMini`; branch `main`.
+- Public Sparkle remains `0.7.59` / build `83`. Unreleased `0.7.61` / build
+  `85` is installed and running locally; strict signing, built/installed binary
+  and Help parity, startup permissions, main-window rendering, and bundled Help
+  rendering were verified.
+- Whole-codebase cleanup and documentation review are tracked in
+  [the audit ledger](docs/codebase-audit.md). The worktree started clean at
+  `1fee68d`; the source cleanup and documentation changes have been reviewed.
+- Removed obsolete UI, synchronous paste, retained-audio, placeholder, and
+  test-only paths. Fixed first-use dictionary persistence, number overflow, and
+  Unicode capitalization crashes. `swift test` passes 458 macOS + 12 VoxCore
+  tests; the seven-fixture dictation regression and generic iOS build pass.
+- The ledger records open paste-concurrency, silent-meeting upload, provider
+  stream, and iOS lifecycle findings. These were not silently treated as fixed.
+- iOS remains a Focused MVP with the physical Notes keyboard → host → return →
+  one-time insertion gate still open; see [Mobile/README.md](Mobile/README.md).
+- Realtime inline typing remains deferred to
+  [the next-phase design](docs/realtime-typing-next-phase.md).
+
+## Release and deployment history
+
+The entries below are dated evidence from earlier work. Version numbers,
+“unreleased” labels, test counts, and pending checks describe each historical
+snapshot; the current state above and the audit ledger take precedence.
+
 ## Released 0.7.59 build 83: recover route changes and low pinned-mic gain
 
 - Switching the macOS output to the 44.1 kHz OontZ Bluetooth device and then
@@ -492,7 +519,7 @@ Last updated: 2026-09-14
 - Regression coverage includes the observed `0.742625s` / RMS `590` empty-toggle case and a voiced short-clip allow case.
 - The release includes the frame-level speech-activity gate from build `53`.
 
-## Current state
+## Historical snapshot: 0.7.34
 
 - Project root: `/Users/andy/Dev/vox` on Mac mini `AKsMini`.
 - Release: `0.7.34` build `54` is the current published release. It includes
@@ -536,7 +563,7 @@ Last updated: 2026-09-14
 - Whisper prose prompt tightened to prefer digits/symbols for these cases.
 - `swift test`: 412 tests, 0 failures.
 
-## Verification
+## Historical verification: August 2026
 
 - Pre-release local app refreshed 2026-08-03: `./scripts/build-app.sh` →
   `/Applications/Vox.app`, LaunchAgent restarted
