@@ -81,6 +81,28 @@ enum AudioInputDevices {
         return status == noErr
     }
 
+    static func defaultInputDeviceID() -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var id = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &id
+        ) == noErr,
+        id != kAudioObjectUnknown else {
+            return nil
+        }
+        return id
+    }
+
     static func hardwareInputFormat(for deviceID: AudioDeviceID) -> AVAudioFormat? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyNominalSampleRate,
@@ -159,25 +181,6 @@ enum AudioInputDevices {
             }
         }
         return false
-    }
-
-    private static func defaultInputDeviceID() -> AudioDeviceID {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var id = AudioDeviceID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        _ = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &id
-        )
-        return id
     }
 
     private static func inputChannelCount(for id: AudioDeviceID) -> UInt32 {

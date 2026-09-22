@@ -11,7 +11,7 @@ The menu contains **Dashboard**, **Meeting**, **Paste Last Transcription**, **Se
 Hold **Fn** (default) and speak. Release to transcribe.
 Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-tap-start, one-tap-stop.
 A start sound plays before the microphone opens; a stop sound plays after you release. Vox prepares the start cue silently after launch to reduce the first-recording delay. Bluetooth output can still take time to wake. Change or silence either cue in Settings → Sounds.
-Choose Settings → Microphone to pin dictation to a specific input device. A pinned USB mic will not silently fall back to Bluetooth. If another app leaves its writable macOS input level below 70%, Vox restores it to 75% before recording; normal levels and devices without software volume controls are unchanged.
+Choose Settings → Microphone to pin dictation to a specific input device. While Vox runs, it keeps that mic as the macOS default input through output changes and device reconnects, and will not silently fall back to Bluetooth. If another app leaves its writable macOS input level below 70%, Vox restores it to 75% before recording; normal levels and devices without software volume controls are unchanged.
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes
@@ -189,10 +189,11 @@ Use the menu → **Check for Updates…**. Your saved settings and API keys rema
   Routine transcript diagnostics log character/word counts rather than transcript
   bodies; provider and system failures are also recorded as errors.
 - **Wrong transcription plus delayed start/stop sounds** — pin the intended
-  USB/studio mic under Settings → Microphone. Vox will bind that input before
-  every dictation and fail safely if it is unavailable instead of switching to
-  Bluetooth. An `inputFormat sampleRate=8000.0` log indicates a Bluetooth-route
-  transition; Vox retries once when the hardware format changes during startup.
+  USB/studio mic under Settings → Microphone. Vox keeps that input as the macOS
+  default while it runs, including across output changes, and fails safely if
+  it is unavailable instead of switching to Bluetooth. An `inputFormat
+  sampleRate=8000.0` log indicates a Bluetooth-route transition; Vox retries
+  once when the hardware format changes during startup.
   Bluetooth output can still delay the cue while the speaker wakes.
 - **Fn key doesn't fire** — confirm Vox has Input Monitoring and Accessibility
   access. If the Globe key opens another macOS action, set System Settings →

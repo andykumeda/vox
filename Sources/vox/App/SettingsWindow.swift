@@ -419,6 +419,9 @@ struct SettingsView: View {
                     }
                     .onChange(of: audioInputDeviceUID) { newValue in
                         AppSettings.audioInputDeviceUID = newValue.isEmpty ? nil : newValue
+                        PinnedAudioInputMonitor.shared.reassertPinnedInput(
+                            reason: "microphone setting changed"
+                        )
                     }
                     Button("Refresh") {
                         audioInputDevices = AudioInputDevices.available()

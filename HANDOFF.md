@@ -1,12 +1,29 @@
 # Vox Handoff
 
-## Current state — unreleased 0.7.61 build 85 (2026-09-21)
+## Current state — unreleased 0.7.63 build 87 (2026-09-22)
 
 - Project root: `/Users/andy/Dev/vox` on `AKsMini`; branch `main`.
-- Public Sparkle remains `0.7.59` / build `83`. Unreleased `0.7.61` / build
-  `85` is installed and running locally; strict signing, built/installed binary
-  and Help parity, startup permissions, main-window rendering, and bundled Help
-  rendering were verified.
+- Public Sparkle remains `0.7.59` / build `83`. Unreleased `0.7.63` / build
+  `87` continuously monitors Core Audio route changes and restores the pinned
+  input by persistent UID when macOS or a conferencing app changes the default.
+  The implementation avoids redundant writes, re-resolves the UID after device
+  reconnects, retries boundedly if Core Audio rejects a selection while the
+  route settles, and still refuses to fall back when the pinned mic is unavailable.
+- The incident was reproduced before the fix: Vox retained the AT2020USB-X UID,
+  but switching output after a Teams session left the OontZ Bluetooth hands-free
+  route as macOS's default 8 kHz input. The earlier launch/pre-record assertions
+  did not repair the visible system route between recordings.
+- Five focused route-monitor regressions pass, including debouncing, bounded
+  retry, no-op when already pinned, and no fallback when unavailable. `swift
+  test` passes 463 macOS + 12 VoxCore tests; the seven-fixture dictation baseline
+  reports quality `1.0` and failure rate `0.0`.
+- Build 86 first proved the live repair. Final build 87 is installed and running
+  as PID `45375`; strict code-sign verification, microphone permission,
+  Accessibility trust, and hotkey startup pass. The live output transition
+  AT2020USB-X → OontZ preserved AT2020USB-X as input. A forced recreation of the
+  bad state then made OontZ's 8 kHz input the macOS default; the same Vox PID
+  immediately restored AT2020USB-X and logged the route-event repair. OontZ
+  remains the selected output and AT2020USB-X the selected input.
 - Whole-codebase cleanup and documentation review are tracked in
   [the audit ledger](docs/codebase-audit.md). The worktree started clean at
   `1fee68d`; the source cleanup and documentation changes have been reviewed.

@@ -128,13 +128,10 @@ final class MenuBarController: NSObject {
         configureMenu()
         refreshIcon()
 
-        // Reassert a pinned microphone at launch. macOS may have changed its
-        // global default while a Bluetooth hands-free profile was active.
-        if let uid = AppSettings.audioInputDeviceUID,
-           let deviceID = AudioInputDevices.deviceID(forUID: uid) {
-            let restored = AudioInputDevices.setDefaultInputDevice(deviceID)
-            dlog("pinned input default restored uid=\(uid) success=\(restored)")
-        }
+        // Keep the pinned microphone as the macOS default continuously. An
+        // output-route change can otherwise activate a Bluetooth hands-free
+        // input between recordings.
+        PinnedAudioInputMonitor.shared.start()
 
         let keychain = keychain
         DispatchQueue.global(qos: .utility).async {
@@ -533,11 +530,7 @@ final class MenuBarController: NSObject {
             sound.play(.error)
             return
         }
-        if let uid = AppSettings.audioInputDeviceUID,
-           let deviceID = AudioInputDevices.deviceID(forUID: uid) {
-            let restored = AudioInputDevices.setDefaultInputDevice(deviceID)
-            dlog("pinned input default asserted uid=\(uid) success=\(restored)")
-        }
+        PinnedAudioInputMonitor.shared.reassertPinnedInput(reason: "recording start")
         currentVerbatim = verbatim
         switch AppSettings.modeOverride {
         case .auto:    currentMode = contextDetector.modeForFrontmost()
