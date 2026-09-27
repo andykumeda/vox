@@ -37,6 +37,7 @@ public struct PostProcessor {
         var suffixKeys: [SuffixKey] = []
         switch mode {
         case .prose:
+            s = avoidSentenceInitialAnd(s)
             s = applyDictionary(.prose, s)
             s = capitalizeSentenceStarts(s)
             if s.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) {
@@ -70,6 +71,27 @@ public struct PostProcessor {
         }
 
         return (restoreURLs(s, urlMap), suffixKeys)
+    }
+
+    /// Speech-to-text may insert a sentence break before a spoken "and".
+    /// The cleanup guard only rejects a *new* sentence-initial And, so repair
+    /// that punctuation here before the text reaches Smart Cleanup.
+    private func avoidSentenceInitialAnd(_ input: String) -> String {
+        var result = input.replacingOccurrences(
+            of: "(?i)\\.([ \\t]+)and\\b[ \\t]+",
+            with: ", and ",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: "(?i)([!?])[ \\t]+and\\b[ \\t]+",
+            with: "$1 ",
+            options: .regularExpression
+        )
+        return result.replacingOccurrences(
+            of: "(?i)^and\\b[ \\t,]+(?=\\S)",
+            with: "",
+            options: .regularExpression
+        )
     }
 
     // Words that, when first in a sentence, signal a question. Used to choose

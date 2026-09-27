@@ -28,9 +28,18 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(p.apply("hello. how are you"), "Hello. How are you?")
     }
 
+    func testProseDoesNotStartSentenceWithAnd() {
+        let p = PostProcessor(mode: .prose, dictionaryProvider: { [] })
+        XCTAssertEqual(p.apply("we talked. And then we left"), "We talked, and then we left.")
+        XCTAssertEqual(p.apply("And then we left"), "Then we left.")
+        XCTAssertEqual(p.apply("Are you coming? And bring the notes"), "Are you coming? Bring the notes.")
+        XCTAssertEqual(p.apply("the word and"), "The word and.")
+    }
+
     func testProseConvertsCompoundNumbers() {
         let p = PostProcessor(mode: .prose)
         XCTAssertEqual(p.apply("i have twenty three apples"), "I have 23 apples.")
+        XCTAssertEqual(p.apply("it costs 300000 dollars"), "It costs 300,000 dollars.")
     }
 
     func testProseLeavesSingleDigitWordAsWord() {
@@ -51,6 +60,8 @@ final class PostProcessorTests: XCTestCase {
     func testProseTimeUsesDigits() {
         let p = PostProcessor(mode: .prose)
         XCTAssertEqual(p.apply("wait three hours"), "Wait 3 hours.")
+        XCTAssertEqual(p.apply("we went over around four or five"), "We went over around 4 or 5.")
+        XCTAssertEqual(p.apply("meet at four"), "Meet at 4.")
     }
 
     func testProseDataSizeUsesAbbreviation() {

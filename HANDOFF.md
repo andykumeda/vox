@@ -1,5 +1,56 @@
 # Vox Handoff
 
+## Current state — unreleased 0.7.66 build 90 (2026-09-26)
+
+- Prose dictation now inserts comma grouping in standalone numbers of at least
+  five digits (`300000` and `three hundred thousand` → `300,000`). The final
+  dictation pipeline reapplies grouping after Smart Cleanup so punctuation-only
+  cleanup cannot strip it. Command mode and identifiers, versions, and years
+  retain their existing formatting.
+- The focused number, postprocessor, and pipeline tests pass. `swift test`
+  passes 467 macOS and 13 VoxCore tests. The seven-fixture dictation regression
+  passes with quality 1.0 and failure rate 0.0.
+- This is an unreleased local build; the public Sparkle appcast remains
+  0.7.59 / build 83. Build 90 is installed at `/Applications/Vox.app`; its
+  executable matches the built app by SHA-256, strict code-sign verification
+  passes, and the LaunchAgent restarted as PID 66374 with microphone permission
+  and hotkey startup confirmed. A live spoken smoke for the reported number
+  remains unverified.
+
+## Current state — unreleased 0.7.65 build 89 (2026-09-24)
+
+- The linked `andy-writing-style-guide.md` exists, is readable, and includes
+  sentence-initial “And” guidance. Live dictation at 15:36 UTC had Smart
+  Cleanup enabled; there was no linked-file fallback error for that run.
+- The pipeline gap: the existing cleanup guard rejected only *new*
+  sentence-initial “And” in the LLM candidate. One already present in
+  post-processed STT could pass through, regardless of the style prompt. Prose
+  formatting now joins `. And …` to `, and …` or removes a leading `And`
+  before a full sentence. The cleanup guard remains in place.
+- This is an unreleased local build. Public Sparkle remains 0.7.59 / build 83.
+- `swift test` passes 466 macOS and 12 VoxCore tests; the seven-fixture
+  dictation regression reports quality 1.0 and failure rate 0.0. Build 89 is
+  installed at `/Applications/Vox.app`, its executable matches the built app by
+  SHA-256, strict code-sign verification passes, and LaunchAgent PID 91866
+  started with hotkey and microphone permission confirmed. The reported
+  recording's raw text and a new spoken smoke have not been verified.
+
+## Current state — unreleased 0.7.64 build 88 (2026-09-24)
+
+- Prose formatting now renders small-number alternatives and ranges as digits
+  (`around four or five` → `around 4 or 5`, `between four and five` →
+  `between 4 and 5`). A bare clock time at a clause end also uses digits
+  (`meet at four` → `meet at 4`); ordinary small counts remain words.
+- The change is local formatting after speech-to-text. The public Sparkle
+  appcast remains at 0.7.59 / build 83; this build is unreleased.
+- `swift test` passes 465 macOS and 12 VoxCore tests. The seven-fixture
+  dictation regression passes with quality 1.0 and failure rate 0.0. The
+  installed `/Applications/Vox.app` is version 0.7.64 / build 88, passes
+  strict code-sign verification, and matches the built executable by SHA-256.
+  The LaunchAgent restarted successfully as PID 89155 with hotkey startup and
+  microphone permission confirmed in the log. The exact spoken phrase has not
+  been manually dictated through the installed app yet.
+
 ## Current state — unreleased 0.7.63 build 87 (2026-09-22)
 
 - Project root: `/Users/andy/Dev/vox` on `AKsMini`; branch `main`.

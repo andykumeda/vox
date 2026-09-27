@@ -130,7 +130,31 @@ public struct NumberNormalizer {
             )
             output.append(contentsOf: result.parts)
         }
-        return normalizeApproximateDollarAmounts(output.joined())
+        let normalized = normalizeApproximateDollarAmounts(output.joined())
+        return aggressive ? normalized : groupLargeNumbers(in: normalized)
+    }
+
+    /// Group standalone prose quantities of at least five digits. Keep years,
+    /// identifiers, paths, versions, and already formatted numbers intact.
+    public func groupLargeNumbers(in input: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: "(?<![\\p{L}\\p{N}_./@-])[0-9]{5,}(?![\\p{L}\\p{N}_/@-]|\\.[\\p{L}\\p{N}])"
+        ) else { return input }
+        let mutable = NSMutableString(string: input)
+        let matches = regex.matches(in: input, range: NSRange(input.startIndex..<input.endIndex, in: input))
+        for match in matches.reversed() {
+            let digits = (input as NSString).substring(with: match.range)
+            let firstGroupSize = digits.count % 3 == 0 ? 3 : digits.count % 3
+            var grouped = String(digits.prefix(firstGroupSize))
+            var index = digits.index(digits.startIndex, offsetBy: firstGroupSize)
+            while index < digits.endIndex {
+                let end = digits.index(index, offsetBy: 3)
+                grouped += "," + digits[index..<end]
+                index = end
+            }
+            mutable.replaceCharacters(in: match.range, with: grouped)
+        }
+        return mutable as String
     }
 
     /// Exact prices read naturally as symbols ("one hundred dollars" →
@@ -175,7 +199,26 @@ public struct NumberNormalizer {
     /// Options are labels/identifiers, so even small number words should be
     /// rendered as digits ("option one" → "option 1").
     private func normalizeContextualNumbers(_ input: String) -> String {
-        var result = input
+        // Alternatives and bounded ranges are explicit quantities even when
+        // each endpoint is a bare single digit ("around four or five").
+        // Leave ordinary counts and unbounded "two and three apples" alone.
+        let small = "zero|one|two|three|four|five|six|seven|eight|nine"
+        let endpoint = "(?:\(small)|[0-9])"
+        var result = replaceSmallNumberWords(
+            in: input,
+            matching: "(?i)\\b\(endpoint)(?:\\s+(?:or|to)\\s+\(endpoint))+\\b"
+        )
+        result = replaceSmallNumberWords(
+            in: result,
+            matching: "(?i)\\bbetween\\s+\(endpoint)\\s+and\\s+\(endpoint)\\b"
+        )
+        // A clock time at the end of a clause has no explicit unit for the
+        // existing parser to see ("meet at four", "done by five"). Require a
+        // clause boundary so "around four people" remains an ordinary count.
+        result = replaceSmallNumberWords(
+            in: result,
+            matching: "(?i)\\b(?:at|by|before|after|around)\\s+(?:\(small))\\b(?=\\s*(?:[,.!?;:]|$))"
+        )
         for (word, value) in Self.units where value <= 9 {
             result = result.replacingOccurrences(
                 of: "(?i)\\b(option\\s+)\(word)\\b",
@@ -184,6 +227,25 @@ public struct NumberNormalizer {
             )
         }
         return result
+    }
+
+    private func replaceSmallNumberWords(in input: String, matching pattern: String) -> String {
+        guard let context = try? NSRegularExpression(pattern: pattern),
+              let words = try? NSRegularExpression(pattern: "(?i)\\b(?:zero|one|two|three|four|five|six|seven|eight|nine)\\b")
+        else { return input }
+
+        let mutable = NSMutableString(string: input)
+        let matches = context.matches(in: input, range: NSRange(input.startIndex..<input.endIndex, in: input))
+        for match in matches.reversed() {
+            let numberMatches = words.matches(in: input, range: match.range)
+            for numberMatch in numberMatches.reversed() {
+                let word = (input as NSString).substring(with: numberMatch.range).lowercased()
+                if let value = Self.units[word] {
+                    mutable.replaceCharacters(in: numberMatch.range, with: String(value))
+                }
+            }
+        }
+        return mutable as String
     }
 
     private func isNumberWord(_ w: String) -> Bool {

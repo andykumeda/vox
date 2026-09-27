@@ -66,4 +66,20 @@ final class DictationPipelineTests: XCTestCase {
             XCTAssertEqual(error as? DictationPipelineError, .suspectedHallucination)
         }
     }
+
+    func testCleanupCannotRemoveLargeNumberGroupingFromDeliveredProse() async throws {
+        let pipeline = DictationPipeline(
+            transcribe: { _, _ in "The total is 300000" },
+            llmCleaner: { _ in "The total is 300000." }
+        )
+        let recording = DictationRecording(
+            wav: Data([0]),
+            metrics: WAVAudioMetrics(durationSec: 2, rms: 1_000, voicedDurationSec: 1)
+        )
+
+        let result = try await pipeline.transcribe(recording: recording, configuration: DictationConfiguration())
+
+        XCTAssertEqual(result.rawText, "The total is 300000")
+        XCTAssertEqual(result.text, "The total is 300,000.")
+    }
 }

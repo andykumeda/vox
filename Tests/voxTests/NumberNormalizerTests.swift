@@ -42,6 +42,17 @@ final class NumberNormalizerTests: XCTestCase {
         XCTAssertEqual(n.normalize("two thousand five hundred"), "2500")
     }
 
+    func testLargeProseNumbersUseThousandsSeparators() {
+        XCTAssertEqual(n.normalize("300000"), "300,000")
+        XCTAssertEqual(n.normalize("three hundred thousand"), "300,000")
+        XCTAssertEqual(n.normalize("three hundred thousand dollars"), "$300,000")
+        XCTAssertEqual(n.normalize("123456789 people"), "123,456,789 people")
+        XCTAssertEqual(n.normalize("300,000"), "300,000")
+        XCTAssertEqual(n.normalize("in 2026"), "in 2026")
+        XCTAssertEqual(n.normalize("ID AB300000 and version 300000.1"), "ID AB300000 and version 300000.1")
+        XCTAssertEqual(n.normalize("300000", aggressive: true), "300000")
+    }
+
     func testAndConnector() {
         XCTAssertEqual(n.normalize("two hundred and fifty"), "250")
     }
@@ -67,6 +78,22 @@ final class NumberNormalizerTests: XCTestCase {
         // "and" between non-scale number words must NOT collapse — these are
         // distinct quantities, not a compound number.
         XCTAssertEqual(n.normalize("two and three apples"), "two and three apples")
+    }
+
+    func testSmallNumberAlternativesAndRangesUseDigits() {
+        XCTAssertEqual(n.normalize("we went over around four or five"), "we went over around 4 or 5")
+        XCTAssertEqual(n.normalize("meet between four and five"), "meet between 4 and 5")
+        XCTAssertEqual(n.normalize("it takes two to three days"), "it takes 2 to 3 days")
+        XCTAssertEqual(n.normalize("bring four or five apples"), "bring 4 or 5 apples")
+        XCTAssertEqual(n.normalize("around four or 5"), "around 4 or 5")
+        XCTAssertEqual(n.normalize("one or two or three"), "1 or 2 or 3")
+    }
+
+    func testBareClockTimeAtClauseEndUsesDigits() {
+        XCTAssertEqual(n.normalize("meet at four"), "meet at 4")
+        XCTAssertEqual(n.normalize("we should finish by five, then leave"), "we should finish by 5, then leave")
+        XCTAssertEqual(n.normalize("it happened around six."), "it happened around 6.")
+        XCTAssertEqual(n.normalize("around four people came"), "around four people came")
     }
 
     func testAndConnectorAfterScaleStillCollapses() {

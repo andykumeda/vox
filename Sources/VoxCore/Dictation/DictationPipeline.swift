@@ -108,6 +108,9 @@ public struct DictationPipeline: Sendable {
             )
             : cleaned
 
-        return DictationResult(text: finalText, rawText: raw, suffixKeys: processed.suffixKeys)
+        let deliveredText = configuration.mode == .prose
+            ? NumberNormalizer().groupLargeNumbers(in: finalText)
+            : finalText
+        return DictationResult(text: deliveredText, rawText: raw, suffixKeys: processed.suffixKeys)
     }
 }
