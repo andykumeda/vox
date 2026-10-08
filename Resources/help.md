@@ -2,7 +2,7 @@
 
 ## Getting started
 
-Open the Vox menu-bar icon → **Settings**, save your OpenAI API key (or select **Dictation provider → OpenRouter** and **Save OpenRouter key**), and grant Microphone, Input Monitoring, and Accessibility in System Settings → Privacy & Security. Meeting transcription also needs Screen Recording.
+Open the Vox menu-bar icon → **Settings**, save your OpenAI API key (or select **Dictation provider → OpenRouter** and **Save API keys**), and grant Microphone, Input Monitoring, and Accessibility in System Settings → Privacy & Security. Meeting transcription also needs Screen Recording. One **Save API keys** button saves all entered provider keys; other settings save automatically.
 
 The menu contains **Dashboard**, **Meeting**, **Paste Last Transcription**, **Settings**, **Check for Updates…**, **Help**, and **Quit Vox**. Dashboard opens Home with recent dictations and meetings. **Quit Vox** stops the app normally; closing a window does not quit it.
 

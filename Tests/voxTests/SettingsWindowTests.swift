@@ -2,6 +2,33 @@ import XCTest
 @testable import vox
 
 final class SettingsWindowTests: XCTestCase {
+    func testSharedSavePersistsAllEnteredKeysAndPreservesBlankKeys() {
+        var saved: [String: String] = [:]
+        let message = APIKeySettingsSaver.save([
+            ("OpenAI", "  test-openai\n", { saved["OpenAI"] = $0 }),
+            ("OpenRouter", "test-openrouter", { saved["OpenRouter"] = $0 }),
+            ("Deepgram", "test-deepgram", { saved["Deepgram"] = $0 }),
+        ])
+        XCTAssertEqual(saved, ["OpenAI": "test-openai", "OpenRouter": "test-openrouter", "Deepgram": "test-deepgram"])
+        XCTAssertEqual(message, "Saved: OpenAI, OpenRouter, Deepgram.")
+        let emptyMessage = APIKeySettingsSaver.save([
+            ("OpenAI", " \n", { _ in XCTFail("Blank input must not overwrite an existing key") }),
+        ])
+        XCTAssertEqual(emptyMessage, "No API keys to save.")
+    }
+
+    func testSharedSaveReportsPartialFailureAndStillSavesRemainingKeys() {
+        struct SaveFailure: Error {}
+        var deepgramSaved = false
+        let message = APIKeySettingsSaver.save([
+            ("OpenAI", "test-openai", { _ in }),
+            ("OpenRouter", "test-openrouter", { _ in throw SaveFailure() }),
+            ("Deepgram", "test-deepgram", { _ in deepgramSaved = true }),
+        ])
+        XCTAssertTrue(deepgramSaved)
+        XCTAssertEqual(message, "Saved: OpenAI, Deepgram. Couldn’t save: OpenRouter. Try again.")
+    }
+
     func testOnlyExplicitUserRoutesMayOpenSettings() {
         XCTAssertTrue(MainWindowController.allowsSettingsNavigation(from: .statusMenu))
         XCTAssertTrue(MainWindowController.allowsSettingsNavigation(from: .sidebar))

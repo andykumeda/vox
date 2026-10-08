@@ -67,7 +67,7 @@ checklist.
 Then:
 
 1. Grant **Microphone**, **Input Monitoring**, **Accessibility** when macOS prompts (or in System Settings → Privacy & Security if a prompt was missed). Meeting transcription also needs **Screen Recording**.
-2. Click the menu-bar Vox icon → **Settings**. For direct OpenAI, paste your OpenAI API key → **Save**. For OpenRouter, select **Dictation provider → OpenRouter**, paste the key → **Save OpenRouter key**. Click **Always Allow** on the keychain prompt.
+2. Click the menu-bar Vox icon → **Settings**. For direct OpenAI, paste your OpenAI API key → **Save API keys**. For OpenRouter, select **Dictation provider → OpenRouter**, paste the key → **Save API keys**. Click **Always Allow** on the keychain prompt.
 3. Hold **Fn**, speak, release.
 
 ## Developing on two Macs
@@ -186,6 +186,7 @@ The original speech-to-text result is retained separately in dictation history.
 Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vox window raises above normal app windows so it does not get hidden behind a larger window:
 
 - **Dictation provider** — OpenAI (default) or OpenRouter. OpenRouter uses `openai/gpt-4o-transcribe`; switching back restores your direct OpenAI model preference. Create a key at [OpenRouter API Keys](https://openrouter.ai/keys), then save it in **OpenRouter API key**. It is stored separately in Keychain (`com.andykumeda.vox` / `openrouter-api-key`). Smart Cleanup, meeting summaries, and the OpenAI meeting backend still use the OpenAI key.
+- **Save API keys** — one button saves all entered OpenAI, OpenRouter, and Deepgram keys. Blank fields preserve saved keys; use each key’s Clear button to remove it. Other settings save automatically.
 - **OpenAI API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `openai-api-key`). Click **Always Allow** on the keychain prompt the first time.
 - **Model** — `gpt-4o-transcribe` (default), `gpt-4o-mini-transcribe`, or `whisper-1`. Vox estimates audio cost with bundled rates of $0.006/min, $0.003/min, and $0.006/min respectively; these are implementation estimates, not a live billing quote. Check [OpenAI pricing](https://openai.com/api/pricing/) for current charges.
 - **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`; OpenRouter uses the full-model estimate, while actual token-based charges are shown in OpenRouter Activity. This estimate excludes cleanup, meeting summaries, and any separately billed output tokens.

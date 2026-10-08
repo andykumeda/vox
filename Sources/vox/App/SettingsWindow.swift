@@ -31,17 +31,39 @@ struct RecordingStorageUsage: Equatable, Sendable {
     }
 }
 
+enum APIKeySettingsSaver {
+    typealias Entry = (name: String, value: String, save: (String) throws -> Void)
+
+    static func save(_ entries: [Entry]) -> String {
+        var saved: [String] = []
+        var failed: [String] = []
+        for entry in entries {
+            let value = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Blank fields must not overwrite a key that could not be loaded.
+            guard !value.isEmpty else { continue }
+            do {
+                try entry.save(value)
+                saved.append(entry.name)
+            } catch {
+                failed.append(entry.name)
+            }
+        }
+        var messages: [String] = []
+        if !saved.isEmpty { messages.append("Saved: \(saved.joined(separator: ", ")).") }
+        if !failed.isEmpty { messages.append("Couldn’t save: \(failed.joined(separator: ", ")). Try again.") }
+        return messages.isEmpty ? "No API keys to save." : messages.joined(separator: " ")
+    }
+}
+
 struct SettingsView: View {
     @State private var dictationProvider = AppSettings.dictationProvider
     @State private var openRouterKey = ""
-    @State private var openRouterSavedMessage: String?
     private let openRouterKeychain = KeychainStore(account: "openrouter-api-key")
     @State private var apiKey: String = ""
     @State private var showKey = false
     @State private var savedMessage: String?
     @State private var deepgramKey: String = ""
     @State private var showDeepgramKey = false
-    @State private var deepgramSavedMessage: String?
     @State private var meetingProvider: MeetingProvider = AppSettings.meetingProvider
     @State private var startSound: SystemAlertSound = AppSettings.startSound
     @State private var stopSound: SystemAlertSound = AppSettings.stopSound
@@ -95,18 +117,14 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack {
-                        Button("Save OpenRouter key") { saveOpenRouter() }
                         Button("Clear") {
                             do {
                                 try openRouterKeychain.delete()
                                 openRouterKey = ""
-                                openRouterSavedMessage = "Cleared."
+                                savedMessage = "OpenRouter key cleared."
                             } catch {
-                                openRouterSavedMessage = "Clear failed: \(error.localizedDescription)"
+                                savedMessage = "Clear failed: \(error.localizedDescription)"
                             }
-                        }
-                        if let message = openRouterSavedMessage {
-                            Text(message).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -131,15 +149,10 @@ struct SettingsView: View {
             }
 
             HStack {
-                Button("Save") { save() }
-                    .keyboardShortcut(.defaultAction)
                 Button("Clear") {
                     try? keychain.delete()
                     apiKey = ""
-                    savedMessage = "Cleared."
-                }
-                if let msg = savedMessage {
-                    Text(msg).foregroundStyle(.secondary)
+                    savedMessage = "OpenAI key cleared."
                 }
             }
 
@@ -162,16 +175,23 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack {
-                    Button("Save Deepgram key") { saveDeepgram() }
                     Button("Clear") {
                         try? deepgramKeychain.delete()
                         deepgramKey = ""
-                        deepgramSavedMessage = "Cleared."
-                    }
-                    if let msg = deepgramSavedMessage {
-                        Text(msg).foregroundStyle(.secondary)
+                        savedMessage = "Deepgram key cleared."
                     }
                 }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Button("Save API keys") { saveAPIKeys() }
+                    .keyboardShortcut(.defaultAction)
+                if let message = savedMessage {
+                    Text(message).foregroundStyle(.secondary)
+                }
+                Text("Saves all entered API keys. Blank fields leave saved keys unchanged; use Clear to remove a key. Other settings save automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
@@ -643,37 +663,15 @@ struct SettingsView: View {
         }
     }
 
-    private func save() {
-        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        apiKey = trimmed
-        do {
-            try keychain.save(trimmed)
-            savedMessage = "Saved."
-        } catch {
-            savedMessage = "Save failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func saveOpenRouter() {
-        let trimmed = openRouterKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        openRouterKey = trimmed
-        do {
-            try openRouterKeychain.save(trimmed)
-            openRouterSavedMessage = "Saved."
-        } catch {
-            openRouterSavedMessage = "Save failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func saveDeepgram() {
-        let trimmed = deepgramKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        deepgramKey = trimmed
-        do {
-            try deepgramKeychain.save(trimmed)
-            deepgramSavedMessage = "Saved."
-        } catch {
-            deepgramSavedMessage = "Save failed: \(error.localizedDescription)"
-        }
+    private func saveAPIKeys() {
+        apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        openRouterKey = openRouterKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        deepgramKey = deepgramKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        savedMessage = APIKeySettingsSaver.save([
+            ("OpenAI", apiKey, keychain.save),
+            ("OpenRouter", openRouterKey, openRouterKeychain.save),
+            ("Deepgram", deepgramKey, deepgramKeychain.save),
+        ])
     }
 
     @MainActor
