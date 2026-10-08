@@ -16,6 +16,9 @@ final class PinnedAudioInputMonitor {
     typealias Log = (String) -> Void
 
     private let selectedUID: SelectedUID
+    private let builtInMicrophoneUID: SelectedUID
+    var onFallbackChanged: ((Bool) -> Void)?
+    private(set) var isUsingBuiltInFallback = false
     private let resolveDevice: ResolveDevice
     private let currentDefault: CurrentDefault
     private let setDefault: SetDefault
@@ -30,6 +33,7 @@ final class PinnedAudioInputMonitor {
 
     init(
         selectedUID: @escaping SelectedUID = { AppSettings.audioInputDeviceUID },
+        builtInMicrophoneUID: @escaping SelectedUID = { AudioInputDevices.builtInMicrophoneUID() },
         resolveDevice: @escaping ResolveDevice = { AudioInputDevices.deviceID(forUID: $0) },
         currentDefault: @escaping CurrentDefault = { AudioInputDevices.defaultInputDeviceID() },
         setDefault: @escaping SetDefault = { AudioInputDevices.setDefaultInputDevice($0) },
@@ -39,6 +43,7 @@ final class PinnedAudioInputMonitor {
         log: @escaping Log = { dlog($0) }
     ) {
         self.selectedUID = selectedUID
+        self.builtInMicrophoneUID = builtInMicrophoneUID
         self.resolveDevice = resolveDevice
         self.currentDefault = currentDefault
         self.setDefault = setDefault
@@ -94,22 +99,52 @@ final class PinnedAudioInputMonitor {
 
     @discardableResult
     func reassertPinnedInput(reason: String) -> Bool? {
-        guard let uid = selectedUID() else { return nil }
-        guard let pinnedID = resolveDevice(uid) else {
-            log("pinned input unavailable after \(reason) uid=\(uid)")
+        // Publish after every route reconciliation, including when fallback
+        // remains active, so open Settings never holds a stale device list.
+        defer {
+            NotificationCenter.default.post(name: .audioInputDevicesChanged, object: self)
+        }
+        guard let preferredUID = selectedUID() else {
+            updateFallback(false)
+            return nil
+        }
+        let uid: String
+        let pinnedID: AudioDeviceID
+        let fallback: Bool
+        if let preferredID = resolveDevice(preferredUID) {
+            uid = preferredUID
+            pinnedID = preferredID
+            fallback = false
+        } else if let fallbackUID = builtInMicrophoneUID(),
+                  let fallbackID = resolveDevice(fallbackUID) {
+            uid = fallbackUID
+            pinnedID = fallbackID
+            fallback = true
+        } else {
+            updateFallback(false)
+            log("pinned input unavailable after \(reason) uid=\(preferredUID); no built-in microphone")
             return false
         }
         if currentDefault() == pinnedID {
+            updateFallback(fallback)
             log("pinned input retained after \(reason) uid=\(uid) deviceID=\(pinnedID)")
             return true
         }
 
         let restored = setDefault(pinnedID)
+        if restored { updateFallback(fallback) }
         log(
             "pinned input restored after \(reason) uid=\(uid) "
                 + "deviceID=\(pinnedID) success=\(restored)"
         )
         return restored
+    }
+
+    private func updateFallback(_ active: Bool) {
+        guard isUsingBuiltInFallback != active else { return }
+        isUsingBuiltInFallback = active
+        log("built-in microphone fallback active=\(active)")
+        onFallbackChanged?(active)
     }
 
     private func addListener(
@@ -173,4 +208,8 @@ final class PinnedAudioInputMonitor {
             listener
         )
     }
+}
+
+extension Notification.Name {
+    static let audioInputDevicesChanged = Notification.Name("vox.audioInputDevicesChanged")
 }

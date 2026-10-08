@@ -203,7 +203,39 @@ final class AudioRecorderRouteRecoveryTests: XCTestCase {
         XCTAssertTrue(requestedVolumes.isEmpty)
     }
 
-    func testStartFailsInsteadOfFallingBackWhenPinnedInputIsUnavailable() {
+    func testRecorderBindsBuiltInFallbackThenPreferredOnNextRecording() throws {
+        var preferredPresent = false
+        let engine = RouteChangingAudioEngine(
+            initialSampleRate: 48_000,
+            settledSampleRate: 48_000,
+            failFirstStart: false
+        )
+        let recorder = AudioRecorder(
+            mode: "prose",
+            engine: engine,
+            selectedInputDeviceUID: { "usb-mic" },
+            builtInMicrophoneUID: { "built-in" },
+            resolveInputDevice: { uid in
+                if uid == "built-in" { return 9 }
+                return preferredPresent ? 42 : nil
+            },
+            hardwareInputFormat: { _ in
+                AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)
+            }
+        )
+        try recorder.start()
+        let firstURL = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: firstURL) }
+        XCTAssertEqual(engine.selectedDeviceIDs, [9])
+        preferredPresent = true
+        try recorder.start()
+        let secondURL = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: secondURL) }
+        XCTAssertEqual(engine.selectedDeviceIDs, [9, 42])
+        XCTAssertEqual(engine.installedTapSampleRates, [48_000, 48_000])
+    }
+
+    func testStartFailsWhenPreferredAndBuiltInInputsAreUnavailable() {
         let engine = RouteChangingAudioEngine(
             initialSampleRate: 48_000,
             settledSampleRate: 48_000,

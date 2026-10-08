@@ -2,7 +2,7 @@
 
 ## Getting started
 
-Open the Vox menu-bar icon → **Settings**, save your OpenAI API key, and grant Microphone, Input Monitoring, and Accessibility in System Settings → Privacy & Security. Meeting transcription also needs Screen Recording.
+Open the Vox menu-bar icon → **Settings**, save your OpenAI API key (or select **Dictation provider → OpenRouter** and **Save OpenRouter key**), and grant Microphone, Input Monitoring, and Accessibility in System Settings → Privacy & Security. Meeting transcription also needs Screen Recording.
 
 The menu contains **Dashboard**, **Meeting**, **Paste Last Transcription**, **Settings**, **Check for Updates…**, **Help**, and **Quit Vox**. Dashboard opens Home with recent dictations and meetings. **Quit Vox** stops the app normally; closing a window does not quit it.
 
@@ -10,8 +10,10 @@ The menu contains **Dashboard**, **Meeting**, **Paste Last Transcription**, **Se
 
 Hold **Fn** (default) and speak. Release to transcribe.
 Switch trigger to **tap-to-toggle** in Settings → Hotkeys if you prefer one-tap-start, one-tap-stop.
-A start sound plays before the microphone opens; a stop sound plays after you release. Vox prepares the start cue silently after launch to reduce the first-recording delay. Bluetooth output can still take time to wake. Change or silence either cue in Settings → Sounds.
-Choose Settings → Microphone to pin dictation to a specific input device. While Vox runs, it keeps that mic as the macOS default input through output changes and device reconnects, and will not silently fall back to Bluetooth. If another app leaves its writable macOS input level below 70%, Vox restores it to 75% before recording; normal levels and devices without software volume controls are unchanged.
+A start sound plays before the microphone opens; a stop sound plays after you release. Vox prepares the start cue silently after launch to reduce the first-recording delay. Bluetooth output can still take time to wake. Change or silence either cue in Settings → Sounds. Empty recordings are skipped before transcription when no sustained speech activity is detected; scattered clicks do not count as a speech run.
+Choose Settings → Microphone to pin dictation to a specific input device. While Vox runs, it keeps that mic as the macOS default input through output changes and device reconnects, and will not fall back to Bluetooth. When the preferred mic disconnects, Vox temporarily uses the built-in microphone, shows a notice in the menu and tooltip, automatically refreshes Settings with the active input, and restores the preferred mic when it reconnects. If no built-in mic is available, recording fails safely. If another app leaves its writable macOS input level below 70%, Vox restores it to 75% before recording; normal levels and devices without software volume controls are unchanged.
+OpenRouter keys are available at [openrouter.ai/keys](https://openrouter.ai/keys) and are stored separately in macOS Keychain. OpenRouter dictation uses GPT-4o Transcribe; Smart Cleanup and meeting summaries still need the OpenAI key.
+
 Dictation uses `gpt-4o-transcribe` by default for accuracy; switch to `gpt-4o-mini-transcribe` in Settings → Model when lower cost matters more.
 
 ## Modes
@@ -147,7 +149,7 @@ Dashboard → Home shows recent dictations. **Raw vs final** appears only when t
 
 Dictation and meeting history are encrypted locally with a key in macOS Keychain. Settings → **Dictation history** controls dictation retention (Forever, 1 year, 90 days, or 30 days). Those choices do not delete saved meeting transcripts; delete meetings in the Meeting view when needed.
 
-Dictation audio goes to OpenAI. Meeting audio goes to the selected transcription provider; optional summaries and Smart Cleanup send text to OpenAI. Local encryption does not control provider retention. The dictionary, style files, copied text, and exported meeting files remain ordinary readable data. Copying only encrypted history files to a different Mac does not copy their Keychain encryption key.
+Dictation audio goes to OpenAI directly, or through OpenRouter to OpenAI when selected. Meeting audio goes to the selected transcription provider; optional summaries and Smart Cleanup send text to OpenAI. Local encryption does not control provider retention. The dictionary, style files, copied text, and exported meeting files remain ordinary readable data. Copying only encrypted history files to a different Mac does not copy their Keychain encryption key.
 
 Settings → **Paste behavior** keeps the latest transcription on the clipboard by default. If you turn this off, Vox restores the previous clipboard text after local paste only when no other app has changed the clipboard. Remote insertion keeps the transcription on the clipboard because synchronization can take longer.
 

@@ -76,10 +76,16 @@ final class MenuBarController: NSObject {
     private let injector = TextInjector()
     private let pasteGate = PasteGate()
     private let sound = SoundPlayer.shared
-    private lazy var transcriber = OpenAITranscriber(
-        modelProvider: { AppSettings.transcriptionModel.rawValue },
-        apiKeyProvider: { [keychain] in keychain.read() }
-    )
+    private var transcriber: OpenAITranscriber {
+        let provider = AppSettings.dictationProvider
+        let model = AppSettings.effectiveTranscriptionModel.rawValue
+        let store = KeychainStore(account: provider.keychainAccount)
+        return OpenAITranscriber(
+            provider: provider,
+            modelProvider: { model },
+            apiKeyProvider: { store.read() }
+        )
+    }
     private lazy var liveLLMCleaner: CleanupProcessor.LLMCleanFunc = makeLiveLLMCleaner(
         apiKeyProvider: { [keychain] in keychain.read() },
         profileProvider: {
@@ -131,9 +137,13 @@ final class MenuBarController: NSObject {
         // Keep the pinned microphone as the macOS default continuously. An
         // output-route change can otherwise activate a Bluetooth hands-free
         // input between recordings.
+        PinnedAudioInputMonitor.shared.onFallbackChanged = { [weak self] _ in
+            self?.configureMenu()
+            self?.refreshIcon()
+        }
         PinnedAudioInputMonitor.shared.start()
 
-        let keychain = keychain
+        let keychain = KeychainStore(account: AppSettings.dictationProvider.keychainAccount)
         DispatchQueue.global(qos: .utility).async {
             _ = Self.warmDictationAPIKey(apiKeyProvider: { keychain.read() })
         }
@@ -270,6 +280,15 @@ final class MenuBarController: NSObject {
         _ = updaterController
 
         let menu = NSMenu()
+        if PinnedAudioInputMonitor.shared.isUsingBuiltInFallback {
+            let notice = NSMenuItem(
+                title: "Using built-in mic — preferred mic disconnected",
+                action: nil,
+                keyEquivalent: ""
+            )
+            notice.isEnabled = false
+            menu.addItem(notice)
+        }
         for command in MenuBarCommand.allCases {
             let item = makeMenuItem(
                 title: command.title,
@@ -469,6 +488,8 @@ final class MenuBarController: NSObject {
         } else {
             stopPulsing()
         }
+        let fallbackNotice = PinnedAudioInputMonitor.shared.isUsingBuiltInFallback
+            ? " — using built-in mic; preferred mic disconnected" : ""
         button.toolTip = {
             switch state {
             case .idle: return "Vox — idle"
@@ -476,7 +497,7 @@ final class MenuBarController: NSObject {
             case .transcribing: return "Vox — transcribing…"
             case .error: return "Vox — error"
             }
-        }()
+        }() + fallbackNotice
     }
 
     private func handleModeToggle() {
@@ -574,12 +595,13 @@ final class MenuBarController: NSObject {
         // (e.g. prose pangram, command-mode "ls -l"). Sustained frame-level
         // speech is required even when handling noise raises aggregate RMS.
         let (durationSec, rms) = wavStats(wav)
-        let voicedSec = voicedDurationSec(wav)
-        dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) voiced=\(voicedSec)s mode=\(mode)")
+        let (voicedSec, sustainedSec) = voicedActivity(wav)
+        dlog("wav bytes=\(wav.count) duration=\(durationSec)s rms=\(rms) voiced=\(voicedSec)s sustained=\(sustainedSec)s mode=\(mode)")
         if DictationSilenceGate.shouldSkip(
             durationSec: durationSec,
             rms: rms,
-            voicedDurationSec: voicedSec
+            voicedDurationSec: voicedSec,
+            sustainedVoicedDurationSec: sustainedSec
         ) {
             dlog("silence gate tripped — skipping transcription")
             try? FileManager.default.removeItem(at: url)
@@ -662,7 +684,7 @@ final class MenuBarController: NSObject {
                 dlog("dictation timing cleanup=\(Self.elapsedString(since: cleanupStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s cleanup_enabled=\(cleanupEnabled) \(cleanedMetrics) verbatim=\(verbatimMode)")
 
                 let wordCount = finalText.split(whereSeparator: { $0.isWhitespace }).count
-                let model = AppSettings.transcriptionModel
+                let model = AppSettings.effectiveTranscriptionModel
                 let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
                 UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model)
                 if !finalText.isEmpty {
@@ -744,16 +766,17 @@ final class MenuBarController: NSObject {
         statusItem.button?.alphaValue = 1.0
     }
 
-    private func voicedDurationSec(_ wav: Data) -> Double {
+    private func voicedActivity(_ wav: Data) -> (total: Double, sustained: Double) {
         let headerSize = 44
-        guard wav.count > headerSize else { return 0 }
+        guard wav.count > headerSize else { return (0, 0) }
         let pcm = wav.subdata(in: headerSize..<wav.count)
         let samplesPerFrame = 320 // 20ms at 16kHz
         let sampleCount = pcm.count / 2
-        guard sampleCount >= samplesPerFrame else { return 0 }
-        return pcm.withUnsafeBytes { raw -> Double in
+        guard sampleCount >= samplesPerFrame else { return (0, 0) }
+        return pcm.withUnsafeBytes { raw -> (Double, Double) in
             let samples = raw.bindMemory(to: Int16.self)
             var voicedFrames = 0
+            var frameLevels: [Double] = []
             var frameStart = 0
             while frameStart + samplesPerFrame <= samples.count {
                 var sumSq = 0.0
@@ -762,12 +785,14 @@ final class MenuBarController: NSObject {
                     sumSq += sample * sample
                 }
                 let frameRMS = sqrt(sumSq / Double(samplesPerFrame))
+                frameLevels.append(frameRMS)
                 if frameRMS >= DictationSilenceGate.speechActivityFrameRMS {
                     voicedFrames += 1
                 }
                 frameStart += samplesPerFrame
             }
-            return Double(voicedFrames) * 0.020
+            return (Double(voicedFrames) * 0.020,
+                    DictationSilenceGate.sustainedVoicedDuration(frameRMS: frameLevels))
         }
     }
 

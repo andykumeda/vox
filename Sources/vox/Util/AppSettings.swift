@@ -138,6 +138,17 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: ignoreRecordHotkeyKey) }
     }
 
+    static var dictationProvider: DictationProvider {
+        get {
+            DictationProvider(rawValue: UserDefaults.standard.string(forKey: "dictationProvider") ?? "") ?? .openai
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "dictationProvider") }
+    }
+
+    static var effectiveTranscriptionModel: TranscriptionModel {
+        dictationProvider == .openrouter ? .full : transcriptionModel
+    }
+
     static var transcriptionModel: TranscriptionModel {
         get {
             if let raw = UserDefaults.standard.string(forKey: modelKey),

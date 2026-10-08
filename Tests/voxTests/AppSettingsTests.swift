@@ -24,6 +24,29 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertNil(AppSettings.audioInputDeviceUID)
     }
 
+    func testDictationProviderDefaultsPersistsAndKeepsDirectModelPreference() {
+        let defaults = UserDefaults.standard
+        let keys = ["dictationProvider", "transcriptionModel"]
+        let previous = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, previous) {
+                if let value { defaults.set(value, forKey: key) }
+                else { defaults.removeObject(forKey: key) }
+            }
+        }
+        defaults.removeObject(forKey: "dictationProvider")
+        XCTAssertEqual(AppSettings.dictationProvider, .openai)
+        AppSettings.transcriptionModel = .mini
+        AppSettings.dictationProvider = .openrouter
+        XCTAssertEqual(AppSettings.dictationProvider, .openrouter)
+        XCTAssertEqual(AppSettings.effectiveTranscriptionModel, .full)
+        XCTAssertNotEqual(DictationProvider.openai.keychainAccount, DictationProvider.openrouter.keychainAccount)
+        AppSettings.dictationProvider = .openai
+        XCTAssertEqual(AppSettings.effectiveTranscriptionModel, .mini)
+        defaults.set("unknown", forKey: "dictationProvider")
+        XCTAssertEqual(AppSettings.dictationProvider, .openai)
+    }
+
     func testTranscriptionModelDefaultsToFullQualityModel() {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "transcriptionModel")

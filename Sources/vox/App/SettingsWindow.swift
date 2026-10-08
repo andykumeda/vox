@@ -32,6 +32,10 @@ struct RecordingStorageUsage: Equatable, Sendable {
 }
 
 struct SettingsView: View {
+    @State private var dictationProvider = AppSettings.dictationProvider
+    @State private var openRouterKey = ""
+    @State private var openRouterSavedMessage: String?
+    private let openRouterKeychain = KeychainStore(account: "openrouter-api-key")
     @State private var apiKey: String = ""
     @State private var showKey = false
     @State private var savedMessage: String?
@@ -43,6 +47,7 @@ struct SettingsView: View {
     @State private var stopSound: SystemAlertSound = AppSettings.stopSound
     @State private var errorSound: SystemAlertSound = AppSettings.errorSound
     @State private var audioInputDevices: [AudioInputDevice] = AudioInputDevices.available()
+    @State private var usingBuiltInFallback = PinnedAudioInputMonitor.shared.isUsingBuiltInFallback
     @State private var audioInputDeviceUID: String = AppSettings.audioInputDeviceUID ?? ""
     @State private var keepOnClipboard: Bool = AppSettings.keepTranscriptionOnClipboard
     @State private var modeOverride: ModeOverride = AppSettings.modeOverride
@@ -65,6 +70,47 @@ struct SettingsView: View {
             Text("Settings")
                 .font(.title2)
                 .fontWeight(.semibold)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Dictation provider").font(.headline)
+                Picker("Dictation provider", selection: $dictationProvider) {
+                    ForEach(DictationProvider.allCases, id: \.self) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                .labelsHidden()
+                .onChange(of: dictationProvider) { AppSettings.dictationProvider = $0 }
+                Text("OpenRouter dictation uses GPT-4o Transcribe. Smart Cleanup and meeting summaries use your OpenAI key.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if dictationProvider == .openrouter {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("OpenRouter API key").font(.headline)
+                    SecureField("sk-or-…", text: $openRouterKey)
+                        .textFieldStyle(.roundedBorder)
+                    Link("Get an OpenRouter API key", destination: URL(string: "https://openrouter.ai/keys")!)
+                    Text("Stored separately in macOS Keychain. Used only for dictation.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Save OpenRouter key") { saveOpenRouter() }
+                        Button("Clear") {
+                            do {
+                                try openRouterKeychain.delete()
+                                openRouterKey = ""
+                                openRouterSavedMessage = "Cleared."
+                            } catch {
+                                openRouterSavedMessage = "Clear failed: \(error.localizedDescription)"
+                            }
+                        }
+                        if let message = openRouterSavedMessage {
+                            Text(message).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("OpenAI API key")
@@ -133,16 +179,22 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Model")
                     .font(.headline)
-                Picker("", selection: $model) {
-                    ForEach(TranscriptionModel.allCases, id: \.self) { m in
-                        Text(m.displayName).tag(m)
+                if dictationProvider == .openai {
+                    Picker("", selection: $model) {
+                        ForEach(TranscriptionModel.allCases, id: \.self) { m in
+                            Text(m.displayName).tag(m)
+                        }
                     }
+                    .labelsHidden()
+                    .onChange(of: model) { newValue in
+                        AppSettings.transcriptionModel = newValue
+                    }
+                } else {
+                    Text("gpt-4o-transcribe")
                 }
-                .labelsHidden()
-                .onChange(of: model) { newValue in
-                    AppSettings.transcriptionModel = newValue
-                }
-                Text(String(format: "≈ $%.4f / minute of audio", model.usdPerMinute))
+                Text(dictationProvider == .openrouter
+                    ? "Usage cost is an estimate. Check OpenRouter Activity for actual token-based charges."
+                    : String(format: "≈ $%.4f / minute of audio", model.usdPerMinute))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -407,14 +459,14 @@ struct SettingsView: View {
                 Text("Microphone")
                     .font(.headline)
                 HStack {
-                    Picker("Input source", selection: $audioInputDeviceUID) {
+                    Picker("Preferred input", selection: $audioInputDeviceUID) {
                         Text("System Default").tag("")
                         ForEach(audioInputDevices) { device in
                             Text(device.displayName).tag(device.uid)
                         }
                         if !audioInputDeviceUID.isEmpty,
                            !audioInputDevices.contains(where: { $0.uid == audioInputDeviceUID }) {
-                            Text("Pinned device unavailable").tag(audioInputDeviceUID)
+                            Text("Preferred microphone disconnected").tag(audioInputDeviceUID)
                         }
                     }
                     .onChange(of: audioInputDeviceUID) { newValue in
@@ -424,20 +476,27 @@ struct SettingsView: View {
                         )
                     }
                     Button("Refresh") {
-                        audioInputDevices = AudioInputDevices.available()
+                        refreshAudioInputs()
                     }
                     .controlSize(.small)
+                }
+                if let active = audioInputDevices.first(where: { $0.isSystemDefault }) {
+                    Text("Active input: \(active.name)\(usingBuiltInFallback ? " (fallback)" : "")")
+                        .font(.caption)
+                        .foregroundStyle(usingBuiltInFallback ? .orange : .secondary)
                 }
                 if audioInputDeviceUID.isEmpty {
                     Text("System Default follows macOS input changes.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if let selected = audioInputDevices.first(where: { $0.uid == audioInputDeviceUID }) {
-                    Text("Pinned to \(selected.name). Vox will not fall back to another microphone.")
+                    Text("Preferred: \(selected.name). If disconnected, Vox uses the built-in microphone and restores this device when it reconnects.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("The pinned microphone is unavailable. Vox will fail safely instead of switching inputs.")
+                    Text(usingBuiltInFallback
+                         ? "The preferred microphone is disconnected. Using the built-in microphone until it reconnects."
+                         : "The preferred microphone is disconnected. No built-in fallback is active.")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -517,6 +576,8 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
+            dictationProvider = AppSettings.dictationProvider
+            openRouterKey = openRouterKeychain.read() ?? ""
             apiKey = keychain.read() ?? ""
             deepgramKey = deepgramKeychain.read() ?? ""
             totals = UsageTracker.totals()
@@ -533,12 +594,20 @@ struct SettingsView: View {
             startSound = AppSettings.startSound
             stopSound = AppSettings.stopSound
             errorSound = AppSettings.errorSound
-            audioInputDevices = AudioInputDevices.available()
+            refreshAudioInputs()
             audioInputDeviceUID = AppSettings.audioInputDeviceUID ?? ""
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .audioInputDevicesChanged).receive(on: RunLoop.main)) { _ in
+            refreshAudioInputs()
         }
         .task {
             await refreshStorageUsage()
         }
+    }
+
+    private func refreshAudioInputs() {
+        audioInputDevices = AudioInputDevices.available()
+        usingBuiltInFallback = PinnedAudioInputMonitor.shared.isUsingBuiltInFallback
     }
 
     private func soundRow(
@@ -582,6 +651,17 @@ struct SettingsView: View {
             savedMessage = "Saved."
         } catch {
             savedMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveOpenRouter() {
+        let trimmed = openRouterKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        openRouterKey = trimmed
+        do {
+            try openRouterKeychain.save(trimmed)
+            openRouterSavedMessage = "Saved."
+        } catch {
+            openRouterSavedMessage = "Save failed: \(error.localizedDescription)"
         }
     }
 

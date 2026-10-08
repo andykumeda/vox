@@ -8,6 +8,72 @@ final class OpenAITranscriberTests: XCTestCase {
         super.tearDown()
     }
 
+    func testOpenRouterUsesCorrectEndpointModelAudioAndProviderPrompt() async throws {
+        var observedRequest: URLRequest?
+        var observedBody: Data?
+        URLProtocolStub.handler = { request in
+            observedRequest = request
+            observedBody = Self.bodyData(from: request)
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"text":"  Actual transcript.\n","usage":{"cost":0.001}}"#.utf8))
+        }
+        let audio = Data([1, 2, 3])
+        let transcriber = OpenAITranscriber(
+            provider: .openrouter,
+            modelProvider: { "whisper-1" },
+            apiKeyProvider: { "  sk-or-test  " },
+            urlSession: URLProtocolStub.makeSession()
+        )
+        let text = try await transcriber.transcribe(wav: audio, mode: .command)
+        XCTAssertEqual(text, "Actual transcript.")
+        let request = try XCTUnwrap(observedRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://openrouter.ai/api/v1/audio/transcriptions")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer sk-or-test")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(observedBody)) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "openai/gpt-4o-transcribe")
+        XCTAssertEqual(body["response_format"] as? String, "json")
+        let input = try XCTUnwrap(body["input_audio"] as? [String: String])
+        XCTAssertEqual(input["data"], audio.base64EncodedString())
+        XCTAssertEqual(input["format"], "wav")
+        let provider = try XCTUnwrap(body["provider"] as? [String: Any])
+        let options = try XCTUnwrap(provider["options"] as? [String: [String: String]])
+        XCTAssertEqual(options["openai"]?["prompt"], TranscriptionMode.command.whisperPrompt)
+        XCTAssertNil(body["prompt"])
+    }
+
+    func testOpenRouterRejectsInvalidTranscriptResponses() async throws {
+        for responseBody in ["plain text", #"{"usage":{}}"#, #"{"text":42}"#] {
+            URLProtocolStub.handler = { request in
+                (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                 Data(responseBody.utf8))
+            }
+            let transcriber = OpenAITranscriber(provider: .openrouter, apiKeyProvider: { "test" },
+                                               urlSession: URLProtocolStub.makeSession())
+            do {
+                _ = try await transcriber.transcribe(wav: Data(), mode: .prose)
+                XCTFail("Invalid response should not reach paste")
+            } catch TranscriptionError.invalidResponse {
+                // Expected.
+            }
+        }
+    }
+
+    func testOpenRouterMissingKeyDoesNotUpload() async throws {
+        URLProtocolStub.handler = { _ in
+            XCTFail("Must not upload without the selected provider's key")
+            throw URLError(.badServerResponse)
+        }
+        let transcriber = OpenAITranscriber(provider: .openrouter, apiKeyProvider: { "  " },
+                                           urlSession: URLProtocolStub.makeSession())
+        do {
+            _ = try await transcriber.transcribe(wav: Data(), mode: .prose)
+            XCTFail("Expected missing key")
+        } catch TranscriptionError.missingAPIKey {
+            // Expected.
+        }
+    }
+
     func testDictationRequestUsesFastDefaultTimeout() async throws {
         var observedRequest: URLRequest?
         var observedBody: Data?

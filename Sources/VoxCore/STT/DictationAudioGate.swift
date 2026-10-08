@@ -41,15 +41,38 @@ public enum DictationSilenceGate {
     public static let absoluteMinimumRMS: Double = 40
     #endif
 
+    /// Count voiced frames in the longest run, bridging up to 40ms of quiet
+    /// between them. Scattered clicks must not accumulate into speech; quiet
+    /// gaps themselves do not contribute voiced time.
+    public static func sustainedVoicedDuration(frameRMS: [Double]) -> Double {
+        var longest = 0
+        var run = 0
+        var quietFrames = 0
+        for rms in frameRMS {
+            if rms >= speechActivityFrameRMS {
+                run += 1
+                quietFrames = 0
+                longest = max(longest, run)
+            } else {
+                quietFrames += 1
+                if quietFrames > 2 { run = 0 }
+            }
+        }
+        return Double(longest) * 0.020
+    }
+
     public static func shouldSkip(
         durationSec: Double,
         rms: Double,
-        voicedDurationSec: Double? = nil
+        voicedDurationSec: Double? = nil,
+        sustainedVoicedDurationSec: Double? = nil
     ) -> Bool {
         if durationSec < minimumDurationSec { return true }
         if durationSec < shortClipDurationSec && rms < shortClipMinimumRMS { return true }
         if let voicedDurationSec,
            voicedDurationSec < minimumVoicedDurationSec { return true }
+        if let sustainedVoicedDurationSec,
+           sustainedVoicedDurationSec < minimumVoicedDurationSec { return true }
         if rms < absoluteMinimumRMS { return true }
         return false
     }

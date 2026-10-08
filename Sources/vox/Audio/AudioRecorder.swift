@@ -111,6 +111,7 @@ public final class AudioRecorder {
     /// single-engine pattern with explicit reset on each start.
     private let engine: AudioEngineControlling
     private let selectedInputDeviceUID: () -> String?
+    private let builtInMicrophoneUID: () -> String?
     private let resolveInputDevice: (String) -> AudioDeviceID?
     private let hardwareInputFormat: (AudioDeviceID) -> AVAudioFormat?
     private let inputVolumeScalar: (AudioDeviceID) -> Float32?
@@ -131,6 +132,7 @@ public final class AudioRecorder {
             mode: mode,
             engine: SystemAudioEngine(),
             selectedInputDeviceUID: { AppSettings.audioInputDeviceUID },
+            builtInMicrophoneUID: { AudioInputDevices.builtInMicrophoneUID() },
             resolveInputDevice: { AudioInputDevices.deviceID(forUID: $0) },
             hardwareInputFormat: { AudioInputDevices.hardwareInputFormat(for: $0) },
             inputVolumeScalar: { AudioInputDevices.inputVolumeScalar(for: $0) },
@@ -142,6 +144,7 @@ public final class AudioRecorder {
         mode: String,
         engine: AudioEngineControlling,
         selectedInputDeviceUID: @escaping () -> String? = { nil },
+        builtInMicrophoneUID: @escaping () -> String? = { nil },
         resolveInputDevice: @escaping (String) -> AudioDeviceID? = { _ in nil },
         hardwareInputFormat: @escaping (AudioDeviceID) -> AVAudioFormat? = { _ in nil },
         inputVolumeScalar: @escaping (AudioDeviceID) -> Float32? = { _ in nil },
@@ -151,6 +154,7 @@ public final class AudioRecorder {
         self.mode = mode
         self.engine = engine
         self.selectedInputDeviceUID = selectedInputDeviceUID
+        self.builtInMicrophoneUID = builtInMicrophoneUID
         self.resolveInputDevice = resolveInputDevice
         self.hardwareInputFormat = hardwareInputFormat
         self.inputVolumeScalar = inputVolumeScalar
@@ -199,9 +203,19 @@ public final class AudioRecorder {
 
         var pinnedFormat: AVAudioFormat?
         var pinnedSelection: (uid: String, deviceID: AudioDeviceID)?
-        if let uid = selectedInputDeviceUID() {
-            guard let deviceID = resolveInputDevice(uid) else {
-                throw AudioRecorderError.inputDeviceUnavailable(uid)
+        if let preferredUID = selectedInputDeviceUID() {
+            let uid: String
+            let deviceID: AudioDeviceID
+            if let preferredID = resolveInputDevice(preferredUID) {
+                uid = preferredUID
+                deviceID = preferredID
+            } else if let fallbackUID = builtInMicrophoneUID(),
+                      let fallbackID = resolveInputDevice(fallbackUID) {
+                uid = fallbackUID
+                deviceID = fallbackID
+                dlog("AudioRecorder.start built-in fallback preferred=\(preferredUID) active=\(uid)")
+            } else {
+                throw AudioRecorderError.inputDeviceUnavailable(preferredUID)
             }
             var selectionError: Error?
             let retryDelays: [TimeInterval] = [0, 0.05, 0.15]

@@ -55,6 +55,11 @@ enum AudioInputDevices {
         }
     }
 
+    /// Only an onboard microphone is eligible for automatic fallback.
+    static func builtInMicrophoneUID() -> String? {
+        available().first(where: { $0.transport == "Built-in" })?.uid
+    }
+
     static func deviceID(forUID uid: String) -> AudioDeviceID? {
         available().first(where: { $0.uid == uid })?.id
     }

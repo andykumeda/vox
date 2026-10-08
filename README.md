@@ -1,6 +1,6 @@
 # Vox
 
-Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn**, speak, release — Vox transcribes via OpenAI and pastes at the cursor in whichever app has focus. Also includes a meeting-transcription mode (system audio + your mic in parallel), a personal dictionary, and an opt-in LLM cleanup pass.
+Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn**, speak, release — Vox transcribes via OpenAI or OpenRouter and pastes at the cursor in whichever app has focus. Also includes a meeting-transcription mode (system audio + your mic in parallel), a personal dictionary, and an opt-in LLM cleanup pass.
 
 For end-user instructions, read [Quick Help](Resources/help.md). For current deployment status, verified behavior, and outstanding manual checks, read [HANDOFF.md](HANDOFF.md) before changing the project. The [codebase audit ledger](docs/codebase-audit.md) records this review and unresolved findings.
 
@@ -31,7 +31,7 @@ transcript bodies. Provider and system failures are also recorded as errors.
 
 Vox runs in one of two text-shaping modes:
 
-- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation. Spelled-out quantities become digits in quantitative contexts (`five dollars` → `$5`, `three hours` → `3 hours`, `one terabyte` → `1 TB`, `option one` → `option 1`), small-number ranges (`around four or five` → `around 4 or 5`), and bare times at a clause end (`meet at four` → `meet at 4`); letter-spelled numbers such as `F-I-F-T-Y feet` are also normalized (`50 feet`). Standalone quantities of at least five digits receive comma grouping (`300000` → `300,000`). Ordinary small counts stay words (`three apples`). Empty short toggles are rejected using sustained frame-level speech activity before transcription. Number phrases too large to convert safely stay as words, and sentence capitalization supports Unicode letters whose uppercase form expands to multiple characters.
+- **Prose** — capitalizes sentence starts, ensures a space after `.`, `!`, `?`, detects questions, and synthesizes a Space keystroke for inter-sentence separation. Spelled-out quantities become digits in quantitative contexts (`five dollars` → `$5`, `three hours` → `3 hours`, `one terabyte` → `1 TB`, `option one` → `option 1`), small-number ranges (`around four or five` → `around 4 or 5`), and bare times at a clause end (`meet at four` → `meet at 4`); letter-spelled numbers such as `F-I-F-T-Y feet` are also normalized (`50 feet`). Standalone quantities of at least five digits receive comma grouping (`300000` → `300,000`). Ordinary small counts stay words (`three apples`). Empty toggles are rejected before transcription when no sustained speech activity is detected; scattered clicks cannot accumulate into a speech run. Number phrases too large to convert safely stay as words, and sentence capitalization supports Unicode letters whose uppercase form expands to multiple characters.
 - **Command** — no auto-capitalize, no trailing period, aggressive number-to-digit conversion, spoken-punctuation expansion (`dash`, `dot`, `pipe`), NATO phonetic letters after dashes, and trailing-keyword key-event synthesis (`tab`, `return`, `escape`, `control X`).
 
 Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`, `Warp`, `Ghostty`, `Alacritty`, `kitty`, `WezTerm`, `Hyper`, `Wave`, `Tabby`) → command; everything else → prose. Override via Settings → Mode (`auto` / `always prose` / `always command`) or the **mode-toggle hotkey** (default `⌃⌥M`).
@@ -41,7 +41,7 @@ Mode is auto-selected by the frontmost app: terminals (`Terminal.app`, `iTerm2`,
 - macOS 13+ on Apple Silicon.
 - Full Xcode 16+ selected with `xcode-select`. The standalone Command Line
   Tools package is not sufficient because it omits the SwiftUI macro plugin.
-- An [OpenAI API key](https://platform.openai.com/api-keys).
+- An [OpenAI API key](https://platform.openai.com/api-keys) or an [OpenRouter API key](https://openrouter.ai/keys) for dictation.
 - `git` (preinstalled on macOS).
 - *Watch out:* if Homebrew OpenSSL 3 is on `PATH` ahead of `/usr/bin/openssl`, `create-dev-cert.sh` may fail with `MAC verification failed` during the PKCS#12 import. The script pins `/usr/bin/openssl` internally; if you still see it, run `which openssl`.
 
@@ -67,7 +67,7 @@ checklist.
 Then:
 
 1. Grant **Microphone**, **Input Monitoring**, **Accessibility** when macOS prompts (or in System Settings → Privacy & Security if a prompt was missed). Meeting transcription also needs **Screen Recording**.
-2. Click the menu-bar Vox icon → **Settings** → paste OpenAI API key → **Save** → click **Always Allow** on the keychain prompt.
+2. Click the menu-bar Vox icon → **Settings**. For direct OpenAI, paste your OpenAI API key → **Save**. For OpenRouter, select **Dictation provider → OpenRouter**, paste the key → **Save OpenRouter key**. Click **Always Allow** on the keychain prompt.
 3. Hold **Fn**, speak, release.
 
 ## Developing on two Macs
@@ -185,14 +185,15 @@ The original speech-to-text result is retained separately in dictation history.
 
 Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vox window raises above normal app windows so it does not get hidden behind a larger window:
 
+- **Dictation provider** — OpenAI (default) or OpenRouter. OpenRouter uses `openai/gpt-4o-transcribe`; switching back restores your direct OpenAI model preference. Create a key at [OpenRouter API Keys](https://openrouter.ai/keys), then save it in **OpenRouter API key**. It is stored separately in Keychain (`com.andykumeda.vox` / `openrouter-api-key`). Smart Cleanup, meeting summaries, and the OpenAI meeting backend still use the OpenAI key.
 - **OpenAI API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `openai-api-key`). Click **Always Allow** on the keychain prompt the first time.
 - **Model** — `gpt-4o-transcribe` (default), `gpt-4o-mini-transcribe`, or `whisper-1`. Vox estimates audio cost with bundled rates of $0.006/min, $0.003/min, and $0.006/min respectively; these are implementation estimates, not a live billing quote. Check [OpenAI pricing](https://openai.com/api/pricing/) for current charges.
-- **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`; this excludes cleanup, meeting summaries, and any separately billed output tokens.
+- **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`; OpenRouter uses the full-model estimate, while actual token-based charges are shown in OpenRouter Activity. This estimate excludes cleanup, meeting summaries, and any separately billed output tokens.
 - **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`. Prose uses symbols for exact prices (`five dollars` → `$5`) while preserving approximate ranges in conventional words (`a few hundred dollars`, not `a few $100`).
 - **Smart cleanup** — opt-in LLM cleanup via gpt-4o-mini adjusts punctuation and capitalization in prose while preserving every dictated word. Prose formatting joins an STT-inserted `. And …` as `, and …` and removes a leading `And` before a full sentence; cleanup rejects any new sentence-initial “And” or semicolon. If the model adds, removes, or repeats wording, Vox discards that cleanup and uses the pre-cleanup transcription, preventing lost words and preventing questions or requests from becoming assistant answers. An explicit `scratch that, …` after an unfinished phrase replaces only that phrase back to the nearest clause boundary—even when the speech pause is transcribed as a comma, dash, or ellipsis—while the established sentence context remains. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — audio is temporary and deleted after dictation or meeting processing reaches a terminal state. A startup sweep removes crash leftovers.
-- **Microphone** — choose **System Default** or pin Vox to a specific input device. A pinned device is selected by its persistent Core Audio UID and kept as macOS's default input while Vox runs, including across output changes and device reconnects. Vox also binds it before every dictation; if it is disconnected, Vox fails safely instead of switching to another microphone. If another app leaves that microphone's writable macOS input level below 70%, Vox restores it to 75% before recording. Devices without a software volume control are left untouched.
+- **Microphone** — choose **System Default** or pin Vox to a specific input device. A pinned device is selected by its persistent Core Audio UID and kept as macOS's default input while Vox runs, including across output changes and device reconnects. Vox also binds it before every dictation; if it is disconnected, Vox temporarily uses the built-in microphone and shows a notice in the menu and tooltip. Settings updates automatically and shows the active input separately from the preferred selection. The preferred selection is preserved and restored when it reconnects. If no built-in microphone is available, recording fails safely. If another app leaves that microphone's writable macOS input level below 70%, Vox restores it to 75% before recording. Devices without a software volume control are left untouched.
 - **Dictation history** — encrypted raw STT and final delivered text, with a **Raw vs final** disclosure when the texts differ and retention choices (forever / 1y / 90d / 30d). Prose transcription asks the STT provider for literal, non-interpretive speech; punctuation and formatting are handled afterward.
 - **Writing-voice skill export** — Personalization → Custom Instructions exports an import-ready `SKILL.md` for Codex, Claude, or another instruction-aware app. It infers style from attributable raw dictation transcripts before cleanup, while using final text only for raw-vs-final cleanup patterns. It does not embed transcript bodies or treat remote meeting participants as the user's voice. Users who already have a writing-voice skill can simply link it instead. About 100 prose dictations gives a rough first pass; roughly 500 dictations or 10,000–15,000 words across varied contexts is the recommended target for a relatively accurate guide.
 - **Paste behavior** → **Keep transcription on clipboard after paste** — on by default. When on, transcribed text remains on your clipboard so you can paste again if focus moved away. When off, prior clipboard text is restored ~1.5s after paste; restore is skipped if anything else writes to the clipboard in the meantime. Remote insertion paths skip restoring the prior clipboard because remote clipboard synchronization can lag behind the local paste event.
@@ -282,7 +283,7 @@ Remote desktop apps need special paste handling. When Vox is running on the Mac 
 
 ## Privacy and local data
 
-Dictation audio is sent to OpenAI. Meeting audio is sent to the selected OpenAI
+Dictation audio is sent to OpenAI directly, or through OpenRouter to OpenAI when OpenRouter is selected. Meeting audio is sent to the selected OpenAI
 or Deepgram provider; optional summaries send meeting text to OpenAI. Smart
 Cleanup sends the processed dictation, dictionary guidance, and active style
 instructions to OpenAI. Local history encryption does not change provider

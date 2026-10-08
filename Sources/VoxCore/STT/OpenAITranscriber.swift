@@ -8,11 +8,24 @@ public enum TranscriptionError: Error, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .missingAPIKey: return "OpenAI API key missing — set it in Settings."
-        case .httpError(let code, let body): return "OpenAI HTTP \(code): \(body)"
-        case .invalidResponse: return "Invalid response from OpenAI"
+        case .missingAPIKey: return "Dictation API key missing — set the selected provider’s key in Settings."
+        case .httpError(let code, let body): return "Transcription HTTP \(code): \(body)"
+        case .invalidResponse: return "Invalid transcription response"
         case .transportError(let e): return "Transport error: \(e.localizedDescription)"
         }
+    }
+}
+
+public enum DictationProvider: String, CaseIterable, Sendable {
+    case openai
+    case openrouter
+
+    public var displayName: String { self == .openai ? "OpenAI" : "OpenRouter" }
+    public var keychainAccount: String { self == .openai ? "openai-api-key" : "openrouter-api-key" }
+    public var endpoint: URL {
+        URL(string: self == .openai
+            ? "https://api.openai.com/v1/audio/transcriptions"
+            : "https://openrouter.ai/api/v1/audio/transcriptions")!
     }
 }
 
@@ -22,19 +35,22 @@ public struct OpenAITranscriber {
     private static let dictationResourceTimeoutPadding: TimeInterval = 5.0
 
     public let endpoint: URL
+    public let provider: DictationProvider
     public let modelProvider: () -> String
     public let apiKeyProvider: () -> String?
     public let requestTimeout: TimeInterval
     public let urlSession: URLSession?
 
     public init(
-        endpoint: URL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
+        endpoint: URL? = nil,
+        provider: DictationProvider = .openai,
         modelProvider: @escaping () -> String = { "gpt-4o-transcribe" },
         apiKeyProvider: @escaping () -> String?,
         requestTimeout: TimeInterval = Self.defaultDictationRequestTimeout,
         urlSession: URLSession? = nil
     ) {
-        self.endpoint = endpoint
+        self.endpoint = endpoint ?? provider.endpoint
+        self.provider = provider
         self.modelProvider = modelProvider
         self.apiKeyProvider = apiKeyProvider
         self.requestTimeout = requestTimeout
@@ -42,8 +58,8 @@ public struct OpenAITranscriber {
     }
 
     public func transcribe(wav: Data, mode: TranscriptionMode) async throws -> String {
-        let model = modelProvider()
-        dlog("transcription request model=\(model) mode=\(mode.rawValue)")
+        let model = provider == .openrouter ? "openai/gpt-4o-transcribe" : modelProvider()
+        dlog("transcription request provider=\(provider.rawValue) model=\(model) mode=\(mode.rawValue)")
 
         let apiKeyStartedAt = Date()
         let raw = apiKeyProvider()
@@ -55,8 +71,21 @@ public struct OpenAITranscriber {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode, model: model)
+        if provider == .openrouter {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            // OpenRouter ignores the top-level prompt; forward it to OpenAI instead.
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "model": model,
+                "input_audio": ["data": wav.base64EncodedString(), "format": "wav"],
+                "response_format": "json",
+                "language": "en",
+                "temperature": 0,
+                "provider": ["options": ["openai": ["prompt": mode.whisperPrompt]]],
+            ])
+        } else {
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.httpBody = buildBody(boundary: boundary, wav: wav, mode: mode, model: model)
+        }
         request.timeoutInterval = Self.dictationRequestTimeout(forWAV: wav, baseTimeout: requestTimeout)
 
         let (data, response): (Data, URLResponse)
@@ -75,7 +104,17 @@ public struct OpenAITranscriber {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw TranscriptionError.httpError(http.statusCode, body)
         }
-        guard let text = String(data: data, encoding: .utf8) else { throw TranscriptionError.invalidResponse }
+        let text: String
+        if provider == .openrouter {
+            struct Transcript: Decodable { let text: String }
+            guard let result = try? JSONDecoder().decode(Transcript.self, from: data) else {
+                throw TranscriptionError.invalidResponse
+            }
+            text = result.text
+        } else {
+            guard let result = String(data: data, encoding: .utf8) else { throw TranscriptionError.invalidResponse }
+            text = result
+        }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

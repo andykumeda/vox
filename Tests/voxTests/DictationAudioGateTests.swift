@@ -58,6 +58,40 @@ final class DictationAudioGateTests: XCTestCase {
         XCTAssertFalse(DictationSilenceGate.shouldSkip(durationSec: 5.0, rms: 40))
     }
 
+    func testScatteredNoiseCannotAccumulateIntoSustainedSpeech() {
+        // 35 loud frames total (0.70s), separated by 60ms of room noise.
+        let frames = Array(repeating: [900.0, 500.0, 500.0, 500.0], count: 35).flatMap { $0 }
+        let sustained = DictationSilenceGate.sustainedVoicedDuration(frameRMS: frames)
+        XCTAssertEqual(sustained, 0.02, accuracy: 0.0001)
+        XCTAssertTrue(DictationSilenceGate.shouldSkip(
+            durationSec: 2.95, rms: 656, voicedDurationSec: 0.70,
+            sustainedVoicedDurationSec: sustained
+        ))
+    }
+
+    func testSustainedSpeechAllowsBriefQuietGaps() {
+        let frames = Array(repeating: 900.0, count: 7) + [100, 100]
+            + Array(repeating: 900.0, count: 7)
+        let sustained = DictationSilenceGate.sustainedVoicedDuration(frameRMS: frames)
+        XCTAssertEqual(sustained, 0.28, accuracy: 0.0001)
+        XCTAssertFalse(DictationSilenceGate.shouldSkip(
+            durationSec: 0.8, rms: 800, voicedDurationSec: 0.28,
+            sustainedVoicedDurationSec: sustained
+        ))
+    }
+
+    func testQuietGapsDoNotCountAsVoicedTime() {
+        let frames = Array(repeating: [900.0, 100.0, 100.0], count: 13).flatMap { $0 }
+        let sustained = DictationSilenceGate.sustainedVoicedDuration(frameRMS: frames)
+        XCTAssertEqual(sustained, 0.26, accuracy: 0.0001)
+        XCTAssertTrue(DictationSilenceGate.shouldSkip(
+            durationSec: 0.8, rms: 800, voicedDurationSec: 0.26,
+            sustainedVoicedDurationSec: sustained
+        ))
+        XCTAssertEqual(DictationSilenceGate.sustainedVoicedDuration(frameRMS: []), 0)
+        XCTAssertEqual(DictationSilenceGate.sustainedVoicedDuration(frameRMS: [100, 100]), 0)
+    }
+
     // MARK: - Hallucination / prompt-echo suppress
 
     func testSuppressesProsePangramFiller() {
