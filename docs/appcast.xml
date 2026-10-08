@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.71</title>
+            <pubDate>Thu, 08 Oct 2026 19:01:04 +0000</pubDate>
+            <sparkle:version>95</sparkle:version>
+            <sparkle:shortVersionString>0.7.71</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Simpler Settings:</strong> One Save API keys button saves all entered OpenAI, OpenRouter, and Deepgram keys. Blank fields preserve saved keys; save failures identify the affected provider.</li>
+                    <li>Other settings continue to save automatically.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.71/Vox.dmg"
+                sparkle:edSignature="P9pTkzbrllNU7yrkyS96N6YzHbPyK9Zrtm7V1ybvVT0UHHoTu03jXuBhzgEg+u8BaY5cUM6R6PbxUpyLs08RDg==" length="2691969"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.70</title>
             <pubDate>Thu, 08 Oct 2026 18:49:29 +0000</pubDate>
             <sparkle:version>94</sparkle:version>
