@@ -50,14 +50,17 @@ public func makeCleanupSystemPrompt(
     return sections.joined(separator: "\n\n")
 }
 
-/// Returns a closure that calls OpenAI `/v1/chat/completions` with `gpt-4o-mini`.
+/// Returns a closure that calls the configured chat-completions service.
 /// Failures are caught by `CleanupProcessor`, which retains the post-trigger text.
 public func makeLiveLLMCleaner(
     apiKeyProvider: @escaping () -> String?,
     profileProvider: @escaping () -> String = { "" },
-    dictionaryProvider: @escaping () -> [DictionaryEntry] = { [] }
+    dictionaryProvider: @escaping () -> [DictionaryEntry] = { [] },
+    configurationProvider: @escaping () throws -> ChatServiceConfiguration = { try .resolve(provider: .openai) },
+    send: @escaping (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
 ) -> CleanupProcessor.LLMCleanFunc {
     return { input in
+        let configuration = try configurationProvider()
         guard let raw = apiKeyProvider() else {
             throw CleanupLLMError.missingAPIKey
         }
@@ -70,9 +73,9 @@ public func makeLiveLLMCleaner(
         )
 
         let body: [String: Any] = [
-            "model": "gpt-4o-mini",
-            "temperature": 0,
-            "max_tokens": 500,
+            "model": configuration.model,
+            "temperature": configuration.temperature,
+            "max_tokens": configuration.maxTokens,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": input],
@@ -80,16 +83,16 @@ public func makeLiveLLMCleaner(
         ]
         let bodyData = try JSONSerialization.data(withJSONObject: body)
 
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        var request = URLRequest(url: configuration.endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyData
-        request.timeoutInterval = 5.0
+        request.timeoutInterval = configuration.timeout
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await send(request)
         } catch {
             throw CleanupLLMError.transportError(error)
         }

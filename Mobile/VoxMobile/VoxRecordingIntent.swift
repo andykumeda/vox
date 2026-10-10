@@ -45,7 +45,6 @@ private final class MobileIntentDictationService {
     static let shared = MobileIntentDictationService()
 
     private let recorder = MobileAudioRecorder()
-    private let settings = MobileSettings()
     private var requestID: UUID?
     private var activity: Activity<VoxRecordingAttributes>?
 
@@ -119,18 +118,28 @@ private final class MobileIntentDictationService {
             guard let metrics = WAVAudioMetrics.analyze(wav) else {
                 throw DictationPipelineError.invalidAudio
             }
-            guard let apiKey = settings.readAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let settings = MobileSettings()
+            let provider = try settings.validatedDictationProvider()
+            let cleanupProvider = try settings.validatedCleanupProvider()
+            let cleanupKey = settings.readAPIKey(provider: cleanupProvider)
+            guard let apiKey = settings.readAPIKey(provider: provider)?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !apiKey.isEmpty
             else { throw TranscriptionError.missingAPIKey }
 
             let transcriber = OpenAITranscriber(
-                modelProvider: { "gpt-4o-transcribe" },
+                provider: provider,
+                modelProvider: { ServiceConfiguration.value(provider == .openrouter ? .openrouterDictationModel : .openaiDictationModel) },
                 apiKeyProvider: { apiKey }
+            )
+            let cleaner = makeLiveLLMCleaner(
+                apiKeyProvider: { cleanupKey },
+                configurationProvider: { try .resolve(provider: cleanupProvider) }
             )
             let result = try await DictationPipeline(
                 transcribe: { wav, mode in
                     try await transcriber.transcribe(wav: wav, mode: mode)
-                }
+                },
+                llmCleaner: cleaner
             ).transcribe(
                 recording: DictationRecording(wav: wav, metrics: metrics),
                 configuration: DictationConfiguration(

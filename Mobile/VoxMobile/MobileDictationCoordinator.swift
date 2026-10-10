@@ -171,19 +171,24 @@ final class MobileDictationCoordinator: ObservableObject {
                 throw DictationPipelineError.invalidAudio
             }
             capturedMetrics = metrics
-            guard let apiKey = settings.readAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let provider = try settings.validatedDictationProvider()
+            let cleanupProvider = try settings.validatedCleanupProvider()
+            let cleanupKey = settings.readAPIKey(provider: cleanupProvider)
+            guard let apiKey = settings.readAPIKey(provider: provider)?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !apiKey.isEmpty
             else {
                 throw TranscriptionError.missingAPIKey
             }
 
             let transcriber = OpenAITranscriber(
-                modelProvider: { "gpt-4o-transcribe" },
+                provider: provider,
+                modelProvider: { ServiceConfiguration.value(provider == .openrouter ? .openrouterDictationModel : .openaiDictationModel) },
                 apiKeyProvider: { apiKey }
             )
             let cleaner = makeLiveLLMCleaner(
-                apiKeyProvider: { apiKey },
-                dictionaryProvider: { self.dictionary.entries }
+                apiKeyProvider: { cleanupKey },
+                dictionaryProvider: { self.dictionary.entries },
+                configurationProvider: { try .resolve(provider: cleanupProvider) }
             )
             let pipeline = DictationPipeline(
                 transcribe: { wav, mode in

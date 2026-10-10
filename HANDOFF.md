@@ -1,5 +1,40 @@
 # Vox Handoff
 
+## Deployed — configurable services, unreleased 0.7.74 build 98 (2026-10-10)
+
+- Service defaults are in `Sources/VoxCore/Configuration/service-defaults.json`.
+  Environment overrides precede saved Settings and defaults; invalid routing or
+  endpoints fail before upload. API keys remain in provider-specific Keychain items.
+- Dictation, cleanup, and summary endpoints/models, timeouts, language,
+  temperature, output budgets, retry policy, meeting chunk size, and audio
+  price estimates are configurable. Cleanup and summaries default to following
+  dictation; Mini's existing OpenRouter preference therefore applies to them.
+  Meeting audio remains separately configured for Deepgram/OpenAI timestamp contracts.
+- Settings exposes provider overrides and advanced service controls. Restart
+  after changing meeting chunk size or retry delays; chunk size and offsets are
+  snapshotted together. Global/project AGENTS rules prohibit hardcoded operational
+  configuration and hidden cross-provider fallback.
+- Mobile has provider/key/service controls too; generic iOS compilation passes,
+  while physical-device smoke remains unverified. App Intent cleanup stays disabled.
+- Final `swift test`: 496 macOS + 17 VoxCore tests pass. Seven dictation
+  fixtures pass (quality 1.0, failure rate 0.0); generic iOS build passes and
+  `git diff --check` passes. `./scripts/build-app.sh` installed 0.7.74 / 98;
+  strict deep codesign passes and installed/packaged executable SHA-256 matches
+  `dd4e6a2465176679023b4e2cbd84b7d1b584ea98cb079303a8e6f405b325001b`.
+  LaunchAgent PID 60337 restarted with microphone permission, hotkey startup,
+  Accessibility trust, selected input, and packaged config resource confirmed.
+  Mini keeps OpenRouter dictation; cleanup/summary overrides are absent and
+  follow that selection. Live spoken cleanup/summary and Settings editing smoke
+  remain pending; mock request tests are not a live provider verification.
+- Build 97 was assembled/installed
+  during validation, but the LaunchAgent still ran the previous build; final
+  changed state uses unique 0.7.74 / 98. No Sparkle appcast/tag/release changes.
+- Ledger: `docs/service-configuration-status.md`. Preserve pre-existing local
+  handoff/audit/fallback notes. Completed changes are committed under the new
+  global policy; pending manual smoke stays explicitly recorded. Every future
+  Vox push must include matching Sparkle publication. The global/Dev instruction
+  files are outside Git and cannot be committed in place.
+
 ## Current state — unreleased 0.7.66 build 90 (2026-09-26)
 
 - Prose dictation now inserts comma grouping in standalone numbers of at least

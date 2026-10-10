@@ -1,27 +1,34 @@
 import Foundation
 
-enum TranscriptionModel: String, CaseIterable, Sendable {
-    case mini = "gpt-4o-mini-transcribe"
-    case full = "gpt-4o-transcribe"
-    case whisper = "whisper-1"
-
+enum TranscriptionModel: CaseIterable, Hashable, Sendable {
+    case mini, full, whisper
     static let defaultModel: TranscriptionModel = .full
-
-    var displayName: String {
+    private var configurationKey: ServiceConfiguration.Key {
         switch self {
-        case .mini: return "gpt-4o-mini-transcribe (lower cost)"
-        case .full: return "gpt-4o-transcribe (default, best quality)"
-        case .whisper: return "whisper-1 (no prompt following)"
+        case .mini: return .miniDictationModel
+        case .full: return .openaiDictationModel
+        case .whisper: return .whisperDictationModel
         }
     }
+    var preferenceValue: String {
+        switch self { case .mini: return "mini"; case .full: return "full"; case .whisper: return "whisper" }
+    }
+    var rawValue: String { ServiceConfiguration.value(configurationKey) }
+    init?(rawValue: String) {
+        guard let match = Self.allCases.first(where: {
+            $0.preferenceValue == rawValue || $0.rawValue == rawValue || ServiceConfiguration.defaultValue($0.configurationKey) == rawValue
+        }) else { return nil }
+        self = match
+    }
+    var displayName: String { rawValue }
 
     // USD per minute of audio. Output text tokens cost extra but are
     // negligible (<100 tokens/transcription). Update if OpenAI pricing changes.
     var usdPerMinute: Double {
         switch self {
-        case .mini: return 0.003
-        case .full: return 0.006
-        case .whisper: return 0.006
+        case .mini: return ServiceConfiguration.estimate(.miniUSDPerMinute)
+        case .full: return ServiceConfiguration.estimate(.fullUSDPerMinute)
+        case .whisper: return ServiceConfiguration.estimate(.whisperUSDPerMinute)
         }
     }
 }
@@ -32,8 +39,8 @@ public enum MeetingProvider: String, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .deepgram: return "Deepgram Nova-3 (diarized speakers)"
-        case .openai:   return "OpenAI Whisper (You/Other only)"
+        case .deepgram: return "Deepgram (diarized speakers)"
+        case .openai:   return "OpenAI (You/Other only)"
         }
     }
 
@@ -43,8 +50,8 @@ public enum MeetingProvider: String, CaseIterable, Sendable {
     // so real billed time is ~2× the wall-clock meeting length.
     public var usdPerHour: Double {
         switch self {
-        case .deepgram: return 0.258
-        case .openai:   return 0.36
+        case .deepgram: return ServiceConfiguration.estimate(.deepgramUSDPerHour)
+        case .openai:   return ServiceConfiguration.estimate(.meetingUSDPerHour)
         }
     }
 }
@@ -140,9 +147,26 @@ enum AppSettings {
 
     static var dictationProvider: DictationProvider {
         get {
-            DictationProvider(rawValue: UserDefaults.standard.string(forKey: "dictationProvider") ?? "") ?? .openai
+            (try? resolvedDictationProvider()) ?? .openai
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "dictationProvider") }
+    }
+
+    /// Absent overrides follow dictation, including installations that selected
+    /// OpenRouter before independent text-provider controls existed.
+    static func resolvedDictationProvider() throws -> DictationProvider {
+        DictationProvider(rawValue: try ServiceConfiguration.string(.dictationProvider))!
+    }
+    static var cleanupProvider: DictationProvider { (try? resolvedTextProvider(.cleanupProvider)) ?? dictationProvider }
+    static var summaryProvider: DictationProvider { (try? resolvedTextProvider(.summaryProvider)) ?? dictationProvider }
+    static func resolvedTextProvider(_ key: ServiceConfiguration.Key) throws -> DictationProvider {
+        let value = try ServiceConfiguration.string(key)
+        return value == "followDictation" ? try resolvedDictationProvider() : DictationProvider(rawValue: value)!
+    }
+
+    static var dictationModel: String {
+        if dictationProvider == .openrouter { return ServiceConfiguration.value(.openrouterDictationModel) }
+        return transcriptionModel.rawValue
     }
 
     static var effectiveTranscriptionModel: TranscriptionModel {
@@ -157,7 +181,7 @@ enum AppSettings {
             }
             return TranscriptionModel.defaultModel
         }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: modelKey) }
+        set { UserDefaults.standard.set(newValue.preferenceValue, forKey: modelKey) }
     }
 
     static var modeOverride: ModeOverride {
@@ -207,19 +231,20 @@ enum AppSettings {
     /// Smart default: Deepgram if a key is configured, else OpenAI. Once the
     /// user picks explicitly, the choice is honored on subsequent reads.
     static var meetingProvider: MeetingProvider {
-        get {
-            if let raw = UserDefaults.standard.string(forKey: meetingProviderKey),
-               let p = MeetingProvider(rawValue: raw) {
-                return p
-            }
-            let hasDeepgram = (KeychainStore(account: "deepgram-api-key").read()?
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-            return hasDeepgram ? .deepgram : .openai
-        }
+        get { (try? resolvedMeetingProvider()) ?? .openai }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: meetingProviderKey) }
     }
+    static func resolvedMeetingProvider() throws -> MeetingProvider {
+        let value = try ServiceConfiguration.string(.meetingProvider)
+        if let provider = MeetingProvider(rawValue: value) { return provider }
+        // The documented automatic policy selects from configured credentials
+        // before capture; runtime failures never cause a provider switch.
+        let hasDeepgram = (KeychainStore(account: "deepgram-api-key").read()?
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        return hasDeepgram ? .deepgram : .openai
+    }
 
-    /// Generate a gpt-4o-mini summary of each completed meeting. Default ON.
+    /// Generate a configured text-model summary of each completed meeting. Default ON.
     static var meetingSummaryEnabled: Bool {
         get {
             // Default to true on first read so users get summaries by default.

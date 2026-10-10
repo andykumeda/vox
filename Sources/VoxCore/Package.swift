@@ -15,6 +15,7 @@ let package = Package(
             name: "VoxCore",
             path: ".",
             exclude: ["Package.swift"],
+            resources: [.process("Configuration/service-defaults.json")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

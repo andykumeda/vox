@@ -37,6 +37,18 @@ cp "$ICON_SRC" "$APP_PATH/Contents/Resources/AppIcon.icns"
 cp Resources/AppIcon-Command.png "$APP_PATH/Contents/Resources/"
 cp Resources/help.md "$APP_PATH/Contents/Resources/"
 
+# SwiftPM service configuration resource bundle is required at runtime.
+RESOURCE_BUNDLE_FOUND=0
+for bundle in "$BUILD_DIR"/*VoxCore.bundle; do
+    [ -d "$bundle" ] || continue
+    cp -R "$bundle" "$APP_PATH/Contents/Resources/"
+    RESOURCE_BUNDLE_FOUND=1
+done
+if [ "$RESOURCE_BUNDLE_FOUND" != 1 ]; then
+    echo "✗ Required VoxCore service configuration bundle missing" >&2
+    exit 1
+fi
+
 # Embed Sparkle.framework for in-app updates.
 SPARKLE_FRAMEWORK="$BUILD_DIR/Sparkle.framework"
 if [ -d "$SPARKLE_FRAMEWORK" ]; then

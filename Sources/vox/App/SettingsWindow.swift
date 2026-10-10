@@ -102,18 +102,20 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .onChange(of: dictationProvider) { AppSettings.dictationProvider = $0 }
-                Text("OpenRouter dictation uses GPT-4o Transcribe. Smart Cleanup and meeting summaries use your OpenAI key.")
+                Text("Select the provider for dictation audio. Text providers and service configuration are below.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if dictationProvider == .openrouter {
+            ServiceSettingsView()
+
+            Group {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("OpenRouter API key").font(.headline)
                     SecureField("sk-or-…", text: $openRouterKey)
                         .textFieldStyle(.roundedBorder)
                     Link("Get an OpenRouter API key", destination: URL(string: "https://openrouter.ai/keys")!)
-                    Text("Stored separately in macOS Keychain. Used only for dictation.")
+                    Text("Stored separately in macOS Keychain. Used for requests routed to OpenRouter.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack {
@@ -210,7 +212,7 @@ struct SettingsView: View {
                         AppSettings.transcriptionModel = newValue
                     }
                 } else {
-                    Text("gpt-4o-transcribe")
+                    Text(AppSettings.dictationModel)
                 }
                 Text(dictationProvider == .openrouter
                     ? "Usage cost is an estimate. Check OpenRouter Activity for actual token-based charges."
@@ -269,7 +271,7 @@ struct SettingsView: View {
                         AppSettings.smartCleanupEnabled = newValue
                     }
                 ))
-                Text("Spoken corrections and layout commands run first. Then gpt-4o-mini may adjust punctuation and capitalization while preserving every remaining word. Adds a small API cost and processing delay.")
+                Text("Spoken corrections and layout commands run first. Then the configured text model may adjust punctuation and capitalization while preserving every remaining word. Adds a small API cost and processing delay.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -352,7 +354,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Toggle("Generate meeting summary after transcription (gpt-4o-mini)", isOn: Binding(
+                    Toggle("Generate meeting summary after transcription (the configured text model)", isOn: Binding(
                         get: { meetingSummaryEnabled },
                         set: { newValue in
                             meetingSummaryEnabled = newValue

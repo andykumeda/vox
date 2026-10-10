@@ -18,31 +18,34 @@ public enum MeetingSummarizerError: Error, CustomStringConvertible {
     }
 }
 
-/// Calls OpenAI Chat Completions (gpt-4o-mini) with a meeting transcript
+/// Calls the configured chat-completions service with a meeting transcript
 /// and returns a markdown summary. Tests inject a mock `send` closure.
 public struct MeetingSummarizer: Sendable {
     public typealias HTTPSend = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
     public let apiKeyProvider: @Sendable () -> String?
-    public let endpoint: URL
+    public let endpoint: URL?
+    public let provider: DictationProvider
     public let send: HTTPSend
 
-    /// Hard cap on transcript characters sent to gpt-4o-mini. ~60k chars
-    /// fits comfortably in the model's context window after the system
-    /// prompt; longer meetings are truncated with a marker.
-    public static let maxTranscriptChars: Int = 60_000
+    /// Configurable transcript budget; longer meetings are truncated with a marker.
+    public static var maxTranscriptChars: Int { Int(ServiceConfiguration.estimate(.summaryMaxCharacters)) }
 
     public init(
         apiKeyProvider: @Sendable @escaping () -> String?,
-        endpoint: URL = URL(string: "https://api.openai.com/v1/chat/completions")!,
+        endpoint: URL? = nil,
+        provider: DictationProvider = .openai,
         send: @escaping HTTPSend = { try await URLSession.shared.data(for: $0) }
     ) {
         self.apiKeyProvider = apiKeyProvider
         self.endpoint = endpoint
+        self.provider = provider
         self.send = send
     }
 
     public func summarize(segments: [TranscriptSegment]) async throws -> String {
+        let configuration = try ChatServiceConfiguration.resolve(provider: provider, summary: true)
+        let maxCharacters = Int(try ServiceConfiguration.number(.summaryMaxCharacters))
         guard !segments.isEmpty else { throw MeetingSummarizerError.noContent }
         guard let raw = apiKeyProvider() else { throw MeetingSummarizerError.missingAPIKey }
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -50,8 +53,8 @@ public struct MeetingSummarizer: Sendable {
 
         let transcript = Self.formatTranscript(segments)
         let truncated: String
-        if transcript.count > Self.maxTranscriptChars {
-            truncated = String(transcript.prefix(Self.maxTranscriptChars)) +
+        if transcript.count > maxCharacters {
+            truncated = String(transcript.prefix(maxCharacters)) +
                 "\n\n[... transcript truncated for length ...]"
         } else {
             truncated = transcript
@@ -87,9 +90,9 @@ public struct MeetingSummarizer: Sendable {
         """
 
         let body: [String: Any] = [
-            "model": "gpt-4o-mini",
-            "temperature": 0,
-            "max_tokens": 800,
+            "model": configuration.model,
+            "temperature": configuration.temperature,
+            "max_tokens": configuration.maxTokens,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": truncated],
@@ -97,12 +100,12 @@ public struct MeetingSummarizer: Sendable {
         ]
         let bodyData = try JSONSerialization.data(withJSONObject: body)
 
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: endpoint ?? configuration.endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyData
-        request.timeoutInterval = 60
+        request.timeoutInterval = configuration.timeout
 
         let (data, response): (Data, URLResponse)
         do {

@@ -22,10 +22,6 @@ public enum DeepgramError: Error, CustomStringConvertible {
 /// Each stream is a whole-meeting request so remote speaker IDs remain stable;
 /// the session transcribes local mic audio separately and labels it as You.
 public struct DeepgramTranscriber {
-    public static let endpoint = URL(string:
-        "https://api.deepgram.com/v1/listen?model=nova-3&diarize=true" +
-        "&utterances=true&punctuate=true&smart_format=true&language=en"
-    )!
 
     /// Deepgram prerecorded API hard cap.
     public static let maxBytes: Int = 2 * 1024 * 1024 * 1024
@@ -56,12 +52,12 @@ public struct DeepgramTranscriber {
         guard size <= maxBytes else { throw DeepgramError.fileTooLarge(bytes: size) }
 
         let audioData = try Data(contentsOf: fileURL)
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: try ServiceConfiguration.url(.deepgramURL))
         request.httpMethod = "POST"
         request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("audio/m4a", forHTTPHeaderField: "Content-Type")
         request.httpBody = audioData
-        request.timeoutInterval = 600
+        request.timeoutInterval = try ServiceConfiguration.number(.deepgramTimeout)
 
         let (data, response): (Data, URLResponse)
         do {

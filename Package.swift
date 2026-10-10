@@ -24,6 +24,7 @@ let package = Package(
             name: "VoxCore",
             path: "Sources/VoxCore",
             exclude: ["Package.swift"],
+            resources: [.process("Configuration/service-defaults.json")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(

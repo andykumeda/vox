@@ -4,7 +4,15 @@ Push-to-talk voice dictation for macOS (Apple Silicon). Hold **Fn**, speak, rele
 
 For end-user instructions, read [Quick Help](Resources/help.md). For current deployment status, verified behavior, and outstanding manual checks, read [HANDOFF.md](HANDOFF.md) before changing the project. The [codebase audit ledger](docs/codebase-audit.md) records this review and unresolved findings.
 
-Default transcription model is `gpt-4o-transcribe` for better dictation accuracy. Switchable to `gpt-4o-mini-transcribe` (lower cost) or `whisper-1`.
+Default transcription model is `gpt-4o-transcribe` for better dictation accuracy. The model presets and custom service fields are configurable in Settings.
+
+## Service configuration
+
+Settings provides API/service configuration for provider endpoints, models, request budgets, service options, and estimated audio prices. Smart Cleanup and meeting summaries default to **Follow dictation provider**; either can be explicitly set to OpenAI or OpenRouter independently. Selecting OpenRouter for dictation therefore routes these text requests through OpenRouter unless you deliberately override them. Missing credentials or failed requests never trigger a hidden switch to another provider.
+
+Configuration precedence is **environment override → saved Settings value → bundled default**. Defaults live in `Sources/VoxCore/Configuration/service-defaults.json`. Each camelCase configuration key has an environment override named `VOX_` plus the key converted to uppercase snake case (for example, `cleanupTimeout` becomes `VOX_CLEANUP_TIMEOUT`). Environment variables must be present in the Vox process environment; exporting one in a terminal does not change an already running LaunchAgent. API keys remain in Keychain.
+
+Meeting speech transcription remains an explicit choice between Deepgram and OpenAI Whisper because the clients require their respective diarization and timestamp response formats. Choosing OpenRouter for dictation does not switch meeting audio transcription. Price fields are estimates rather than provider billing records; cleanup and summary charges are excluded from dictation totals. See [the service configuration ledger](docs/service-configuration-status.md) for verification and deployment status.
 
 ## iPhone MVP
 
@@ -20,7 +28,7 @@ iPhone validation steps.
 
 If text appears slowly after you release Fn, check `~/Library/Logs/vox.log`.
 Vox logs `transcription http attempt` and `dictation timing` lines so you can
-tell whether the wait is the OpenAI transcription request, Smart Cleanup, or
+tell whether the wait is the transcription request, Smart Cleanup, or
 paste insertion. Long dictations get a larger transcription timeout budget than
 short clips; the attempt log includes both the request timeout and the remaining
 hard deadline shared by all retry attempts. Holding Option while pressing Fn
@@ -89,11 +97,12 @@ git switch <branch>
 git pull --ff-only
 ```
 
-Finish the required live smoke before committing paste, remote insertion, TCC,
-meeting-capture, or Sparkle changes. Avoid switching machines mid-change for
-those surfaces. If an unavoidable uncommitted handoff is needed, transfer only
-the source diff/untracked source files; never synchronize `.git`, `.build`,
-`dist`, logs, or credentials through a cloud drive.
+Document and commit every completed change. Record pending live smoke for paste,
+remote insertion, TCC, meeting capture, and Sparkle accurately; pending smoke
+does not waive the commit requirement. Every push must include the matching
+Sparkle DMG, GitHub release, and verified public appcast. Avoid switching Macs
+mid-change for those surfaces; never synchronize `.git`, `.build`, `dist`,
+logs, or credentials through a cloud drive.
 
 Run `./scripts/setup.sh` once on each Mac to select its signing identity and
 establish its TCC grants. Prefer an Apple-issued team identity and keep the
@@ -185,13 +194,13 @@ The original speech-to-text result is retained separately in dictation history.
 
 Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vox window raises above normal app windows so it does not get hidden behind a larger window:
 
-- **Dictation provider** — OpenAI (default) or OpenRouter. OpenRouter uses `openai/gpt-4o-transcribe`; switching back restores your direct OpenAI model preference. Create a key at [OpenRouter API Keys](https://openrouter.ai/keys), then save it in **OpenRouter API key**. It is stored separately in Keychain (`com.andykumeda.vox` / `openrouter-api-key`). Smart Cleanup, meeting summaries, and the OpenAI meeting backend still use the OpenAI key.
+- **Dictation provider** — OpenAI (default) or OpenRouter. OpenRouter uses `openai/gpt-4o-transcribe`; switching back restores your direct OpenAI model preference. Create a key at [OpenRouter API Keys](https://openrouter.ai/keys), then save it in **OpenRouter API key**. It is stored separately in Keychain (`com.andykumeda.vox` / `openrouter-api-key`). Smart Cleanup and meeting summaries follow the dictation provider by default, with independent explicit overrides. The OpenAI meeting transcription backend still uses the OpenAI key.
 - **Save API keys** — one button saves all entered OpenAI, OpenRouter, and Deepgram keys. Blank fields preserve saved keys; use each key’s Clear button to remove it. Other settings save automatically.
 - **OpenAI API key** — stored in the macOS Keychain (`com.andykumeda.vox` / `openai-api-key`). Click **Always Allow** on the keychain prompt the first time.
-- **Model** — `gpt-4o-transcribe` (default), `gpt-4o-mini-transcribe`, or `whisper-1`. Vox estimates audio cost with bundled rates of $0.006/min, $0.003/min, and $0.006/min respectively; these are implementation estimates, not a live billing quote. Check [OpenAI pricing](https://openai.com/api/pricing/) for current charges.
+- **Model** — `gpt-4o-transcribe` (default), `gpt-4o-mini-transcribe`, or `whisper-1`. Vox estimates audio cost with bundled rates of $0.006/min, $0.003/min, and $0.006/min respectively; these estimates can be overridden in API/service configuration and are not live billing quotes. Check [OpenAI pricing](https://openai.com/api/pricing/) for current charges.
 - **Usage (lifetime)** — calls, audio minutes, words, USD estimate. Refresh + Reset buttons. Estimate = `audioMinutes × model.usdPerMinute`; OpenRouter uses the full-model estimate, while actual token-based charges are shown in OpenRouter Activity. This estimate excludes cleanup, meeting summaries, and any separately billed output tokens.
 - **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`. Prose uses symbols for exact prices (`five dollars` → `$5`) while preserving approximate ranges in conventional words (`a few hundred dollars`, not `a few $100`).
-- **Smart cleanup** — opt-in LLM cleanup via gpt-4o-mini adjusts punctuation and capitalization in prose while preserving every dictated word. Prose formatting joins an STT-inserted `. And …` as `, and …` and removes a leading `And` before a full sentence; cleanup rejects any new sentence-initial “And” or semicolon. If the model adds, removes, or repeats wording, Vox discards that cleanup and uses the pre-cleanup transcription, preventing lost words and preventing questions or requests from becoming assistant answers. An explicit `scratch that, …` after an unfinished phrase replaces only that phrase back to the nearest clause boundary—even when the speech pause is transcribed as a comma, dash, or ellipsis—while the established sentence context remains. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured OpenAI cleanup provider with each eligible dictation. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
+- **Smart cleanup** — opt-in LLM cleanup using the configured provider and model adjusts punctuation and capitalization in prose while preserving every dictated word. Prose formatting joins an STT-inserted `. And …` as `, and …` and removes a leading `And` before a full sentence; cleanup rejects any new sentence-initial “And” or semicolon. If the model adds, removes, or repeats wording, Vox discards that cleanup and uses the pre-cleanup transcription, preventing lost words and preventing questions or requests from becoming assistant answers. An explicit `scratch that, …` after an unfinished phrase replaces only that phrase back to the nearest clause boundary—even when the speech pause is transcribed as a comma, dash, or ellipsis—while the established sentence context remains. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured cleanup provider with each eligible dictation. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
 - **Recordings storage** — audio is temporary and deleted after dictation or meeting processing reaches a terminal state. A startup sweep removes crash leftovers.
 - **Microphone** — choose **System Default** or pin Vox to a specific input device. A pinned device is selected by its persistent Core Audio UID and kept as macOS's default input while Vox runs, including across output changes and device reconnects. Vox also binds it before every dictation; if it is disconnected, Vox temporarily uses the built-in microphone and shows a notice in the menu and tooltip. Settings updates automatically and shows the active input separately from the preferred selection. The preferred selection is preserved and restored when it reconnects. If a USB microphone returns with a changed port-dependent UID, Vox recognizes a single available input with the same manufacturer, model, and audio interface. Multiple matching inputs require choosing the intended microphone again. If no built-in microphone is available, recording fails safely. If another app leaves that microphone's writable macOS input level below 70%, Vox restores it to 75% before recording. Devices without a software volume control are left untouched.
@@ -205,7 +214,7 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 
 - **Wrong transcription with delayed start/stop sounds** — pin the intended USB/studio mic under Settings → Microphone. Vox keeps that device as macOS's default input while it runs, including when the output switches to Bluetooth, and will not fall back to a Bluetooth input. In `~/Library/Logs/vox.log`, `AudioRecorder.start inputFormat sampleRate=8000.0` indicates a Bluetooth-route transition; Vox retries once if the hardware format changes during startup. Bluetooth output can still delay the audible cue while the speaker wakes.
 - **Vox hears silence after a conferencing app** — some conferencing apps automatically adjust microphone gain and can leave the system input level very low afterward. For a pinned microphone with a writable volume control, Vox restores levels below 70% to 75% when recording starts; normal levels are preserved.
-- **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for `dictation timing`, `transcription request model=...`, `transcription api key read elapsed=...`, and `transcription http attempt` lines. A slow first dictation after relaunch can be Keychain warming; longer waits after that are usually the OpenAI transcription request, network path, or Smart Cleanup. The `timeout=...` value scales up for longer WAVs. `resource_timeout=...` is the remaining hard deadline shared by the request and any retry, so retries cannot multiply a stalled request into a much longer wait.
+- **Text appears slowly after recording** — check `~/Library/Logs/vox.log` for `dictation timing`, `transcription request model=...`, `transcription api key read elapsed=...`, and `transcription http attempt` lines. A slow first dictation after relaunch can be Keychain warming; longer waits after that are usually the transcription request, network path, or Smart Cleanup. The `timeout=...` value scales up for longer WAVs. `resource_timeout=...` is the remaining hard deadline shared by the request and any retry, so retries cannot multiply a stalled request into a much longer wait.
 - **Raw-vs-final troubleshooting** — open Dashboard → Home and expand **Raw vs final** on a recent dictation when the texts differ. Equal entries intentionally have no disclosure. This compares the initial speech-to-text result with final output, not the recording with its transcription: Vox deletes the WAV after processing. Routine transcript diagnostics contain counts and timing, not transcript bodies.
 
 ## Dictionary
@@ -237,7 +246,7 @@ Enable **Meeting Transcription (Beta) → Enable Meeting Mode** in Settings and 
 - Closing the panel with `X` only hides the UI — recording continues. Re-open the panel via hotkey or menu to see the running timer or stop.
 - On Stop, Vox transcribes via the configured provider:
   - **Deepgram Nova-3 (default if a Deepgram key is set)** — each captured source is submitted in a separate whole-meeting request and the resulting segments are aligned on the meeting timeline. The microphone is labeled `You`; diarization within the system and optional Phone/FaceTime streams produces anonymous `Speaker` labels. Vox preserves separate speaker-ID ranges for those remote sources.
-  - **OpenAI Whisper (fallback)** — mic and system streams are chunked, transcribed independently, and tagged `You` (mic) vs `Other` (system). No within-stream speaker separation.
+  - **OpenAI Whisper** — mic and system streams are chunked, transcribed independently, and tagged `You` (mic) vs `Other` (system). No within-stream speaker separation.
   Provider is selectable in Settings → Meeting Transcription (Beta). Add a Deepgram API key in Settings → Deepgram API key (Keychain account `deepgram-api-key`).
 - Meeting audio is temporary and deleted after transcription and optional summarization finish. Raw provider segments, final displayed segments, and summaries remain in authenticated encrypted transcript files.
 - Select a saved meeting to use **Copy Transcript** for clipboard-ready plain text, or **Export…** to save plain or timestamped text.
@@ -262,7 +271,7 @@ Recording is **never** auto-started — the user still clicks Record on the pane
 
 ### Meeting summary (opt-out)
 
-Settings → Meeting Transcription (Beta) → **Generate meeting summary after transcription** (default ON). After Vox finishes transcribing, segments are sent to gpt-4o-mini with a structured prompt; the markdown summary (Summary / Key decisions / Action items) is stored on the transcript and rendered in a disclosure section at the top of the transcript browser. Summary requests are billed separately by OpenAI and are excluded from Vox's dictation usage estimate. At most the first 60,000 transcript characters are submitted. If the OpenAI API key is missing or the call fails, the summary is skipped and the transcript remains available.
+Settings → Meeting Transcription (Beta) → **Generate meeting summary after transcription** (default ON). After Vox finishes transcribing, segments are sent to the configured summary provider and model with a structured prompt; the markdown summary (Summary / Key decisions / Action items) is stored on the transcript and rendered in a disclosure section at the top of the transcript browser. Summary requests are billed separately by the selected provider and are excluded from Vox's dictation usage estimate. The configured transcript character limit bounds submitted text (60,000 by default). If the selected provider's API key is missing or the call fails, the summary is skipped and the transcript remains available.
 
 ## Menu bar icon
 
@@ -285,9 +294,9 @@ Remote desktop apps need special paste handling. When Vox is running on the Mac 
 ## Privacy and local data
 
 Dictation audio is sent to OpenAI directly, or through OpenRouter to OpenAI when OpenRouter is selected. Meeting audio is sent to the selected OpenAI
-or Deepgram provider; optional summaries send meeting text to OpenAI. Smart
+or Deepgram provider; optional summaries send meeting text to the configured summary provider. Smart
 Cleanup sends the processed dictation, dictionary guidance, and active style
-instructions to OpenAI. Local history encryption does not change provider
+instructions to the configured cleanup provider. Both text services follow the dictation provider by default. Local history encryption does not change provider
 processing or retention.
 
 Transcript history uses authenticated AES-256-GCM encryption with a per-install
@@ -433,3 +442,9 @@ permissions and verify an actual dictation on that Mac.
 - Developer ID-signed, notarized releases (reduces distribution friction; TCC persistence still requires verification)
 - Per-call output token cost tracking (currently estimate is audio-only)
 - Mission Control space-switcher via synthesized arrow keystrokes (not verified; signing/notarization alone is not a demonstrated fix)
+
+Service configuration edits use **Save service configuration**. Restart Vox after changing meeting chunk duration or meeting retry delays; other service fields apply to new requests. Custom models/endpoints must support the selected client’s response format.
+
+The iOS host also has dictation and cleanup provider controls, separate provider keys, and service settings. Its experimental App Intent continues to bypass Smart Cleanup. Generic iOS compilation does not verify physical-device permissions or keyboard insertion.
+
+Provider environment overrides are `VOX_DICTATION_PROVIDER`, `VOX_CLEANUP_PROVIDER`, `VOX_SUMMARY_PROVIDER`, and `VOX_MEETING_PROVIDER`. Text providers accept `followDictation`, `openai`, or `openrouter`; dictation accepts `openai` or `openrouter`. Meeting audio accepts `deepgram`, `openai`, or the documented `automatic` startup selection (Deepgram when its key is configured, otherwise OpenAI). This startup policy never switches providers in response to a request failure.

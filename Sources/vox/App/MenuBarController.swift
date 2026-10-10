@@ -76,9 +76,9 @@ final class MenuBarController: NSObject {
     private let injector = TextInjector()
     private let pasteGate = PasteGate()
     private let sound = SoundPlayer.shared
-    private var transcriber: OpenAITranscriber {
-        let provider = AppSettings.dictationProvider
-        let model = AppSettings.effectiveTranscriptionModel.rawValue
+    private func makeTranscriber() throws -> OpenAITranscriber {
+        let provider = try AppSettings.resolvedDictationProvider()
+        let model = AppSettings.dictationModel
         let store = KeychainStore(account: provider.keychainAccount)
         return OpenAITranscriber(
             provider: provider,
@@ -87,13 +87,18 @@ final class MenuBarController: NSObject {
         )
     }
     private lazy var liveLLMCleaner: CleanupProcessor.LLMCleanFunc = makeLiveLLMCleaner(
-        apiKeyProvider: { [keychain] in keychain.read() },
+        apiKeyProvider: { KeychainStore(account: AppSettings.cleanupProvider.keychainAccount).read() },
         profileProvider: {
             WritingStyleSourceStore.shared.activeInstructions(
                 fallback: CleanupProfileStore.shared.load()
             )
         },
-        dictionaryProvider: { DictionaryStore.loadEntriesFromDisk() }
+        dictionaryProvider: { DictionaryStore.loadEntriesFromDisk() },
+        configurationProvider: {
+            let provider = try AppSettings.resolvedTextProvider(.cleanupProvider)
+            dlog("cleanup request provider=\(provider.rawValue)")
+            return try .resolve(provider: provider)
+        }
     )
     private lazy var updaterController: SPUStandardUpdaterController = {
         let c = SPUStandardUpdaterController(
@@ -621,7 +626,7 @@ final class MenuBarController: NSObject {
             dlog("dictation pipeline started duration=\(durationSec)s bytes=\(wav.count) mode=\(mode)")
             do {
                 let sttStartedAt = Date()
-                let raw = try await self.transcriber.transcribe(wav: wav, mode: mode)
+                let raw = try await self.makeTranscriber().transcribe(wav: wav, mode: mode)
                 let rawMetrics = textLogMetrics(label: "raw", text: raw)
                 dlog("dictation timing stt=\(Self.elapsedString(since: sttStartedAt))s total=\(Self.elapsedString(since: pipelineStartedAt))s \(rawMetrics)")
 
@@ -685,8 +690,9 @@ final class MenuBarController: NSObject {
 
                 let wordCount = finalText.split(whereSeparator: { $0.isWhitespace }).count
                 let model = AppSettings.effectiveTranscriptionModel
-                let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model)
-                UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model)
+                let rate = AppSettings.dictationProvider == .openrouter ? ServiceConfiguration.estimate(.openrouterUSDPerMinute) : model.usdPerMinute
+                let cost = UsageTracker.costEstimate(durationSec: durationSec, model: model, usdPerMinute: rate)
+                UsageTracker.record(durationSec: durationSec, wordCount: wordCount, model: model, usdPerMinute: rate)
                 if !finalText.isEmpty {
                     let recorded = DictationHistoryStore.shared.record(DictationEntry(
                         mode: mode == .prose ? "prose" : "command",

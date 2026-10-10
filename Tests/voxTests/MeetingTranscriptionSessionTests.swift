@@ -769,6 +769,21 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+    func testMissingSelectedDeepgramClientFailsWithoutOpenAIFallback() async throws {
+        var openAICalls = 0
+        let session = MeetingTranscriptionSession(
+            store: store, recorder: MockRecorder(), captureMic: false,
+            chunker: { _, _ in [] },
+            transcribe: { _, _, _ in openAICalls += 1; return [] },
+            provider: { .deepgram }, apiKey: { "test" },
+            preflight: { .success(()) }
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .failed)
+        XCTAssertEqual(openAICalls, 0)
+    }
 }
 
 /// Minimal async semaphore for deterministic interleaving tests.

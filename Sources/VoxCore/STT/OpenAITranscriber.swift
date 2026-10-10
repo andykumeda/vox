@@ -22,19 +22,15 @@ public enum DictationProvider: String, CaseIterable, Sendable {
 
     public var displayName: String { self == .openai ? "OpenAI" : "OpenRouter" }
     public var keychainAccount: String { self == .openai ? "openai-api-key" : "openrouter-api-key" }
-    public var endpoint: URL {
-        URL(string: self == .openai
-            ? "https://api.openai.com/v1/audio/transcriptions"
-            : "https://openrouter.ai/api/v1/audio/transcriptions")!
-    }
+
 }
 
 public struct OpenAITranscriber {
-    public static let defaultDictationRequestTimeout: TimeInterval = 8.0
-    private static let maximumDictationRequestTimeout: TimeInterval = 24.0
-    private static let dictationResourceTimeoutPadding: TimeInterval = 5.0
+    public static var defaultDictationRequestTimeout: TimeInterval { ServiceConfiguration.estimate(.dictationTimeout) }
+    private static var maximumDictationRequestTimeout: TimeInterval { ServiceConfiguration.estimate(.dictationMaximumTimeout) }
+    private static var dictationResourceTimeoutPadding: TimeInterval { ServiceConfiguration.estimate(.dictationTimeoutPadding) }
 
-    public let endpoint: URL
+    public let endpoint: URL?
     public let provider: DictationProvider
     public let modelProvider: () -> String
     public let apiKeyProvider: () -> String?
@@ -44,12 +40,12 @@ public struct OpenAITranscriber {
     public init(
         endpoint: URL? = nil,
         provider: DictationProvider = .openai,
-        modelProvider: @escaping () -> String = { "gpt-4o-transcribe" },
+        modelProvider: @escaping () -> String = { ServiceConfiguration.value(.openaiDictationModel) },
         apiKeyProvider: @escaping () -> String?,
         requestTimeout: TimeInterval = Self.defaultDictationRequestTimeout,
         urlSession: URLSession? = nil
     ) {
-        self.endpoint = endpoint ?? provider.endpoint
+        self.endpoint = endpoint
         self.provider = provider
         self.modelProvider = modelProvider
         self.apiKeyProvider = apiKeyProvider
@@ -58,7 +54,9 @@ public struct OpenAITranscriber {
     }
 
     public func transcribe(wav: Data, mode: TranscriptionMode) async throws -> String {
-        let model = provider == .openrouter ? "openai/gpt-4o-transcribe" : modelProvider()
+        let model = provider == .openrouter ? try ServiceConfiguration.string(.openrouterDictationModel) : modelProvider()
+        try ServiceConfiguration.validate(model, for: provider == .openrouter ? .openrouterDictationModel : .openaiDictationModel)
+        for key in [ServiceConfiguration.Key.temperature, .language, .dictationTimeout, .dictationMaximumTimeout, .dictationTimeoutPerAudioSecond, .dictationTimeoutPadding] { _ = try ServiceConfiguration.string(key) }
         dlog("transcription request provider=\(provider.rawValue) model=\(model) mode=\(mode.rawValue)")
 
         let apiKeyStartedAt = Date()
@@ -68,7 +66,7 @@ public struct OpenAITranscriber {
         guard !key.isEmpty else { throw TranscriptionError.missingAPIKey }
 
         let boundary = "vox-\(UUID().uuidString)"
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: try endpoint ?? ServiceConfiguration.url(provider == .openrouter ? .openrouterTranscriptionURL : .openaiTranscriptionURL))
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         if provider == .openrouter {
@@ -78,8 +76,8 @@ public struct OpenAITranscriber {
                 "model": model,
                 "input_audio": ["data": wav.base64EncodedString(), "format": "wav"],
                 "response_format": "json",
-                "language": "en",
-                "temperature": 0,
+                "language": try ServiceConfiguration.string(.language),
+                "temperature": try ServiceConfiguration.number(.temperature),
                 "provider": ["options": ["openai": ["prompt": mode.whisperPrompt]]],
             ])
         } else {
@@ -123,7 +121,7 @@ public struct OpenAITranscriber {
         session: URLSession? = nil,
         totalTimeout: TimeInterval? = nil,
         retryDelayNanoseconds: (Int) -> UInt64 = { attempt in
-            UInt64(300_000_000) * UInt64(attempt + 1)
+            UInt64(ServiceConfiguration.estimate(.requestRetryDelay) * 1_000_000_000) * UInt64(attempt + 1)
         },
         sleep: (UInt64) async throws -> Void = { nanoseconds in
             try await Task.sleep(nanoseconds: nanoseconds)
@@ -143,7 +141,8 @@ public struct OpenAITranscriber {
             .notConnectedToInternet, .cannotConnectToHost
         ]
         var lastError: Error?
-        let maxAttempts = 3
+        let maxAttempts = Int(try ServiceConfiguration.number(.requestMaxAttempts))
+        _ = try ServiceConfiguration.number(.requestRetryDelay)
         let operationStartedAt = monotonicNow()
         for attempt in 0..<maxAttempts {
             let attemptNumber = attempt + 1
@@ -287,7 +286,7 @@ public struct OpenAITranscriber {
         guard let duration = wavDurationSeconds(wav) else {
             return floor
         }
-        let durationScaledTimeout = Self.defaultDictationRequestTimeout + duration * 0.25
+        let durationScaledTimeout = Self.defaultDictationRequestTimeout + duration * ServiceConfiguration.estimate(.dictationTimeoutPerAudioSecond)
         return max(floor, min(Self.maximumDictationRequestTimeout, durationScaledTimeout))
     }
 
@@ -359,7 +358,7 @@ public struct OpenAITranscriber {
         offsetSeconds: Double,
         apiKey: String,
         source: SegmentSource = .remote,
-        endpoint: URL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
+        endpoint: URL? = nil,
         urlSession: URLSession = .shared
     ) async throws -> [TranscriptSegment] {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -367,16 +366,16 @@ public struct OpenAITranscriber {
 
         let audioData = try Data(contentsOf: fileURL)
         let boundary = "vox-\(UUID().uuidString)"
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: try endpoint ?? ServiceConfiguration.url(.openaiTranscriptionURL))
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = buildMeetingBody(
+        request.httpBody = try buildMeetingBody(
             boundary: boundary,
             audio: audioData,
             filename: fileURL.lastPathComponent
         )
-        request.timeoutInterval = 120.0
+        request.timeoutInterval = try ServiceConfiguration.number(.meetingTimeout)
 
         let (data, response): (Data, URLResponse)
         do {
@@ -410,7 +409,7 @@ public struct OpenAITranscriber {
         }
     }
 
-    private static func buildMeetingBody(boundary: String, audio: Data, filename: String) -> Data {
+    private static func buildMeetingBody(boundary: String, audio: Data, filename: String) throws -> Data {
         var body = Data()
         func field(_ name: String, _ value: String) {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
@@ -418,14 +417,14 @@ public struct OpenAITranscriber {
             body.append(value.data(using: .utf8)!)
             body.append("\r\n".data(using: .utf8)!)
         }
-        field("model", "whisper-1")
+        field("model", try ServiceConfiguration.string(.meetingModel))
         field("response_format", "verbose_json")
         field("timestamp_granularities[]", "segment")
         // Pin language + temperature=0 so silence/noise chunks don't get transcribed as
         // random Japanese (or other) text. Whisper's silence-hallucination behavior is
         // strongly correlated with language=auto + non-zero temperature.
-        field("language", "en")
-        field("temperature", "0")
+        field("language", try ServiceConfiguration.string(.language))
+        field("temperature", try ServiceConfiguration.string(.temperature))
 
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append(
@@ -449,9 +448,9 @@ public struct OpenAITranscriber {
         }
         appendField("model", model)
         appendField("response_format", "text")
-        appendField("language", "en")
+        appendField("language", ServiceConfiguration.value(.language))
         appendField("prompt", mode.whisperPrompt)
-        appendField("temperature", "0")
+        appendField("temperature", ServiceConfiguration.value(.temperature))
 
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)

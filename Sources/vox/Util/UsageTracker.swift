@@ -13,12 +13,12 @@ enum UsageTracker {
     private static let wordsKey = "usage.words"
     private static let usdKey = "usage.usd"
 
-    static func record(durationSec: Double, wordCount: Int, model: TranscriptionModel) {
+    static func record(durationSec: Double, wordCount: Int, model: TranscriptionModel, usdPerMinute: Double? = nil) {
         let d = UserDefaults.standard
         d.set(d.integer(forKey: callsKey) + 1, forKey: callsKey)
         d.set(d.double(forKey: secondsKey) + durationSec, forKey: secondsKey)
         d.set(d.integer(forKey: wordsKey) + wordCount, forKey: wordsKey)
-        let costThisCall = (durationSec / 60.0) * model.usdPerMinute
+        let costThisCall = (durationSec / 60.0) * (usdPerMinute ?? model.usdPerMinute)
         d.set(d.double(forKey: usdKey) + costThisCall, forKey: usdKey)
     }
 
@@ -40,7 +40,7 @@ enum UsageTracker {
         d.removeObject(forKey: usdKey)
     }
 
-    static func costEstimate(durationSec: Double, model: TranscriptionModel) -> Double {
-        return (durationSec / 60.0) * model.usdPerMinute
+    static func costEstimate(durationSec: Double, model: TranscriptionModel, usdPerMinute: Double? = nil) -> Double {
+        return (durationSec / 60.0) * (usdPerMinute ?? model.usdPerMinute)
     }
 }

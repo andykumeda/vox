@@ -21,14 +21,24 @@ public enum MeetingChunkerError: Error, CustomStringConvertible {
 public struct MeetingChunker {
     public let chunkDurationSeconds: Double
 
-    public init(chunkDurationSeconds: Double = 300) {
+    public init(chunkDurationSeconds: Double = ServiceConfiguration.estimate(.meetingChunkDuration)) {
         self.chunkDurationSeconds = chunkDurationSeconds
+    }
+
+    static func chunkCount(totalDuration: Double, chunkDuration: Double) throws -> Int {
+        let count = ceil(totalDuration / chunkDuration)
+        guard count.isFinite, count > 0, count < Double(Int.max) else {
+            throw ServiceConfiguration.InvalidValue(key: .meetingChunkDuration)
+        }
+        return Int(count)
     }
 
     /// Split `input` into ordered AAC m4a chunks of at most `chunkDurationSeconds`,
     /// written into `outputDirectory` as `000.m4a`, `001.m4a`, …
     /// Returns the chunk URLs in order.
     public func split(input: URL, outputDirectory: URL) async throws -> [URL] {
+        _ = try ServiceConfiguration.number(.meetingChunkDuration)
+        guard chunkDurationSeconds.isFinite, chunkDurationSeconds > 0 else { throw ServiceConfiguration.InvalidValue(key: .meetingChunkDuration) }
         try FileManager.default.createDirectory(
             at: outputDirectory, withIntermediateDirectories: true
         )
@@ -39,7 +49,7 @@ public struct MeetingChunker {
         let tracks = try await asset.loadTracks(withMediaType: .audio)
         guard !tracks.isEmpty else { throw MeetingChunkerError.noAudioTrack }
 
-        let chunkCount = Int(ceil(totalDuration / chunkDurationSeconds))
+        let chunkCount = try Self.chunkCount(totalDuration: totalDuration, chunkDuration: chunkDurationSeconds)
         var outputs: [URL] = []
         for i in 0..<chunkCount {
             let start = Double(i) * chunkDurationSeconds

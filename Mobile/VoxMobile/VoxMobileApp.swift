@@ -45,7 +45,7 @@ private struct SetupView: View {
                 Label("Open Settings → General → Keyboard → Keyboards", systemImage: "1.circle")
                 Label("Add Vox Keyboard", systemImage: "2.circle")
                 Label("Enable Allow Full Access", systemImage: "3.circle")
-                Label("Enter your OpenAI API key in Settings", systemImage: "4.circle")
+                Label("Select your provider and enter its API key in Settings", systemImage: "4.circle")
             } header: {
                 Text("Get started")
             } footer: {
@@ -194,21 +194,55 @@ private struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("OpenAI") {
-                SecureField("API key", text: $settings.apiKey)
+            Section("API keys") {
+                SecureField("OpenAI API key", text: $settings.apiKey)
                     .textContentType(.password)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                Button("Save API Key") { settings.saveAPIKey() }
+                Button("Save OpenAI Key") { settings.saveAPIKey(provider: .openai) }
+                SecureField("OpenRouter API key", text: $settings.openrouterAPIKey)
+                    .textContentType(.password)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                Button("Save OpenRouter Key") { settings.saveAPIKey(provider: .openrouter) }
                 if let message = settings.saveMessage {
                     Text(message).font(.caption).foregroundStyle(.secondary)
                 }
             }
             Section("Dictation") {
+                Picker("Dictation provider", selection: $settings.dictationProvider) {
+                    ForEach(DictationProvider.allCases, id: \.self) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                Picker("Cleanup provider", selection: $settings.cleanupProvider) {
+                    ForEach(MobileCleanupProvider.allCases, id: \.self) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
                 Toggle("Smart Cleanup", isOn: $settings.smartCleanupEnabled)
                 Text("Say “verbatim” or “literal” first to bypass cleanup for one dictation.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            Section("API/service configuration") {
+                ForEach(MobileSettings.serviceKeys, id: \.self) { key in
+                    VStack(alignment: .leading) {
+                        Text(key.rawValue).font(.caption)
+                        TextField(key.rawValue, text: Binding(
+                            get: { settings.serviceValues[key] ?? "" },
+                            set: { settings.serviceValues[key] = $0 }
+                        ))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    }
+                }
+                Button("Save service configuration") { settings.saveServiceConfiguration() }
+                Text("Environment overrides take precedence over saved settings; blank values restore bundled defaults. API keys stay in Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let message = settings.serviceSaveMessage {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("Privacy") {
                 Text("Audio is deleted after transcription or cancellation. Transcripts and dictionary entries remain only on this iPhone for this MVP.")

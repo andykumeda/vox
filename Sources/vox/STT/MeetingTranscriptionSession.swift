@@ -16,7 +16,9 @@ public final class MeetingTranscriptionSession {
     /// chat-completions client.
     public typealias Summarize = ([TranscriptSegment]) async throws -> String
 
-    public static let shared = MeetingTranscriptionSession(
+    public static let shared: MeetingTranscriptionSession = {
+        let chunkDuration = ServiceConfiguration.estimate(.meetingChunkDuration)
+        return MeetingTranscriptionSession(
         store: MeetingTranscriptStore(),
         recorder: nil,
         micRecorder: nil,
@@ -24,7 +26,7 @@ public final class MeetingTranscriptionSession {
         captureMic: true,
         captureVoIPProcesses: true,
         chunker: { input, dir in
-            try await MeetingChunker().split(input: input, outputDirectory: dir)
+            try await MeetingChunker(chunkDurationSeconds: chunkDuration).split(input: input, outputDirectory: dir)
         },
         transcribe: { url, offset, source in
             let key = KeychainStore().read() ?? ""
@@ -38,16 +40,20 @@ public final class MeetingTranscriptionSession {
                 fileURL: streamURL, apiKey: key
             )
         },
-        provider: { AppSettings.meetingProvider },
+        provider: { try AppSettings.resolvedMeetingProvider() },
         apiKey: { KeychainStore().read() },
         deepgramAPIKey: { KeychainStore(account: "deepgram-api-key").read() },
         summarize: { segments in
-            try await MeetingSummarizer(
-                apiKeyProvider: { KeychainStore().read() }
+            let provider = try AppSettings.resolvedTextProvider(.summaryProvider)
+            return try await MeetingSummarizer(
+                apiKeyProvider: { KeychainStore(account: provider.keychainAccount).read() },
+                provider: provider
             ).summarize(segments: segments)
         },
-        summarizeEnabled: { AppSettings.meetingSummaryEnabled }
+        summarizeEnabled: { AppSettings.meetingSummaryEnabled },
+        chunkDuration: chunkDuration
     )
+    }()
 
     public let store: MeetingTranscriptStore
     private let systemRecorderFactory: () -> MeetingAudioRecording
@@ -56,7 +62,7 @@ public final class MeetingTranscriptionSession {
     private let chunker: Chunker
     private let transcribe: Transcribe
     private let deepgramTranscribe: DeepgramTranscribe?
-    private let providerProvider: () -> MeetingProvider
+    private let providerProvider: () throws -> MeetingProvider
     private let summarize: Summarize?
     private let summarizeEnabledProvider: () -> Bool
     private let saveSession: (TranscriptSession) throws -> Void
@@ -64,7 +70,7 @@ public final class MeetingTranscriptionSession {
     /// AppSettings; tests pass `{ .success(()) }` to bypass.
     private let preflight: () -> Result<Void, MeetingGateError>
     private let backoffSchedule: [Double]
-    private let chunkDuration: Double = 300
+    private let chunkDuration: Double
 
     private var systemRecorder: MeetingAudioRecording?
     private var micRecorder: MeetingAudioRecording?
@@ -102,7 +108,7 @@ public final class MeetingTranscriptionSession {
         chunker: @escaping Chunker,
         transcribe: @escaping Transcribe,
         deepgramTranscribe: DeepgramTranscribe? = nil,
-        provider: @escaping () -> MeetingProvider = { .openai },
+        provider: @escaping () throws -> MeetingProvider = { .openai },
         apiKey: @escaping () -> String?,
         deepgramAPIKey: @escaping () -> String? = {
             KeychainStore(account: "deepgram-api-key").read()
@@ -111,8 +117,9 @@ public final class MeetingTranscriptionSession {
         summarizeEnabled: @escaping () -> Bool = { false },
         preflight: (() -> Result<Void, MeetingGateError>)? = nil,
         saveSession: ((TranscriptSession) throws -> Void)? = nil,
-        backoffSchedule: [Double] = [1, 2, 4, 8, 16, 30],
-        systemRecorderFactory: (() -> MeetingAudioRecording)? = nil
+        backoffSchedule: [Double] = ServiceConfiguration.value(.meetingRetryDelays).split(separator: ",").compactMap { Double($0) },
+        systemRecorderFactory: (() -> MeetingAudioRecording)? = nil,
+        chunkDuration: Double = ServiceConfiguration.estimate(.meetingChunkDuration)
     ) {
         self.store = store
         if let systemRecorderFactory {
@@ -159,7 +166,10 @@ public final class MeetingTranscriptionSession {
             let deepgramKeyProvider = deepgramAPIKey
             self.preflight = {
                 let key: String?
-                switch selectedProvider() {
+                let selected: MeetingProvider
+                do { selected = try selectedProvider() }
+                catch { return .failure(.captureFailed(error.localizedDescription)) }
+                switch selected {
                 case .deepgram:
                     key = deepgramKeyProvider()
                 case .openai:
@@ -169,6 +179,7 @@ public final class MeetingTranscriptionSession {
                 return MeetingPreflight.gate(hasAPIKey: hasKey)
             }
         }
+        self.chunkDuration = chunkDuration
         self.backoffSchedule = backoffSchedule
     }
 
@@ -443,9 +454,19 @@ public final class MeetingTranscriptionSession {
                 }
             }
         }
-        // Deepgram sends a separate whole-meeting request for each source.
-        // Use the OpenAI chunked pipeline when Deepgram is not selected or wired.
-        if providerProvider() == .deepgram, let dg = deepgramTranscribe {
+        let provider: MeetingProvider
+        do { provider = try providerProvider() }
+        catch {
+            updateSession { $0.status = .failed; $0.failureReason = error.localizedDescription }
+            return
+        }
+        // A selected service must be wired. Never send its audio to another
+        // provider merely because its client is unavailable.
+        if provider == .deepgram {
+            guard let dg = deepgramTranscribe else {
+                updateSession { $0.status = .failed; $0.failureReason = "Selected Deepgram client is unavailable." }
+                return
+            }
             await runDeepgramPipeline(
                 systemURL: systemURL, micURL: micURL, phoneURL: phoneURL,
                 systemShift: systemShift, micShift: micShift, phoneShift: phoneShift,
@@ -868,11 +889,14 @@ public final class MeetingTranscriptionSession {
     /// Caps transport retries so a prolonged outage cannot block new meetings
     /// via `.alreadyActive` forever. Matches the last backoff step (30s) for
     /// roughly twenty minutes of attempts before failing the chunk.
-    private static let maxTransportRetryDuration: TimeInterval = 20 * 60
+    private static var maxTransportRetryDuration: TimeInterval { ServiceConfiguration.estimate(.meetingRetryBudget) }
 
     private func transcribeWithRetry(
         url: URL, offset: Double, source: SegmentSource
     ) async throws -> [TranscriptSegment] {
+        _ = try ServiceConfiguration.string(.meetingRetryDelays)
+        _ = try ServiceConfiguration.number(.meetingRetryBudget)
+        guard !backoffSchedule.isEmpty else { throw ServiceConfiguration.InvalidValue(key: .meetingRetryDelays) }
         var attempt = 0
         let deadline = Date().addingTimeInterval(Self.maxTransportRetryDuration)
         while true {
