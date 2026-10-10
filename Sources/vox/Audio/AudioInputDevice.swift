@@ -61,7 +61,31 @@ enum AudioInputDevices {
     }
 
     static func deviceID(forUID uid: String) -> AudioDeviceID? {
-        available().first(where: { $0.uid == uid })?.id
+        preferredDevice(forUID: uid, in: available())?.id
+    }
+
+    /// Apple USB Audio UIDs can include a port-dependent LocationID rather
+    /// than a serial number (TN3190). Recover only a unique input of the same
+    /// manufacturer/model/interface; never choose between identical devices.
+    static func preferredDevice(
+        forUID uid: String,
+        in devices: [AudioInputDevice]
+    ) -> AudioInputDevice? {
+        if let exact = devices.first(where: { $0.uid == uid }) { return exact }
+        guard let identity = usbIdentity(uid) else { return nil }
+        let matches = devices.filter {
+            $0.transport == "USB" && usbIdentity($0.uid) == identity
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    private static func usbIdentity(_ uid: String) -> [String]? {
+        let parts = uid.components(separatedBy: ":")
+        guard parts.count == 5,
+              parts[0] == "AppleUSBAudioEngine",
+              parts.allSatisfy({ !$0.isEmpty })
+        else { return nil }
+        return [parts[0], parts[1], parts[2], parts[4]]
     }
 
     /// Make the pinned microphone the macOS default input as well as the

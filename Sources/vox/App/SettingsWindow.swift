@@ -482,10 +482,12 @@ struct SettingsView: View {
                     Picker("Preferred input", selection: $audioInputDeviceUID) {
                         Text("System Default").tag("")
                         ForEach(audioInputDevices) { device in
-                            Text(device.displayName).tag(device.uid)
+                            Text(device.displayName).tag(
+                                device.id == preferredAudioInput?.id ? audioInputDeviceUID : device.uid
+                            )
                         }
                         if !audioInputDeviceUID.isEmpty,
-                           !audioInputDevices.contains(where: { $0.uid == audioInputDeviceUID }) {
+                           preferredAudioInput == nil {
                             Text("Preferred microphone disconnected").tag(audioInputDeviceUID)
                         }
                     }
@@ -509,7 +511,7 @@ struct SettingsView: View {
                     Text("System Default follows macOS input changes.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                } else if let selected = audioInputDevices.first(where: { $0.uid == audioInputDeviceUID }) {
+                } else if let selected = preferredAudioInput {
                     Text("Preferred: \(selected.name). If disconnected, Vox uses the built-in microphone and restores this device when it reconnects.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -628,6 +630,10 @@ struct SettingsView: View {
     private func refreshAudioInputs() {
         audioInputDevices = AudioInputDevices.available()
         usingBuiltInFallback = PinnedAudioInputMonitor.shared.isUsingBuiltInFallback
+    }
+
+    private var preferredAudioInput: AudioInputDevice? {
+        AudioInputDevices.preferredDevice(forUID: audioInputDeviceUID, in: audioInputDevices)
     }
 
     private func soundRow(
