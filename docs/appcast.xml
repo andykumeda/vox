@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.72</title>
+            <pubDate>Sat, 10 Oct 2026 20:15:00 +0000</pubDate>
+            <sparkle:version>96</sparkle:version>
+            <sparkle:shortVersionString>0.7.72</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>USB microphone reconnect:</strong> Recognizes the preferred USB microphone when a port or hub change gives it a different device UID. Exact matches take priority; multiple matching inputs require choosing the intended microphone again.</li>
+                    <li>Settings uses the same device matching so the preferred microphone no longer stays marked disconnected after it returns.</li>
+                    <li>Built-in microphone fallback remains active while the preferred microphone is absent.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.72/Vox.dmg"
+                sparkle:edSignature="KIBfwA6jMhbpGvwZa6e5X1uI6AmOVsJljTn8XgFvR0g1eoVWGRqv2W0gAZXaZAmRWuqEQaIJ1pWD2y+gP3JjDQ==" length="2694396"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.71</title>
             <pubDate>Thu, 08 Oct 2026 19:01:04 +0000</pubDate>
             <sparkle:version>95</sparkle:version>
