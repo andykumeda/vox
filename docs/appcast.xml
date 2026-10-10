@@ -6,6 +6,25 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.74</title>
+            <pubDate>Sat, 10 Oct 2026 23:04:26 GMT</pubDate>
+            <sparkle:version>98</sparkle:version>
+            <sparkle:shortVersionString>0.7.74</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Explicit service routing:</strong> Smart Cleanup and meeting summaries now follow the dictation provider by default, including OpenRouter, with independent provider overrides.</li>
+                    <li><strong>Configurable services:</strong> Settings and environment overrides control endpoints, models, request budgets, retries, language/options, and cost estimates.</li>
+                    <li>Invalid configuration fails before upload; unavailable services never silently switch providers.</li>
+                    <li>iOS adds provider-specific keys and service configuration controls.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/andykumeda/vox/releases/download/v0.7.74/Vox.dmg"
+                sparkle:edSignature="zx9A3oboav6yyWlu+qcaItkxgTTrwPB8PCU+TA4OXlUSO6c9Rrxn4yjq1jIDR8eGnVMfgROJG2hZXhQiYunHDA==" length="2737454"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.72</title>
             <pubDate>Sat, 10 Oct 2026 20:15:00 +0000</pubDate>
             <sparkle:version>96</sparkle:version>

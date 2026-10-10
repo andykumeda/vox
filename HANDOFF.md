@@ -1,6 +1,6 @@
 # Vox Handoff
 
-## Deployed — configurable services, unreleased 0.7.74 build 98 (2026-10-10)
+## Release delivery — configurable services, 0.7.74 build 98 (2026-10-10)
 
 - Service defaults are in `Sources/VoxCore/Configuration/service-defaults.json`.
   Environment overrides precede saved Settings and defaults; invalid routing or
@@ -28,7 +28,14 @@
   remain pending; mock request tests are not a live provider verification.
 - Build 97 was assembled/installed
   during validation, but the LaunchAgent still ran the previous build; final
-  changed state uses unique 0.7.74 / 98. No Sparkle appcast/tag/release changes.
+  changed state uses unique 0.7.74 / 98. Public delivery is now authorized.
+- Source commits `4e9c6f6` and `6c49493` and tag `v0.7.74` are pushed.
+  The signed DMG was mounted read-only and verified, including its service
+  configuration resource. Its SHA-256 is
+  `9af03cd50b9f8e5bdb7650a4e3be23e56a7c5da5ba8e89828c8c560a5ffeb658`.
+  Sparkle signature verifies against the bundled public key; candidate/installed
+  Mach-O UUIDs and designated requirements match. GitHub release is published; anonymous public DMG download matches the
+  signed local DMG SHA-256. Public feed and remote CI checks remain pending.
 - Ledger: `docs/service-configuration-status.md`. Preserve pre-existing local
   handoff/audit/fallback notes. Completed changes are committed under the new
   global policy; pending manual smoke stays explicitly recorded. Every future
