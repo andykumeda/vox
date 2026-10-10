@@ -11,7 +11,7 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
 - Keep edits scoped to the current task. Do not rewrite unrelated release history or stale design docs unless the task needs it.
 - After every change, deploy the resulting state to production before handing it back. For Vox, the standard production deployment is `./scripts/build-app.sh` (which installs `/Applications/Vox.app`) followed by restarting `com.andykumeda.vox` with `launchctl kickstart -k "gui/$(id -u)/com.andykumeda.vox"`; verify the deployed app when the change affects runtime behavior.
 - Every production deployment must have a new, unique bundle identity. Before deploying, bump both `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`; never deploy changed code while reusing the latest published version/build. If the deployment is not being published through Sparkle, label it as an unreleased build in `HANDOFF.md` and keep it distinguishable from the public appcast release.
-- Do not commit until manual smoke is confirmed for changes involving paste, remote desktop insertion, TCC permissions, meeting capture, or Sparkle release behavior.
+- Fully document and commit every completed change before handing it back. Record pending manual smoke for paste, remote insertion, TCC, meeting capture, or Sparkle behavior accurately; pending smoke does not waive the commit requirement. Preserve unrelated work and stage only intended changes.
 - Use `git commit --no-gpg-sign`; pinentry is unreliable in non-tty shells on this machine.
 - Stage only intended files. Do not include `.build/`, `dist/`, `.worktrees/`, `tools/`, local logs, credentials, or generated junk.
 
@@ -24,7 +24,7 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
   `launchctl kickstart -k "gui/$(id -u)/com.andykumeda.vox"` (or use
   `open /Applications/Vox.app` before its LaunchAgent exists).
 - Release build/signing: `./scripts/make-dmg.sh` plus Sparkle `sign_update`; update `docs/appcast.xml` only when cutting a release.
-- Public release publication remains a separate release action; production deployment is still required for every change.
+- Every push of Vox changes must include a matching Sparkle release. A source-only push is incomplete: build/sign the DMG on AKsMini, publish the matching GitHub tag/release asset, update and push `docs/appcast.xml`, and verify the public feed and downloadable DMG match the version/build, signature, and byte length. Complete the release as one coordinated delivery; do not claim a push complete while Sparkle still advertises an older release. Production deployment remains required.
 - A local production deployment is not allowed to reuse the public appcast's version/build. Check the newest `<sparkle:shortVersionString>` and `<sparkle:version>` in `docs/appcast.xml` before choosing the next identity.
 
 ## Documentation
@@ -46,4 +46,13 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
   from a MacBook clone or Codex Desktop is displaying a remote mini workspace.
 - Self-signed/non-notarized updates can require re-granting Mic, Input
   Monitoring, Accessibility, and Screen Recording permissions.
-- Do not tag, edit `docs/appcast.xml`, or publish a DMG unless explicitly doing a public release. Bumping `Resources/Info.plist` is required for every production deployment, including unreleased deployments; public release publication remains separately approval-gated.
+- A user-authorized push of Vox changes includes authorization for its required matching Sparkle release; no second approval is required for that delivery. A local-only change still requires documentation, commit, and production deployment, but does not independently authorize a push. Bump `Resources/Info.plist` for every changed production deployment and verify the signed release before publication.
+
+## Operational configuration
+
+- Do not hardcode operational or service configuration in application code: provider routing, API endpoints, model identifiers, prices or cost estimates, request budgets, retry policies, and service-specific language/options must be externally configurable through Settings, environment variables, or a documented configuration file.
+- Keep defaults in one documented configuration source. Resolve overrides consistently, validate them, and expose the effective provider/configuration so users can understand where requests go. Do not duplicate defaults across clients or UI labels.
+- Never silently fall back to another provider, endpoint, model, or credential when a configured service is unavailable. Report the failure or use an explicitly authorized fallback policy. Follow-provider settings must track the user's current provider selection.
+- Keep secrets in the platform credential store or an explicitly supported secret source; never put credentials in checked-in defaults or logs.
+- Protocol syntax, entitlements, bundle/app-group/Keychain identities, file-format constants, and tested algorithm invariants may remain implementation constants. Do not disguise a changeable service choice or operational policy as an implementation constant.
+- When touching existing hardcoded operational configuration, move it into the shared configuration path and add focused verification for precedence, validation, and provider routing. Do not introduce speculative controls unrelated to the app's supported behavior.
