@@ -481,7 +481,7 @@ struct SettingsView: View {
                 Text("Microphone")
                     .font(.headline)
                 HStack {
-                    Picker("Preferred input", selection: $audioInputDeviceUID) {
+                    Picker("Input", selection: $audioInputDeviceUID) {
                         Text("System Default").tag("")
                         ForEach(audioInputDevices) { device in
                             Text(device.displayName).tag(
@@ -490,7 +490,10 @@ struct SettingsView: View {
                         }
                         if !audioInputDeviceUID.isEmpty,
                            preferredAudioInput == nil {
-                            Text("Preferred microphone disconnected").tag(audioInputDeviceUID)
+                            Text(usingBuiltInFallback
+                                 ? "\(audioInputDevices.first(where: { $0.isSystemDefault })?.name ?? "Built-in microphone") (automatic)"
+                                 : "Preferred microphone unavailable")
+                                .tag(audioInputDeviceUID)
                         }
                     }
                     .onChange(of: audioInputDeviceUID) { newValue in
@@ -505,9 +508,9 @@ struct SettingsView: View {
                     .controlSize(.small)
                 }
                 if let active = audioInputDevices.first(where: { $0.isSystemDefault }) {
-                    Text("Active input: \(active.name)\(usingBuiltInFallback ? " (fallback)" : "")")
+                    Text("Active input: \(active.name)\(usingBuiltInFallback ? " (automatic)" : "")")
                         .font(.caption)
-                        .foregroundStyle(usingBuiltInFallback ? .orange : .secondary)
+                        .foregroundStyle(.secondary)
                 }
                 if audioInputDeviceUID.isEmpty {
                     Text("System Default follows macOS input changes.")
@@ -519,10 +522,10 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Text(usingBuiltInFallback
-                         ? "The preferred microphone is disconnected. Using the built-in microphone until it reconnects."
-                         : "The preferred microphone is disconnected. No built-in fallback is active.")
+                         ? "Using the built-in microphone automatically. Vox remembers your preferred microphone and switches back when it reconnects."
+                         : "The preferred microphone is unavailable. No built-in microphone is active.")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(usingBuiltInFallback ? Color.secondary : Color.orange)
                 }
             }
 

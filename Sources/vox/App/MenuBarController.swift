@@ -287,7 +287,7 @@ final class MenuBarController: NSObject {
         let menu = NSMenu()
         if PinnedAudioInputMonitor.shared.isUsingBuiltInFallback {
             let notice = NSMenuItem(
-                title: "Using built-in mic — preferred mic disconnected",
+                title: "Using built-in microphone (automatic)",
                 action: nil,
                 keyEquivalent: ""
             )
@@ -494,7 +494,7 @@ final class MenuBarController: NSObject {
             stopPulsing()
         }
         let fallbackNotice = PinnedAudioInputMonitor.shared.isUsingBuiltInFallback
-            ? " — using built-in mic; preferred mic disconnected" : ""
+            ? " — using built-in microphone automatically" : ""
         button.toolTip = {
             switch state {
             case .idle: return "Vox — idle"

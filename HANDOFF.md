@@ -1,5 +1,19 @@
 # Vox Handoff
 
+## Microphone fallback presentation — 0.7.75 build 99 (2026-10-11)
+
+- Unplugging the preferred USB input already restores the built-in microphone;
+  live device-route metadata confirmed both disconnect and reconnect handling.
+  Settings now shows the active built-in input as “automatic”, retains the
+  preferred device for reconnect, and reserves warnings for no active fallback.
+- Menu and tooltip wording now present built-in fallback as normal operation.
+  Routing and capture logic are unchanged. Tests: 496 macOS + 17 VoxCore pass.
+  Seven dictation fixtures pass. Production 0.7.75 / 99 is installed and
+  restarted with strict signature and binary-match checks passing. Sparkle
+  publication is in progress; rendered-label smoke remains pending after
+  native UI inspection timed out. See
+  [the microphone presentation ledger](docs/microphone-input-status.md).
+
 ## Released — configurable services, 0.7.74 build 98 (2026-10-10)
 
 - Service defaults are in `Sources/VoxCore/Configuration/service-defaults.json`.
