@@ -10,8 +10,10 @@
   Routing and capture logic are unchanged. Tests: 496 macOS + 17 VoxCore pass.
   Seven dictation fixtures pass. Production 0.7.75 / 99 is installed and
   restarted with strict signature and binary-match checks passing. Sparkle
-  publication is in progress; rendered-label smoke remains pending after
-  native UI inspection timed out. See
+  release is published with verified raw/live feeds and public signed DMG.
+  Source `dedbbcb`, appcast `7451ee3`, and tag/release `v0.7.75` are pushed.
+  Release Gate, source regression, and Pages deployment passed.
+  Rendered-label smoke remains pending after native UI inspection timed out. See
   [the microphone presentation ledger](docs/microphone-input-status.md).
 
 ## Released — configurable services, 0.7.74 build 98 (2026-10-10)
