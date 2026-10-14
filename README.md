@@ -436,6 +436,7 @@ permissions and verify an actual dictation on that Mac.
 ## Roadmap (not yet)
 
 - SSH-vs-local detection inside a terminal
+- Transcription reliability and usability — planned for the next phase; see [the prioritized task ledger](docs/transcription-next-phase.md)
 - Real-time inline typing — explicitly deferred; see [the next-phase design](docs/realtime-typing-next-phase.md)
 - Separate mode for code editors
 - Floating HUD near the cursor

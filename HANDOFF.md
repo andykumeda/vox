@@ -1,5 +1,21 @@
 # Vox Handoff
 
+## Unreleased — next-phase planning, 0.7.77 build 101 (2026-10-14)
+
+- `docs/transcription-next-phase.md` records eleven deferred items with explicit
+  Not started states, priorities, dependencies, acceptance criteria and tests.
+  Runtime feature work is not implemented by this documentation update.
+- Recorded user confirmation that 0.7.76 produced “Testing 1 2 3.” on MacBook.
+  OpenRouter meeting/live capture checks remain pending.
+- Bundle identity advances solely to satisfy the unique production-deployment
+  rule for this documentation change. 0.7.77 / 101 is installed/restarted on
+  Mini and MacBook; build, strict signatures and installed/packaged binary hashes
+  pass. Document links, all eleven deferred states and diff whitespace pass.
+  No new runtime test or live meeting result is claimed. Public Sparkle remains
+  0.7.75 / 99; this build is not pushed or published.
+
+
+
 ## Unreleased — OpenRouter meetings and digit sequences, 0.7.76 build 100 (2026-10-14)
 
 - Meeting audio can explicitly use OpenRouter with its saved provider key and a
@@ -14,13 +30,17 @@
   verify installed 0.7.76 / 100 on Mini and MacBook. MacBook LaunchAgent restarted;
   OpenRouter is selected for meetings. Mini opened directly because its
   LaunchAgent was not loaded; hotkey, microphone and Accessibility startup pass.
-- Live spoken sequence, actual OpenRouter meeting upload and repeated short
-  speech/quiet-room smoke remain pending. Capture stalls and speech-gate rejection
+- User confirmed live MacBook output “Testing 1 2 3.” on 2026-10-14. Actual
+  OpenRouter meeting upload and repeated short speech/quiet-room smoke remain
+  pending. Capture stalls and speech-gate rejection
   are separate unresolved observations; the gate and engine lifecycle are unchanged.
 - Public Sparkle remains 0.7.75 / 99. This local build is not pushed/published.
   Ledger: `docs/transcription-reliability-status.md`. Wispr's shipped-client
   inspection is in `docs/wispr-flow-transcription-analysis.md`; its server-side
   formatter is unknown and the static analysis has bounded coverage.
+- Next-phase work is documented in `docs/transcription-next-phase.md`: eleven
+  deferred items with priorities, dependencies, acceptance criteria and verification.
+  No implementation of those planned items is claimed.
 
 
 ## Microphone fallback presentation — 0.7.75 build 99 (2026-10-11)
