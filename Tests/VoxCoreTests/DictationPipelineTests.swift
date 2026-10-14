@@ -49,6 +49,19 @@ final class DictationPipelineTests: XCTestCase {
         XCTAssertEqual(result.text, "I use Vox for dictation.")
     }
 
+    func testSpokenDigitSequenceIsNotAddedTogether() async throws {
+        let pipeline = DictationPipeline { _, _ in "Testing one two three." }
+        let recording = DictationRecording(
+            wav: Data([0]),
+            metrics: WAVAudioMetrics(durationSec: 2, rms: 1_000, voicedDurationSec: 1)
+        )
+        let result = try await pipeline.transcribe(
+            recording: recording, configuration: DictationConfiguration()
+        )
+        XCTAssertEqual(result.rawText, "Testing one two three.")
+        XCTAssertEqual(result.text, "Testing 1 2 3.")
+    }
+
     func testRunawayTranscriptionIsSuppressed() async {
         let pipeline = DictationPipeline { _, _ in String(repeating: "word ", count: 100) }
         let recording = DictationRecording(

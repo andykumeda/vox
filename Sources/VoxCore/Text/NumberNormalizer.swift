@@ -262,6 +262,17 @@ public struct NumberNormalizer {
             let w = t.word.lowercased()
             return isNumberWord(w) ? w : nil
         }
+        // Adjacent single digits are a spoken sequence, not an additive
+        // quantity: "one two three" must never become six. Preserve each
+        // token's spacing and punctuation, and leave any following unit alone.
+        if words.count > 1, words.allSatisfy({ (Self.units[$0] ?? 10) < 10 }) {
+            return (tokens.map { token in
+                if let digit = Self.units[token.word.lowercased()] {
+                    return String(token.leadingWhitespace) + String(digit)
+                }
+                return token.original
+            }, 0)
+        }
         guard let n = parseWords(words) else {
             // Not a parseable number run — keep originals.
             return (tokens.map { $0.original }, 0)

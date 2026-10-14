@@ -10,6 +10,14 @@ final class NumberNormalizerTests: XCTestCase {
         XCTAssertEqual(n.normalize("I have three apples"), "I have three apples")
     }
 
+    func testSpokenDigitSequencesStaySeparate() {
+        XCTAssertEqual(n.normalize("Testing one two three."), "Testing 1 2 3.")
+        XCTAssertEqual(n.normalize("code nine zero one one"), "code 9 0 1 1")
+        XCTAssertEqual(n.normalize("one two three", aggressive: true), "1 2 3")
+        XCTAssertEqual(n.normalize("one two three dollars"), "1 2 3 dollars")
+        XCTAssertEqual(n.normalize("one  two\tthree"), "1  2\t3")
+    }
+
     func testSingleTenOrAboveConverts() {
         XCTAssertEqual(n.normalize("I have twenty apples"), "I have 20 apples")
     }
