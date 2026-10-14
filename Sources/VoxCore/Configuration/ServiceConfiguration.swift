@@ -28,6 +28,9 @@ public enum ServiceConfiguration {
         case openaiSummaryModel
         case openrouterSummaryModel
         case meetingModel
+        case openrouterMeetingModel
+        case openrouterMeetingProviderOptions
+        case openrouterMeetingUSDPerHour
         case language
         case dictationTimeout
         case dictationMaximumTimeout
@@ -82,7 +85,7 @@ public enum ServiceConfiguration {
             case .whisperUSDPerMinute: return true
             case .openrouterUSDPerMinute: return true
             case .deepgramUSDPerHour: return true
-            case .meetingUSDPerHour: return true
+            case .meetingUSDPerHour, .openrouterMeetingUSDPerHour: return true
             default: return false
             }
         }
@@ -116,9 +119,12 @@ public enum ServiceConfiguration {
         if key == .dictationProvider {
             guard DictationProvider(rawValue: value) != nil else { throw InvalidValue(key: key) }
         } else if key == .meetingProvider {
-            guard ["automatic", "deepgram", "openai"].contains(value) else { throw InvalidValue(key: key) }
+            guard ["automatic", "deepgram", "openai", "openrouter"].contains(value) else { throw InvalidValue(key: key) }
         } else if key == .cleanupProvider || key == .summaryProvider {
             guard value == "followDictation" || DictationProvider(rawValue: value) != nil else { throw InvalidValue(key: key) }
+        } else if key == .openrouterMeetingProviderOptions {
+            guard let data = value.data(using: .utf8),
+                  (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { throw InvalidValue(key: key) }
         } else if key == .meetingRetryDelays {
             let parts = value.split(separator: ",", omittingEmptySubsequences: false)
             guard !parts.isEmpty, parts.allSatisfy({ Double($0).map { $0.isFinite && $0 > 0 && $0 <= Double(Int32.max) } == true }) else { throw InvalidValue(key: key) }

@@ -1,5 +1,28 @@
 # Vox Handoff
 
+## Unreleased — OpenRouter meetings and digit sequences, 0.7.76 build 100 (2026-10-14)
+
+- Meeting audio can explicitly use OpenRouter with its saved provider key and a
+  separate configurable model, timestamped chunks and optional per-chunk speaker
+  labels. Default model is `microsoft/mai-transcribe-2`; options default to `{}`
+  for You/Other. Selection/key are captured at recording start. No fallback.
+- Fixed additive normalization of consecutive digit words: “testing one two
+  three” stays `Testing 1 2 3.` instead of becoming `Testing 6.`. The failing
+  formatter and real-pipeline tests reproduced that exact transformation.
+- Verification: 505 macOS + 19 VoxCore tests pass; seven dictation fixtures pass
+  at quality 1.0/failure rate 0.0. Strict signatures and equal executable hashes
+  verify installed 0.7.76 / 100 on Mini and MacBook. MacBook LaunchAgent restarted;
+  OpenRouter is selected for meetings. Mini opened directly because its
+  LaunchAgent was not loaded; hotkey, microphone and Accessibility startup pass.
+- Live spoken sequence, actual OpenRouter meeting upload and repeated short
+  speech/quiet-room smoke remain pending. Capture stalls and speech-gate rejection
+  are separate unresolved observations; the gate and engine lifecycle are unchanged.
+- Public Sparkle remains 0.7.75 / 99. This local build is not pushed/published.
+  Ledger: `docs/transcription-reliability-status.md`. Wispr's shipped-client
+  inspection is in `docs/wispr-flow-transcription-analysis.md`; its server-side
+  formatter is unknown and the static analysis has bounded coverage.
+
+
 ## Microphone fallback presentation — 0.7.75 build 99 (2026-10-11)
 
 - Unplugging the preferred USB input already restores the built-in microphone;

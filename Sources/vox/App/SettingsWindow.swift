@@ -317,7 +317,7 @@ struct SettingsView: View {
                             }
                         }
                         .labelsHidden()
-                        Text("Deepgram diarizes individual speakers (Speaker 0/1/…). OpenAI Whisper only distinguishes your mic (You) vs the system audio loopback (Other). Deepgram needs its own API key above.")
+                        Text("Deepgram diarizes individual speakers. OpenAI Whisper and OpenRouter separate your mic (You) from system audio (Other). OpenRouter uses your saved OpenRouter key; choose its meeting model and optional speaker-label options under API and service configuration. Labels from separate chunks do not identify the same person.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(String(format: "≈ $%.2f / hour of audio (mic + system audio billed separately, so ~2× meeting length)", meetingProvider.usdPerHour))

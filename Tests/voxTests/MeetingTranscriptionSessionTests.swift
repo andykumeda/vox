@@ -769,6 +769,100 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+    func testOpenRouterChunksAllStreamsAndScopesSpeakerLabels() async throws {
+        let urls = (0..<2).map { tempRoot.appendingPathComponent("router-\($0).m4a") }
+        for url in urls { try Data([0]).write(to: url) }
+        let session = MeetingTranscriptionSession(
+            store: store, recorder: MockRecorder(), micRecorder: MockRecorder(), phoneRecorder: MockRecorder(),
+            chunker: { _, _ in urls }, transcribe: { _, _, _ in XCTFail("Direct OpenAI must not run"); return [] },
+            openrouterTranscribe: { _, offset, source in
+                [TranscriptSegment(startTime: offset + 1, endTime: offset + 2, text: "speech", source: source,
+                                   speakerID: source == .local ? nil : 0)]
+            }, provider: { .openrouter }, apiKey: { nil }, preflight: { .success(()) }, chunkDuration: 300
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let stored = try XCTUnwrap(store.load(id: XCTUnwrap(session.activeSessionID)))
+        XCTAssertEqual(stored.chunksTotal, 6)
+        XCTAssertEqual(stored.segments.filter { $0.source == .local }.count, 2)
+        XCTAssertEqual(stored.segments.filter { $0.source == .local }.compactMap(\.speakerID), [])
+        XCTAssertEqual(Set(stored.segments.compactMap(\.speakerID)), Set([0, 1, 2, 3]))
+        XCTAssertEqual(stored.segments.map(\.startTime), [1, 1, 1, 301, 301, 301])
+    }
+
+    func testOpenRouterPreflightDoesNotAcceptDirectOpenAIKey() async throws {
+        let savedMode = AppSettings.meetingModeEnabled
+        let savedConsent = AppSettings.meetingConsentAcknowledged
+        let savedBackendStatus = MeetingPreflight.backendStatusProvider
+        defer {
+            AppSettings.meetingModeEnabled = savedMode
+            AppSettings.meetingConsentAcknowledged = savedConsent
+            MeetingPreflight.backendStatusProvider = savedBackendStatus
+        }
+        AppSettings.meetingModeEnabled = true
+        AppSettings.meetingConsentAcknowledged = true
+        MeetingPreflight.backendStatusProvider = { MeetingBackendStatus(available: true, detail: "ready") }
+        let session = MeetingTranscriptionSession(
+            store: store, recorder: MockRecorder(), chunker: { _, _ in [] }, transcribe: { _, _, _ in [] },
+            provider: { .openrouter }, apiKey: { "direct-only" }, openrouterAPIKey: { nil }
+        )
+        do {
+            try await session.start()
+            XCTFail("Direct key must not authorize an OpenRouter upload")
+        } catch let MeetingTranscriptionSession.SessionError.preflight(error) {
+            XCTAssertEqual(error, .missingAPIKey)
+        }
+    }
+
+    func testOpenRouterChunksSnapshotProviderAndCredential() async throws {
+        var provider: MeetingProvider = .openrouter
+        var key = "router-at-start"
+        var observedKeys: [String] = []
+        var directCalls = 0
+        let chunkURL = tempRoot.appendingPathComponent("router-chunk.m4a")
+        try Data([0]).write(to: chunkURL)
+        let session = MeetingTranscriptionSession(
+            store: store, recorder: MockRecorder(),
+            chunker: { _, _ in [chunkURL] },
+            transcribe: { _, _, _ in directCalls += 1; return [] },
+            provider: { provider }, apiKey: { "direct" },
+            openrouterAPIKey: { key },
+            clientFactory: { selected, capturedKey in
+                XCTAssertEqual(selected, .openrouter)
+                return (chunk: { _, offset, source in
+                    observedKeys.append(capturedKey)
+                    return [TranscriptSegment(startTime: offset, endTime: offset + 1, text: "router", source: source)]
+                }, stream: nil)
+            }, preflight: { .success(()) }
+        )
+        try await session.start()
+        provider = .openai
+        key = "router-changed"
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        XCTAssertEqual(observedKeys, ["router-at-start"])
+        XCTAssertEqual(directCalls, 0)
+    }
+
+    func testMissingOpenRouterClientFailsWithoutDirectFallback() async throws {
+        var directCalls = 0
+        let session = MeetingTranscriptionSession(
+            store: store, recorder: MockRecorder(),
+            chunker: { _, _ in [] },
+            transcribe: { _, _, _ in directCalls += 1; return [] },
+            provider: { .openrouter }, apiKey: { "direct" },
+            preflight: { .success(()) }
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .failed)
+        XCTAssertEqual(directCalls, 0)
+    }
+
     func testMissingSelectedDeepgramClientFailsWithoutOpenAIFallback() async throws {
         var openAICalls = 0
         let session = MeetingTranscriptionSession(

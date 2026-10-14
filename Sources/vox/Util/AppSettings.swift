@@ -36,11 +36,13 @@ enum TranscriptionModel: CaseIterable, Hashable, Sendable {
 public enum MeetingProvider: String, CaseIterable, Sendable {
     case deepgram
     case openai
+    case openrouter
 
     public var displayName: String {
         switch self {
         case .deepgram: return "Deepgram (diarized speakers)"
         case .openai:   return "OpenAI (You/Other only)"
+        case .openrouter: return "OpenRouter (You/Other; optional diarization)"
         }
     }
 
@@ -52,6 +54,7 @@ public enum MeetingProvider: String, CaseIterable, Sendable {
         switch self {
         case .deepgram: return ServiceConfiguration.estimate(.deepgramUSDPerHour)
         case .openai:   return ServiceConfiguration.estimate(.meetingUSDPerHour)
+        case .openrouter: return ServiceConfiguration.estimate(.openrouterMeetingUSDPerHour)
         }
     }
 }

@@ -33,6 +33,14 @@ final class ServiceConfigurationTests: XCTestCase {
         XCTAssertNil(settings.string(forKey: key.settingsName))
     }
 
+    func testOpenRouterMeetingConfigurationValidation() throws {
+        try ServiceConfiguration.validate("openrouter", for: .meetingProvider)
+        try ServiceConfiguration.validate(#"{"azure":{"diarization":{"enabled":true}}}"#, for: .openrouterMeetingProviderOptions)
+        for value in ["[]", "true", "invalid"] {
+            XCTAssertThrowsError(try ServiceConfiguration.validate(value, for: .openrouterMeetingProviderOptions))
+        }
+    }
+
     func testInvalidOverridesAreRejectedWithoutProviderFallback() {
         for url in ["http://example.com/chat", "not-a-url", "https://user:password@example.com/chat", "https://example.com/#fragment"] {
             XCTAssertThrowsError(try ServiceConfiguration.validate(url, for: .openaiChatURL))

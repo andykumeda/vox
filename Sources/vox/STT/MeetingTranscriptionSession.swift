@@ -28,21 +28,29 @@ public final class MeetingTranscriptionSession {
         chunker: { input, dir in
             try await MeetingChunker(chunkDurationSeconds: chunkDuration).split(input: input, outputDirectory: dir)
         },
-        transcribe: { url, offset, source in
-            let key = KeychainStore().read() ?? ""
-            return try await OpenAITranscriber.transcribeMeetingChunk(
-                fileURL: url, offsetSeconds: offset, apiKey: key, source: source
-            )
-        },
-        deepgramTranscribe: { streamURL in
-            let key = KeychainStore(account: "deepgram-api-key").read() ?? ""
-            return try await DeepgramTranscriber.transcribeMeeting(
-                fileURL: streamURL, apiKey: key
-            )
-        },
+        transcribe: { _, _, _ in [] },
         provider: { try AppSettings.resolvedMeetingProvider() },
         apiKey: { KeychainStore().read() },
         deepgramAPIKey: { KeychainStore(account: "deepgram-api-key").read() },
+        openrouterAPIKey: { KeychainStore(account: "openrouter-api-key").read() },
+        clientFactory: { provider, key in
+            switch provider {
+            case .openai:
+                return (chunk: { url, offset, source in
+                    try await OpenAITranscriber.transcribeMeetingChunk(
+                        fileURL: url, offsetSeconds: offset, apiKey: key, source: source)
+                }, stream: nil)
+            case .openrouter:
+                return (chunk: { url, offset, source in
+                    try await OpenRouterMeetingTranscriber.transcribeMeetingChunk(
+                        fileURL: url, offsetSeconds: offset, source: source, apiKey: key)
+                }, stream: nil)
+            case .deepgram:
+                return (chunk: nil, stream: { url in
+                    try await DeepgramTranscriber.transcribeMeeting(fileURL: url, apiKey: key)
+                })
+            }
+        },
         summarize: { segments in
             let provider = try AppSettings.resolvedTextProvider(.summaryProvider)
             return try await MeetingSummarizer(
@@ -61,14 +69,20 @@ public final class MeetingTranscriptionSession {
     private let phoneRecorderFactory: () -> MeetingAudioRecording?
     private let chunker: Chunker
     private let transcribe: Transcribe
+    public typealias Clients = (chunk: Transcribe?, stream: DeepgramTranscribe?)
     private let deepgramTranscribe: DeepgramTranscribe?
+    private let openrouterTranscribe: Transcribe?
+    private let credentialProvider: (MeetingProvider) -> String?
+    private let clientFactory: ((MeetingProvider, String) -> Clients)?
+    private var activeProvider: MeetingProvider = .openai
+    private var activeClients: Clients = (nil, nil)
     private let providerProvider: () throws -> MeetingProvider
     private let summarize: Summarize?
     private let summarizeEnabledProvider: () -> Bool
     private let saveSession: (TranscriptSession) throws -> Void
     /// Preflight gate. Default calls `MeetingPreflight.gate` with live
     /// AppSettings; tests pass `{ .success(()) }` to bypass.
-    private let preflight: () -> Result<Void, MeetingGateError>
+    private let preflight: (() -> Result<Void, MeetingGateError>)?
     private let backoffSchedule: [Double]
     private let chunkDuration: Double
 
@@ -108,11 +122,14 @@ public final class MeetingTranscriptionSession {
         chunker: @escaping Chunker,
         transcribe: @escaping Transcribe,
         deepgramTranscribe: DeepgramTranscribe? = nil,
+        openrouterTranscribe: Transcribe? = nil,
         provider: @escaping () throws -> MeetingProvider = { .openai },
         apiKey: @escaping () -> String?,
         deepgramAPIKey: @escaping () -> String? = {
             KeychainStore(account: "deepgram-api-key").read()
         },
+        openrouterAPIKey: @escaping () -> String? = { KeychainStore(account: "openrouter-api-key").read() },
+        clientFactory: ((MeetingProvider, String) -> Clients)? = nil,
         summarize: Summarize? = nil,
         summarizeEnabled: @escaping () -> Bool = { false },
         preflight: (() -> Result<Void, MeetingGateError>)? = nil,
@@ -152,33 +169,20 @@ public final class MeetingTranscriptionSession {
         self.chunker = chunker
         self.transcribe = transcribe
         self.deepgramTranscribe = deepgramTranscribe
+        self.openrouterTranscribe = openrouterTranscribe
+        self.clientFactory = clientFactory
+        self.credentialProvider = { selected in
+            switch selected {
+            case .openai: return apiKey()
+            case .deepgram: return deepgramAPIKey()
+            case .openrouter: return openrouterAPIKey()
+            }
+        }
         self.providerProvider = provider
         self.summarize = summarize
         self.summarizeEnabledProvider = summarizeEnabled
         self.saveSession = saveSession ?? { try store.save($0) }
-        if let preflight = preflight {
-            self.preflight = preflight
-        } else {
-            // Resolve the selected provider at start time so the default gate
-            // checks the same credential that transcription will use.
-            let selectedProvider = provider
-            let openAIKeyProvider = apiKey
-            let deepgramKeyProvider = deepgramAPIKey
-            self.preflight = {
-                let key: String?
-                let selected: MeetingProvider
-                do { selected = try selectedProvider() }
-                catch { return .failure(.captureFailed(error.localizedDescription)) }
-                switch selected {
-                case .deepgram:
-                    key = deepgramKeyProvider()
-                case .openai:
-                    key = openAIKeyProvider()
-                }
-                let hasKey = (key?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-                return MeetingPreflight.gate(hasAPIKey: hasKey)
-            }
-        }
+        self.preflight = preflight
         self.chunkDuration = chunkDuration
         self.backoffSchedule = backoffSchedule
     }
@@ -202,7 +206,12 @@ public final class MeetingTranscriptionSession {
     public func start() async throws {
         // Preflight: enforce Meeting Mode + consent + API key + backend gate.
         // The floating HUD's Record button calls start() directly.
-        if case .failure(let err) = preflight() {
+        let selected = try providerProvider()
+        // Injected clients with an injected gate own credential validation; do
+        // not touch the live Keychain when running those clients (including tests).
+        let key = (preflight != nil && clientFactory == nil) ? ""
+            : (credentialProvider(selected)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+        if case .failure(let err) = preflight?() ?? MeetingPreflight.gate(hasAPIKey: !key.isEmpty) {
             throw SessionError.preflight(err)
         }
 
@@ -223,6 +232,8 @@ public final class MeetingTranscriptionSession {
                     break
                 }
             }
+            activeProvider = selected
+            activeClients = clientFactory?(selected, key) ?? (selected == .openrouter ? openrouterTranscribe : transcribe, deepgramTranscribe)
             session = initial
         }
 
@@ -454,16 +465,11 @@ public final class MeetingTranscriptionSession {
                 }
             }
         }
-        let provider: MeetingProvider
-        do { provider = try providerProvider() }
-        catch {
-            updateSession { $0.status = .failed; $0.failureReason = error.localizedDescription }
-            return
-        }
+        let provider = activeProvider
         // A selected service must be wired. Never send its audio to another
         // provider merely because its client is unavailable.
         if provider == .deepgram {
-            guard let dg = deepgramTranscribe else {
+            guard let dg = activeClients.stream else {
                 updateSession { $0.status = .failed; $0.failureReason = "Selected Deepgram client is unavailable." }
                 return
             }
@@ -472,6 +478,11 @@ public final class MeetingTranscriptionSession {
                 systemShift: systemShift, micShift: micShift, phoneShift: phoneShift,
                 sessionID: sessionID, deepgram: dg
             )
+            return
+        }
+
+        guard activeClients.chunk != nil else {
+            updateSession { $0.status = .failed; $0.failureReason = "Selected \(provider.displayName) client is unavailable." }
             return
         }
 
@@ -503,6 +514,17 @@ public final class MeetingTranscriptionSession {
             }
         }
 
+        if provider == .openrouter, let phoneURL {
+            let dir = store.chunksDirectory(id: sessionID).appendingPathComponent("phone")
+            let prepped = await prepareForChunking(streamURL: phoneURL, baseShift: phoneShift)
+            do {
+                let chunks = try await chunker(prepped.url, dir)
+                streams.append((.remote, chunks, dir, prepped.shift, prepped.audibleDuration))
+            } catch {
+                dlog("Phone audio chunking failed: \(error)")
+            }
+        }
+
         guard !streams.isEmpty else {
             updateSession { s in
                 s.status = .failed
@@ -518,6 +540,7 @@ public final class MeetingTranscriptionSession {
         }
 
         var completed = 0
+        var nextSpeakerID = 0
         for (source, chunks, _, shift, audibleDuration) in streams {
             for (i, chunkURL) in chunks.enumerated() {
                 if Task.isCancelled { break }
@@ -538,6 +561,17 @@ public final class MeetingTranscriptionSession {
                     return
                 }
 
+                // OpenRouter diarization is optional and IDs restart per request.
+                // Allocate unique labels for each chunk rather than claiming that
+                // similarly numbered speakers in separate chunks are one person.
+                var speakerLabels: [Int: Int] = [:]
+                if provider == .openrouter, source == .remote {
+                    for id in Set(segments.compactMap(\.speakerID)).sorted() {
+                        speakerLabels[id] = nextSpeakerID
+                        nextSpeakerID += 1
+                    }
+                }
+
                 // Collapse repetition cascades across consecutive segments
                 // (e.g. 200× "I don't know." each on a 1-second grid). This
                 // catches per-segment hallucinations that the per-segment
@@ -552,7 +586,7 @@ public final class MeetingTranscriptionSession {
                             endTime: segment.endTime + shift,
                             text: segment.text,
                             source: segment.source,
-                            speakerID: segment.speakerID
+                            speakerID: segment.speakerID.flatMap { provider == .openrouter ? speakerLabels[$0] : $0 }
                         )
                     })
                 }
@@ -578,7 +612,8 @@ public final class MeetingTranscriptionSession {
                         startTime: seg.startTime + shift,
                         endTime: min(seg.endTime, hallucinationCap) + shift,
                         text: seg.text,
-                        source: seg.source
+                        source: seg.source,
+                        speakerID: seg.speakerID.flatMap { provider == .openrouter ? speakerLabels[$0] : $0 }
                     )
                 }
                 updateSession { s in
@@ -902,7 +937,8 @@ public final class MeetingTranscriptionSession {
         while true {
             try Task.checkCancellation()
             do {
-                return try await transcribe(url, offset, source)
+                guard let client = activeClients.chunk else { throw TranscriptionError.invalidResponse }
+                return try await client(url, offset, source)
             } catch TranscriptionError.transportError(let underlying) {
                 if Date() >= deadline {
                     dlog("Meeting transport retry budget exhausted after \(attempt) attempts")
