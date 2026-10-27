@@ -1,6 +1,6 @@
 # Vox Handoff
 
-## Reliability stabilization — 0.7.78 build 102 (2026-10-26)
+## Released — reliability stabilization, 0.7.78 build 102 (2026-10-26)
 
 - Capture readiness now requires usable frames; missing/stalled audio and conversion,
   payload/finalization/read errors produce persistent actionable failure, with a safe
@@ -18,8 +18,12 @@
   Installed/restarted on Mini; microphone, hotkey and Accessibility startup pass.
   User confirmed successful insertion at 18:37 Pacific; logs show raw input callback,
   converted audio and completed transcription (1.94s audio, 4.318s processing).
-- Public Sparkle delivery is authorized and in progress. Until verified, this is a
-  locally deployed build; public feed was last checked at 0.7.75 / 99.
+- Public Sparkle 0.7.78 / 102 is published. Source `dbd4bb5`, tag/release
+  `v0.7.78`, and appcast `86f2b81` are pushed. Anonymous DMG download matches
+  signed SHA-256 `e0ec90c493813e63be7a834f7ef6309f82e842d40163d39db74fdbaddf7e37e2`.
+  Raw and live feeds verify version/build, URL, signature, and 2,775,141-byte length.
+  Pages deployment `40434274125` and source regression `40434200588` passed.
+  Release Gate `40434254831` and appcast-head regression `40434275258` passed.
 - Underlying intermittent hardware/framework trigger, prolonged USB/post-meeting soak,
   real partial meetings/network interruption, second-Mac update, and comparative
   Wispr/Glaido benchmarks remain unverified. Detection/recovery is not proof the

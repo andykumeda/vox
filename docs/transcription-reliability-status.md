@@ -57,4 +57,4 @@ OpenRouter transport retry, and polite-phrase rejection fixes are implemented.
 Full verification and remaining hardware acceptance are tracked in
 [the stabilization ledger](reliability-stabilization.md). The original hardware/framework
 stall trigger and competitor parity remain unproven; this is not closure of all
-next-phase features. Public Sparkle delivery is authorized and in progress.
+next-phase features. Public Sparkle 0.7.78 / 102 is published with matching signed DMG and verified raw/live feeds.

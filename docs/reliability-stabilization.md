@@ -35,7 +35,11 @@ checks use monotonic time and count quiet buffers as healthy. Audio remains ephe
 - LaunchAgent restarted with microphone permission, hotkey and Accessibility passing.
   User confirmed successful dictation insertion at 18:37 Pacific; logs show first raw
   callback, converted frames, 1.94 seconds of audio and completion in 4.318 seconds.
-- Public Sparkle publication authorized; packaging/signing/public verification in progress.
+- Public Sparkle 0.7.78 / 102 is published: source `dbd4bb5`, appcast `86f2b81`,
+  tag/release `v0.7.78`. Raw and live feeds match version/build, URL, EdDSA signature,
+  minimum OS and byte length; anonymous public DMG SHA-256 matches the signed candidate.
+  Pages deployment `40434274125` and source regression `40434200588` passed.
+  Release Gate `40434254831` and appcast-head regression `40434275258` passed.
 
 ## Remaining acceptance checks
 
