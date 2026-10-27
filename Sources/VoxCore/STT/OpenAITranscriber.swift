@@ -99,8 +99,8 @@ public struct OpenAITranscriber {
 
         guard let http = response as? HTTPURLResponse else { throw TranscriptionError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw TranscriptionError.httpError(http.statusCode, body)
+            // Provider error bodies can echo private audio-derived content.
+            throw TranscriptionError.httpError(http.statusCode, "Check the selected provider's key, credits, and model in Settings.")
         }
         let text: String
         if provider == .openrouter {
@@ -388,8 +388,8 @@ public struct OpenAITranscriber {
             throw TranscriptionError.invalidResponse
         }
         guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw TranscriptionError.httpError(http.statusCode, body)
+            // Provider error bodies can echo private audio-derived content.
+            throw TranscriptionError.httpError(http.statusCode, "Check the selected provider's key, credits, and model in Settings.")
         }
 
         let decoded: WhisperVerboseResponse

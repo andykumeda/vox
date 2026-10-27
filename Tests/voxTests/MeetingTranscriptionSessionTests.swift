@@ -78,6 +78,56 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertEqual(stored.segments[0].text, "chunk 0")
     }
 
+    func testPhoneAudioSurvivesFailedSystemCaptureWithoutMicrophone() async throws {
+        final class SilentSystemRecorder: MeetingAudioRecording {
+            let recorder = MockRecorder()
+            var lastFailureReason: String? { "No system audio buffers" }
+            func start(outputURL: URL) async throws { try await recorder.start(outputURL: outputURL) }
+            func stop() async throws -> URL { try await recorder.stop() }
+        }
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: SilentSystemRecorder(),
+            phoneRecorder: MockRecorder(),
+            chunker: { url, _ in [url] },
+            transcribe: { _, offset, source in
+                XCTAssertEqual(source, .remote)
+                return [TranscriptSegment(startTime: offset, endTime: offset + 1, text: "phone audio")]
+            },
+            apiKey: { "test-key" },
+            preflight: { .success(()) }
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let stored = try XCTUnwrap(store.load(id: XCTUnwrap(session.activeSessionID)))
+        XCTAssertEqual(stored.rawSegments.first?.text, "phone audio")
+        XCTAssertFalse(stored.captureWarnings.isEmpty)
+    }
+
+    func testCaptureWarningPreservesUsableSystemAudio() async throws {
+        final class PartialRecorder: MeetingAudioRecording {
+            let recorder = MockRecorder()
+            var captureWarnings: [String] { ["One audio buffer was dropped."] }
+            func start(outputURL: URL) async throws { try await recorder.start(outputURL: outputURL) }
+            func stop() async throws -> URL { try await recorder.stop() }
+        }
+        let session = MeetingTranscriptionSession(
+            store: store, recorder: PartialRecorder(),
+            chunker: { url, _ in [url] },
+            transcribe: { _, _, _ in [TranscriptSegment(startTime: 0, endTime: 1, text: "usable audio")] },
+            apiKey: { "test-key" }, preflight: { .success(()) }
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        let stored = try XCTUnwrap(store.load(id: XCTUnwrap(session.activeSessionID)))
+        XCTAssertEqual(stored.status, .completed)
+        XCTAssertEqual(stored.rawSegments.first?.text, "usable audio")
+        XCTAssertEqual(stored.captureWarnings, ["System audio: One audio buffer was dropped."])
+    }
+
     func testTransientRetrySucceedsAfterFailures() async throws {
         let recorder = MockRecorder()
         let chunkURL = tempRoot.appendingPathComponent("chunk-0.m4a")
@@ -600,6 +650,28 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         }
         XCTAssertNil(session.activeSessionID)
         XCTAssertFalse(session.isActive)
+    }
+
+    func testSystemStopFailurePreservesMicrophoneTranscriptWithWarning() async throws {
+        let session = MeetingTranscriptionSession(
+            store: store,
+            recorder: StopFailRecorder(),
+            micRecorder: MockRecorder(),
+            chunker: { url, _ in [url] },
+            transcribe: { _, offset, source in
+                XCTAssertEqual(source, .local)
+                return [TranscriptSegment(startTime: offset, endTime: offset + 1, text: "microphone audio", source: source)]
+            },
+            apiKey: { "test-key" },
+            preflight: { .success(()) }
+        )
+        try await session.start()
+        try await session.stop()
+        await session.waitForCompletion()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        let stored = try XCTUnwrap(store.load(id: XCTUnwrap(session.activeSessionID)))
+        XCTAssertEqual(stored.rawSegments.first?.text, "microphone audio")
+        XCTAssertFalse(stored.captureWarnings.isEmpty)
     }
 
     func testStopDuringRecorderCreateFailsCleanlyAndAllowsRetry() async throws {

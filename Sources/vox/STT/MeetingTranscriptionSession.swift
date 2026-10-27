@@ -280,6 +280,7 @@ public final class MeetingTranscriptionSession {
             } catch {
                 dlog("MeetingMicCapture start failed (continuing without mic): \(error)")
                 self.micRecorder = nil
+                addCaptureWarning("Microphone could not start. Your voice may be missing; check Microphone permission and the selected input.")
             }
         }
 
@@ -330,33 +331,20 @@ public final class MeetingTranscriptionSession {
             clearSession(ifMatching: current.id)
             throw SessionError.notRecording
         }
-        let systemURL: URL
+        var systemURL: URL?
+        var systemStopError: Error?
+        var systemFailureReason: String?
         do {
             systemURL = try await system.stop()
+            systemFailureReason = system.lastFailureReason
         } catch {
-            // Stop threw — record the failure and clear in-memory state so
-            // subsequent start()s aren't permanently blocked by .alreadyActive.
+            // Stop every source before deciding whether any captured audio can be kept.
             dlog("MeetingTranscriptionSession stop failed (system recorder): \(error)")
-            self.systemRecorder = nil
-            // Best-effort: also stop the mic so its recorder isn't left dangling.
-            if let mic = self.micRecorder {
-                _ = try? await mic.stop()
-                self.micRecorder = nil
-            }
-            if let phone = self.phoneRecorder {
-                _ = try? await phone.stop()
-                self.phoneRecorder = nil
-            }
-            updateSession { s in
-                s.status = .failed
-                s.failureReason = "Recorder stop failed: \(error)"
-            }
-            try? store.purgeAudio(for: current.id)
-            clearSession(ifMatching: current.id)
-            throw error
+            systemStopError = error
+            systemFailureReason = "System audio could not be finalized."
         }
-        let systemFailureReason = system.lastFailureReason
         let systemStartedAt = system.audioStartedAt
+        for warning in system.captureWarnings { addCaptureWarning("System audio: \(warning)") }
         self.systemRecorder = nil
 
         var micURL: URL? = nil
@@ -373,6 +361,7 @@ public final class MeetingTranscriptionSession {
             } catch {
                 micFailureReason = "Mic stop failed: \(error)"
             }
+            for warning in mic.captureWarnings { addCaptureWarning("Microphone: \(warning)") }
             self.micRecorder = nil
         }
 
@@ -386,28 +375,37 @@ public final class MeetingTranscriptionSession {
                     phoneURL = url
                 } else {
                     dlog("MeetingProcessTap produced no usable audio: \(phone.lastFailureReason ?? "")")
+                    addCaptureWarning("Phone/FaceTime capture produced no usable audio; caller speech may be missing.")
                 }
             } catch {
                 dlog("MeetingProcessTap stop failed (continuing without VoIP capture): \(error)")
+                addCaptureWarning("Phone/FaceTime audio could not be finalized; caller speech may be missing.")
             }
+            for warning in phone.captureWarnings { addCaptureWarning("Phone/FaceTime: \(warning)") }
             self.phoneRecorder = nil
         }
 
         let sid = current.id
-        // Hard-fail only if BOTH streams are unusable. If system captured nothing but mic
-        // worked, proceed with mic-only transcript. Vice versa. Phone-tap is purely
-        // additive so it doesn't participate in the hard-fail gate.
-        if let sysReason = systemFailureReason, micURL == nil {
+        // Preserve any usable source, including Phone/FaceTime when system capture is empty.
+        if let sysReason = systemFailureReason, micURL == nil, phoneURL == nil {
             updateSession { s in
                 s.status = .failed
                 s.failureReason = "System audio: \(sysReason)" +
                     (micFailureReason.map { " | Mic: \($0)" } ?? "")
             }
             try? store.purgeAudio(for: sid)
+            if let systemStopError {
+                clearSession(ifMatching: sid)
+                throw systemStopError
+            }
             return
         }
+        if systemFailureReason != nil {
+            addCaptureWarning("System audio is unavailable; only the other captured sources are included.")
+        }
         if let micReason = micFailureReason {
-            dlog("Mic capture failed (continuing with system audio only): \(micReason)")
+            dlog("Mic capture failed (continuing with other audio): \(micReason)")
+            addCaptureWarning("Microphone audio is unavailable; your voice may be missing.")
         }
 
         let usableSystemURL: URL? = (systemFailureReason == nil) ? systemURL : nil
@@ -497,8 +495,10 @@ public final class MeetingTranscriptionSession {
                 streams.append((.remote, chunks, dir, prepped.shift, prepped.audibleDuration))
             } catch MeetingChunkerError.zeroDurationAsset {
                 dlog("System audio chunking: zero-duration asset")
+                addCaptureWarning("System audio was empty and is missing from the transcript.")
             } catch {
                 dlog("System audio chunking failed: \(error)")
+                addCaptureWarning("System audio could not be prepared and is missing from the transcript.")
             }
         }
         if let micURL = micURL {
@@ -509,12 +509,14 @@ public final class MeetingTranscriptionSession {
                 streams.append((.local, chunks, dir, prepped.shift, prepped.audibleDuration))
             } catch MeetingChunkerError.zeroDurationAsset {
                 dlog("Mic chunking: zero-duration asset")
+                addCaptureWarning("Microphone audio was empty and is missing from the transcript.")
             } catch {
                 dlog("Mic chunking failed: \(error)")
+                addCaptureWarning("Microphone audio could not be prepared and is missing from the transcript.")
             }
         }
 
-        if provider == .openrouter, let phoneURL {
+        if let phoneURL {
             let dir = store.chunksDirectory(id: sessionID).appendingPathComponent("phone")
             let prepped = await prepareForChunking(streamURL: phoneURL, baseShift: phoneShift)
             do {
@@ -522,6 +524,7 @@ public final class MeetingTranscriptionSession {
                 streams.append((.remote, chunks, dir, prepped.shift, prepped.audibleDuration))
             } catch {
                 dlog("Phone audio chunking failed: \(error)")
+                addCaptureWarning("Phone/FaceTime audio could not be prepared and is missing from the transcript.")
             }
         }
 
@@ -949,6 +952,14 @@ public final class MeetingTranscriptionSession {
                 attempt += 1
             } catch {
                 throw error
+            }
+        }
+    }
+
+    private func addCaptureWarning(_ warning: String) {
+        updateSession { session in
+            if !session.captureWarnings.contains(warning) {
+                session.captureWarnings.append(warning)
             }
         }
     }

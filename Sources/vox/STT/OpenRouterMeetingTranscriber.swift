@@ -60,7 +60,14 @@ public enum OpenRouterMeetingTranscriber {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.timeoutInterval = try ServiceConfiguration.number(.meetingTimeout)
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            try Task.checkCancellation()
+            // The meeting session owns the configured transport retry budget.
+            throw TranscriptionError.transportError(error)
+        }
         guard let http = response as? HTTPURLResponse else { throw OpenRouterMeetingError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             // Provider bodies may echo private content; don't put them in logs/UI.

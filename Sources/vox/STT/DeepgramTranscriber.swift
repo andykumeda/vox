@@ -69,8 +69,8 @@ public struct DeepgramTranscriber {
             throw DeepgramError.invalidResponse
         }
         guard (200..<300).contains(http.statusCode) else {
-            let bodyText = String(data: data, encoding: .utf8) ?? ""
-            throw DeepgramError.httpError(http.statusCode, String(bodyText.prefix(400)))
+            // Provider error bodies can echo private audio-derived content.
+            throw DeepgramError.httpError(http.statusCode, "Check the Deepgram key and service configuration in Settings.")
         }
         let decoded: Response
         do {

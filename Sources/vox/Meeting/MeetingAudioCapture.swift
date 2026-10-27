@@ -19,6 +19,9 @@ public protocol MeetingAudioRecording: AnyObject {
     /// failure rather than handing an empty file to the chunker.
     var lastFailureReason: String? { get }
 
+    /// Nonfatal capture gaps; usable audio must still be transcribed.
+    var captureWarnings: [String] { get }
+
     /// Wall-clock time corresponding to t=0 inside the recorded file. Used by the session
     /// to align segments across multiple recorders (mic + system) onto a shared timeline.
     /// nil until the recorder has actually started writing audio (e.g. SCStream waits for
@@ -28,6 +31,7 @@ public protocol MeetingAudioRecording: AnyObject {
 
 public extension MeetingAudioRecording {
     var lastFailureReason: String? { nil }
+    var captureWarnings: [String] { [] }
     var audioStartedAt: Date? { nil }
 }
 
@@ -63,8 +67,14 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
     private let queue = DispatchQueue(label: "vox.meeting.capture", qos: .userInitiated)
     private var sessionStarted = false
     private var sampleBufferCount = 0
+    private var droppedSampleBufferCount = 0
     private(set) public var lastFailureReason: String?
     private(set) public var audioStartedAt: Date?
+
+    public var captureWarnings: [String] {
+        guard droppedSampleBufferCount > 0 else { return [] }
+        return ["System audio has gaps: the writer dropped \(droppedSampleBufferCount) audio buffers under load."]
+    }
 
     public override init() { super.init() }
 
@@ -115,6 +125,7 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
         // format is once we hand it a sourceFormatHint from the first buffer.
         config.excludesCurrentProcessAudio = true
         sampleBufferCount = 0
+        droppedSampleBufferCount = 0
         lastFailureReason = nil
         audioStartedAt = nil
         dlog("MeetingAudioCapture starting → \(outputURL.path)")
@@ -225,6 +236,7 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
             let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let started = writer.startWriting()
             if !started {
+                lastFailureReason = "System audio writer could not start: \(writer.error?.localizedDescription ?? "unknown writer failure")"
                 dlog("MeetingAudioCapture writer.startWriting returned false: \(writer.error?.localizedDescription ?? "nil")")
                 return
             }
@@ -234,7 +246,11 @@ public final class MeetingAudioCapture: NSObject, MeetingAudioRecording, SCStrea
             dlog("MeetingAudioCapture session started at PTS \(startTime.seconds)")
         }
         if input.isReadyForMoreMediaData {
-            input.append(sampleBuffer)
+            if !input.append(sampleBuffer) {
+                lastFailureReason = "System audio could not be saved: \(writer.error?.localizedDescription ?? "writer rejected an audio buffer")"
+            }
+        } else {
+            droppedSampleBufferCount += 1
         }
     }
 }

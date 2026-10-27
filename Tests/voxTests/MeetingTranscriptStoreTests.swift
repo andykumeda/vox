@@ -49,6 +49,18 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         XCTAssertFalse(String(data: encrypted, encoding: .utf8)?.contains("hello") == true)
     }
 
+    func testCaptureWarningsPersistAndOlderSessionsDecodeWithoutWarnings() throws {
+        var session = makeSession(status: .completed)
+        session.captureWarnings = ["Microphone unavailable"]
+        try store.save(session)
+        XCTAssertEqual(store.load(id: session.id)?.captureWarnings, session.captureWarnings)
+
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) as? [String: Any])
+        legacy.removeValue(forKey: "captureWarnings")
+        let decoded = try JSONDecoder().decode(TranscriptSession.self, from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertTrue(decoded.captureWarnings.isEmpty)
+    }
+
     func testLegacyPlaintextTranscriptMigratesAndIsRemoved() throws {
         let session = makeSession(status: .completed)
         let legacy = store.legacyTranscriptFile(id: session.id)

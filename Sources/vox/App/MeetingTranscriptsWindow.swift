@@ -202,6 +202,15 @@ struct MeetingTranscriptsView: View {
                     Button("Delete") { model.delete(s.id) }
                 }.padding()
                 Divider()
+                if !s.captureWarnings.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Partial recording", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(s.captureWarnings.joined(separator: "\n"))
+                            .textSelection(.enabled)
+                    }.font(.callout).padding()
+                    Divider()
+                }
                 if s.status == .failed, let reason = s.failureReason {
                     HStack(alignment: .top) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -330,6 +339,12 @@ private struct SidebarRow: View {
             HStack(spacing: 6) {
                 Text(durationText).foregroundStyle(.secondary).font(.caption)
                 statusBadge
+                if !session.captureWarnings.isEmpty {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help("Partial recording: \(session.captureWarnings.joined(separator: " "))")
+                        .accessibilityLabel("Partial recording")
+                }
                 if session.status == .transcribing {
                     Button(action: onCancel) {
                         Image(systemName: "xmark.circle")
