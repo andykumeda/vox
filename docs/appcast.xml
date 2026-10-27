@@ -6,6 +6,24 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.78</title>
+            <pubDate>Tue, 27 Oct 2026 01:43:10 +0000</pubDate>
+            <sparkle:version>102</sparkle:version>
+            <sparkle:shortVersionString>0.7.78</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li>Detect missing or stalled microphone audio and offer a safe restart action.</li>
+                    <li>Preserve partial meeting sources, disclose capture gaps, and retry OpenRouter transport failures.</li>
+                    <li>Keep quiet meeting capture continuous and preserve genuine polite phrases and spoken digit sequences.</li>
+                    <li>Configurable OpenRouter meeting transcription; provider failures omit private response bodies.</li>
+                </ul>
+            ]]></description>
+            <enclosure url="https://github.com/andykumeda/vox/releases/download/v0.7.78/Vox.dmg"
+                sparkle:edSignature="E/08/6haPwAFwZef1w7DPIwWVweDZC3jCMukOe55Y4WjoNTcEO2HQRFuXGeA6YODntzu6JQ+LHEB+DieTPmRBQ==" length="2775141"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.75</title>
             <pubDate>Sun, 11 Oct 2026 22:36:04 +0000</pubDate>
             <sparkle:version>99</sparkle:version>
