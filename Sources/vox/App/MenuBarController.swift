@@ -644,10 +644,7 @@ final class MenuBarController: NSObject {
         captureTimer?.invalidate()
         captureTimer = nil
         let recordingURL = recorder.stop()
-        let failure: String?
-        if case .failed(let message) = health { failure = message }
-        else { failure = recorder.captureFailure }
-        if let failure {
+        if let failure = recorder.captureFailure(health: health) {
             if let url = recordingURL { try? FileManager.default.removeItem(at: url) }
             showCaptureFailure(failure)
             return

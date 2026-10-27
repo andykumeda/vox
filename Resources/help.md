@@ -230,6 +230,9 @@ reason and **Restart Vox to reconnect microphone**. Restart is disabled while
 another dictation is processing or a meeting is active. You can also reconnect
 the microphone or choose another input in Settings, then repeat the recording.
 No audio can be recovered from a recording that captured no samples.
+If you release Fn during **Starting…** before the capture timeout, the empty
+attempt is canceled without a microphone error. Hold Fn until recording is ready
+before speaking. Missing audio after the timeout still reports a failure.
 
 Quiet meeting periods no longer restart the microphone. If a source fails or
 system audio drops buffers, the saved meeting shows a partial-capture warning;

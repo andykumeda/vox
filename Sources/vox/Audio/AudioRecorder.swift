@@ -153,11 +153,15 @@ public final class AudioRecorder {
         return progress.health(at: monotonicTime(), timeout: timeout)
     }
 
-    var captureFailure: String? {
+    func captureFailure(health: DictationCaptureHealth) -> String? {
         lock.lock()
         defer { lock.unlock() }
         if let failure = progress.failure { return failure }
-        return pcmBytesWritten == 0 ? "No audio was captured. Check the microphone and record again." : nil
+        // Releasing before the first buffer is cancellation, not a stalled microphone.
+        if case .failed(let message) = health {
+            return message
+        }
+        return nil
     }
 
 

@@ -460,6 +460,10 @@ silently treating a broken recording as quiet speech. Open the menu and choose
 **Restart Vox to reconnect microphone** when needed; this action is unavailable
 while dictation processing or a meeting is active. Repeat the failed dictation.
 Restart is a recovery action, not a guarantee against USB/Core Audio stalls.
+Releasing Fn while capture is still **Starting…**, before its timeout and before
+any audio arrives, cancels that empty attempt without a microphone error. Hold
+Fn until recording is ready before speaking. Capture that exceeds the timeout
+without frames still reports a microphone failure.
 
 `captureHealthTimeout` defaults to 2 seconds in the shared service configuration
 (valid range 0.25–30 seconds). Settings → advanced service controls or

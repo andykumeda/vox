@@ -3,6 +3,27 @@ import XCTest
 @testable import vox
 
 final class AudioRecorderRouteRecoveryTests: XCTestCase {
+    func testBuiltInFallbackReleaseBeforeFirstBufferDoesNotReportMicrophoneFailure() throws {
+        var now: TimeInterval = 10
+        let engine = RouteChangingAudioEngine(initialSampleRate: 48_000, settledSampleRate: 48_000, failFirstStart: false)
+        let recorder = AudioRecorder(
+            mode: "prose", engine: engine,
+            selectedInputDeviceUID: { "disconnected-usb" },
+            builtInMicrophoneUID: { "built-in" },
+            resolveInputDevice: { $0 == "built-in" ? 9 : nil },
+            hardwareInputFormat: { _ in AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1) },
+            monotonicTime: { now }
+        )
+        try recorder.start()
+        now = 10.1
+        let url = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: url) }
+        XCTAssertEqual(try Data(contentsOf: url).count, 44)
+        XCTAssertEqual(recorder.captureHealth(timeout: 2), .starting)
+        XCTAssertNil(recorder.captureFailure(health: recorder.captureHealth(timeout: 2)))
+        XCTAssertEqual(engine.selectedDeviceIDs, [9])
+    }
+
     func testEmptyEngineStartReportsCaptureFailureAndQuietFramesProveReadiness() throws {
         var now: TimeInterval = 10
         let engine = RouteChangingAudioEngine(initialSampleRate: 48_000, settledSampleRate: 48_000, failFirstStart: false)
@@ -13,7 +34,7 @@ final class AudioRecorderRouteRecoveryTests: XCTestCase {
         guard case .failed = recorder.captureHealth(timeout: 2) else { return XCTFail("Missing frames must fail") }
         let emptyURL = try XCTUnwrap(recorder.stop())
         defer { try? FileManager.default.removeItem(at: emptyURL) }
-        XCTAssertNotNil(recorder.captureFailure)
+        XCTAssertNotNil(recorder.captureFailure(health: recorder.captureHealth(timeout: 2)))
         XCTAssertEqual(try Data(contentsOf: emptyURL).count, 44)
 
         try recorder.start()
@@ -25,7 +46,7 @@ final class AudioRecorderRouteRecoveryTests: XCTestCase {
         XCTAssertEqual(recorder.captureHealth(timeout: 2), .receiving)
         let quietURL = try XCTUnwrap(recorder.stop())
         defer { try? FileManager.default.removeItem(at: quietURL) }
-        XCTAssertNil(recorder.captureFailure)
+        XCTAssertNil(recorder.captureFailure(health: recorder.captureHealth(timeout: 2)))
         XCTAssertGreaterThan(try Data(contentsOf: quietURL).count, 44)
     }
 

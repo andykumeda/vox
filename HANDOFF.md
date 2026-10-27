@@ -1,5 +1,25 @@
 # Vox Handoff
 
+## P1 open — MacBook microphone switch, unreleased 0.7.79 build 103 (2026-10-27)
+
+- User prioritizes failed dictation after USB-to-built-in input switching. Keep
+  this ahead of deferred features until real MacBook route/capture smoke passes.
+- Logs establish an early-release bug: built-in selection succeeded, but Fn was
+  released about 0.1 seconds after capture started, before the first buffer.
+  Completion now respects startup health: early empty release cancels; actual
+  timeout, conversion, and saving failures remain visible. README/Help updated.
+- Regression failed on the original screenshot message; final `swift test` passes
+  526 macOS + 21 VoxCore tests. Seven dictation fixtures pass at quality 1.0,
+  failure rate 0.0. Diff whitespace, strict signatures, and equal installed/built
+  executable hashes pass. Local 0.7.79/103 installed/restarted on both Macs;
+  public Sparkle remains 0.7.78/102. No push/publication performed.
+- User's later long-hold test still failed with no message. The reopened MacBook
+  app logged no Fn press despite microphone permission, Accessibility trust,
+  enabled event tap and idle main loop. Keyboard/local-vs-remote input path is
+  pending clarification; successful dictation after route switching is NOT verified.
+- Current ledger and acceptance: `docs/macbook-microphone-capture-priority.md`.
+  Preserve pre-existing handoff/audit/fallback changes. P1 remains In progress.
+
 ## Released — reliability stabilization, 0.7.78 build 102 (2026-10-26)
 
 - Capture readiness now requires usable frames; missing/stalled audio and conversion,
