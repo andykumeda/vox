@@ -221,3 +221,21 @@ Service configuration edits use **Save service configuration**. Restart Vox afte
 The iOS host also has dictation and cleanup provider controls, separate provider keys, and service settings. Its experimental App Intent continues to bypass Smart Cleanup. Generic iOS compilation does not verify physical-device permissions or keyboard insertion.
 
 Provider environment overrides are `VOX_DICTATION_PROVIDER`, `VOX_CLEANUP_PROVIDER`, `VOX_SUMMARY_PROVIDER`, and `VOX_MEETING_PROVIDER`. Text providers accept `followDictation`, `openai`, or `openrouter`; dictation accepts `openai` or `openrouter`. Meeting audio accepts `deepgram`, `openai`, `openrouter`, or the documented `automatic` startup selection (Deepgram when its key is configured, otherwise OpenAI). This startup policy never switches providers in response to a request failure.
+
+## Recording starts but no text appears
+
+**Starting…** means Vox is waiting for usable microphone audio. **Mic error**
+means capture failed, rather than ordinary silence. Open the Vox menu for the
+reason and **Restart Vox to reconnect microphone**. Restart is disabled while
+another dictation is processing or a meeting is active. You can also reconnect
+the microphone or choose another input in Settings, then repeat the recording.
+No audio can be recovered from a recording that captured no samples.
+
+Quiet meeting periods no longer restart the microphone. If a source fails or
+system audio drops buffers, the saved meeting shows a partial-capture warning;
+Vox transcribes the remaining usable sources. Phone/FaceTime audio is included
+for OpenAI and OpenRouter as well as Deepgram.
+
+Advanced service setting `captureHealthTimeout` controls how long missing audio
+is tolerated (default 2 seconds, range 0.25–30); quiet audio still counts as
+healthy. The environment override is `VOX_CAPTURE_HEALTH_TIMEOUT`.

@@ -1,9 +1,9 @@
 # Next phase: transcription reliability and usability
 
-Recorded: 2026-10-14. Implementation status: **Not started**.
+Recorded: 2026-10-14. Updated: 2026-10-26. Reliability work is **In progress**.
 
-These items are planned for the next phase. This document does not implement them
-or claim they have been verified. Priorities are based on the Vox/Wispr Flow
+These items track the next phase. Implemented portions and verification are recorded
+in [the stabilization ledger](reliability-stabilization.md); remaining scope is not complete. Priorities are based on the Vox/Wispr Flow
 comparison, current Vox source and observed MacBook failures. Wispr's packaged
 client was inspected statically; its server internals and comparative accuracy
 remain unverified. See [inspection evidence](wispr-flow-transcription-analysis.md).
@@ -16,11 +16,11 @@ the phase begins. Every item starts **Not started** and advances through
 
 | ID | Priority | State | Item | Scope / acceptance criteria | Verification | Dependencies |
 | --- | --- | --- | --- | --- | --- | --- |
-| NP-01 | First | Not started | Normalize provider failures and repair OpenRouter meeting retries | Use shared typed transport/HTTP/configuration outcomes; retry temporary connection failures within the configured budget; fail promptly on invalid credentials, unsupported models and invalid responses; never change providers implicitly | Inject timeout/disconnect then success, exhausted budget, cancellation, 401 and unsupported-model responses; real interrupted-network meeting | Shared failure contract owned before NP-03 integration |
-| NP-02 | First | Not started | Microphone readiness and actionable feedback | Show Starting, Receiving audio and Processing; require observed buffers before claiming audio is flowing; detect missing first buffer; name the active input and offer the appropriate recovery; preserve early samples | Fake engine with delayed/absent first buffer; live built-in/USB microphone, disconnect/reconnect, and post-meeting Fn tests | Coordinate capture event contract with NP-03 |
+| NP-01 | First | In progress | Normalize provider failures and repair OpenRouter meeting retries | Use shared typed transport/HTTP/configuration outcomes; retry temporary connection failures within the configured budget; fail promptly on invalid credentials, unsupported models and invalid responses; never change providers implicitly | Inject timeout/disconnect then success, exhausted budget, cancellation, 401 and unsupported-model responses; real interrupted-network meeting | Shared failure contract owned before NP-03 integration |
+| NP-02 | First | In progress | Microphone readiness and actionable feedback | Show Starting, Receiving audio and Processing; require observed buffers before claiming audio is flowing; detect missing first buffer; name the active input and offer the appropriate recovery; preserve early samples | Fake engine with delayed/absent first buffer; live built-in/USB microphone, disconnect/reconnect, and post-meeting Fn tests | Coordinate capture event contract with NP-03 |
 | NP-03 | First | Not started | Unify dictation processing | Route macOS and shared-core processing through one policy; preserve command/prose, verbatim, dictionary, cleanup and suffix behavior; distinguish no buffers, insufficient speech, provider failure and success | Pipeline tests plus existing dictation fixtures; compare acceptance and output across both call sites; live paste smoke | NP-01 failure contract; NP-02 capture metadata |
-| NP-04 | First | Not started | Improve short/quiet speech detection | Evaluate adaptive noise calibration and speech detection; preserve short real speech without admitting clicks, handling noise or silent-room hallucinations; retain appropriate audio padding | Consent-based labeled samples covering short phrases, whispered/far-field speech, room noise and clicks; compare false rejection/acceptance against current gate before replacing it | NP-03 unified policy; NP-02 capture diagnostics |
-| NP-05 | First | Not started | Per-source meeting health | Show independent microphone, computer-audio and Phone/FaceTime health; immediately disclose partial capture; distinguish missing buffers from quiet audio before recovery; avoid repeated resets during legitimate silence | Simulated source startup/stall/failure; live meeting-app and route-change checks for each source; verify unaffected sources continue | NP-02 event pattern; existing meeting recorder boundaries |
+| NP-04 | First | In progress | Improve short/quiet speech detection | Evaluate adaptive noise calibration and speech detection; preserve short real speech without admitting clicks, handling noise or silent-room hallucinations; retain appropriate audio padding | Consent-based labeled samples covering short phrases, whispered/far-field speech, room noise and clicks; compare false rejection/acceptance against current gate before replacing it | NP-03 unified policy; NP-02 capture diagnostics |
+| NP-05 | First | In progress | Per-source meeting health | Show independent microphone, computer-audio and Phone/FaceTime health; immediately disclose partial capture; distinguish missing buffers from quiet audio before recovery; avoid repeated resets during legitimate silence | Simulated source startup/stall/failure; live meeting-app and route-change checks for each source; verify unaffected sources continue | NP-02 event pattern; existing meeting recorder boundaries |
 | NP-06 | Follow-on | Not started | Incremental/live meeting transcription | Process completed chunks during capture or use provider-supported streaming; show backlog, connection and retry states; preserve timestamps and avoid claiming stable speaker identity across independent chunks | Interrupted/reconnected sessions, long meetings, cancellation, duplicate/out-of-order responses, timeline and speaker-scope checks; real provider recording | NP-01 and NP-05; explicit provider capabilities and session/chunk contract |
 | NP-07 | Follow-on | Not started | Optional recovery of failed audio | Add opt-in encrypted retention of failed audio with expiry, Retry and Delete; retain ephemeral behavior by default; session IDs prevent stale retry results from entering new dictations | Encryption, expiry, deletion and migration tests; interrupted retry/new dictation; live restart recovery | NP-01/NP-03 outcomes; explicit retention and encryption lifecycle design |
 | NP-08 | Follow-on | Not started | Cleanup controls and raw-text recovery | Add Copy raw, Copy final and Reformat; distinguish raw transcription from formatting-only behavior; preserve wording by default; retain original text after failure | Cleanup/dictionary/number/command fixtures; history actions and clipboard smoke; ensure retries do not overwrite originals | NP-03 result contract; existing encrypted raw/final history |
@@ -71,3 +71,12 @@ commit and deployment reference in this ledger/current-state docs. Follow
 repository requirements for unique bundle version/build, local production
 installation and signed publication only when authorized. Pending physical/OS
 smoke must remain explicit and must not be reported as verified.
+
+### Stabilization increment (2026-10-26)
+
+NP-01 transport retry and private error-body handling, NP-02 dictation readiness/error
+and safe restart, NP-04 polite-phrase false rejection, and NP-05 continuous mic capture
+and persisted partial-source warnings are delivered in 0.7.78 / 102. These are portions
+of the listed acceptance criteria, not completion of every item. Live per-source health,
+short-speech calibration, unified processing, streaming, retained retry audio and the
+other deferred features remain outstanding. See the linked ledger for exact tests.

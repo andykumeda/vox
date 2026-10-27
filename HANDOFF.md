@@ -1,5 +1,34 @@
 # Vox Handoff
 
+## Reliability stabilization — 0.7.78 build 102 (2026-10-26)
+
+- Capture readiness now requires usable frames; missing/stalled audio and conversion,
+  payload/finalization/read errors produce persistent actionable failure, with a safe
+  restart action disabled while dictation or meeting work is active. Separate lifecycle
+  locking prevents failed-start tap removal from deadlocking an in-flight callback.
+- Quiet meetings no longer restart the microphone or use lossy part concatenation.
+  Valid partial microphone and Phone/FaceTime audio survives other-source failure;
+  partial-capture and backpressure warnings persist and appear in transcript views.
+  OpenRouter meeting transport errors now enter the configured retry policy.
+- Genuine voiced polite phrases survive the hallucination guard; HTTP errors omit
+  response bodies. No provider fallback or persistent audio retention was introduced.
+- Verification: 525 macOS + 21 VoxCore tests pass; seven dictation fixtures pass
+  (quality 1.0, failure rate 0.0). Strict signature and installed/packaged SHA-256 match:
+  `2fc197ba2e4885ebec9a2c345db0101a1aef686f554c1ada40cd74783dda807e`.
+  Installed/restarted on Mini; microphone, hotkey and Accessibility startup pass.
+  User confirmed successful insertion at 18:37 Pacific; logs show raw input callback,
+  converted audio and completed transcription (1.94s audio, 4.318s processing).
+- Public Sparkle delivery is authorized and in progress. Until verified, this is a
+  locally deployed build; public feed was last checked at 0.7.75 / 99.
+- Underlying intermittent hardware/framework trigger, prolonged USB/post-meeting soak,
+  real partial meetings/network interruption, second-Mac update, and comparative
+  Wispr/Glaido benchmarks remain unverified. Detection/recovery is not proof the
+  underlying stall can never recur. Glaido decompilation is unavailable; bounded
+  shipped evidence is recorded without claiming runtime or server behavior.
+- Ledger: `docs/reliability-stabilization.md`; evidence:
+  `docs/competitor-reliability-evidence.md`. Prior local handoff/audit notes preserved.
+
+
 ## Unreleased — next-phase planning, 0.7.77 build 101 (2026-10-14)
 
 - `docs/transcription-next-phase.md` records eleven deferred items with explicit

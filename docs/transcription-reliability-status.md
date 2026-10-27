@@ -1,12 +1,12 @@
 # Transcription reliability and OpenRouter meetings
 
-Updated: 2026-10-14. Owner: root integration; OpenRouter backend workstream.
+Updated: 2026-10-26. Owner: root integration; OpenRouter backend workstream.
 
 | Workstream | State | Acceptance / evidence | Remaining checks |
 | --- | --- | --- | --- |
 | Spoken digit sequences | Deployed | Formatter and real pipeline regression reproduced “Testing one two three.” → “Testing 6.”; preserve distinct digits, compound quantities, units and spacing | User confirmed live MacBook output “Testing 1 2 3.” on 2026-10-14 |
 | OpenRouter meeting audio | Deployed | Explicit provider/key/model; timestamped chunks; no provider fallback; optional speaker labels scoped per chunk | Mock request/session/full checks pass; real meeting pending |
-| Intermittent Fn capture | Not started | MacBook recordings included 44-byte header-only WAVs; later recordings captured audio. Safe app restart completed with no audio files open. Permissions/hotkey startup pass | Post-restart spoken verification; determine capture stall cause before changing engine lifecycle |
+| Intermittent Fn capture | In progress | MacBook recordings included 44-byte header-only WAVs; later recordings captured audio. Safe app restart completed with no audio files open. Permissions/hotkey startup pass | Post-restart spoken verification; determine capture stall cause before changing engine lifecycle |
 | Short-clip speech gate | Not started | Captured 1.3–1.8s clips had 0.52–0.56s total voiced audio but 0.20–0.24s longest voiced run; gate requires 0.28s. Other clips reach OpenRouter HTTP 200 | Original audio is ephemeral; no claim that rejected clips contain speech. Controlled repeated short-speech and quiet-room verification before changing protection |
 
 ## Configuration
@@ -48,3 +48,13 @@ installed/packaged executable SHA-256
 `6b67fd6729fd5570062739fdcd9d0ae2d96d5acd4bfb66f20f924ac2cf0a1d57` pass.
 Relative document links, eleven Not started ledger rows and `git diff --check` pass.
 No new runtime tests or live meeting checks were performed for this documentation change.
+
+## 2026-10-26 stabilization delivery
+
+0.7.78 / 102 is installed on Mini with successful user-confirmed dictation.
+Capture health/error/restart handling, meeting source preservation and warnings,
+OpenRouter transport retry, and polite-phrase rejection fixes are implemented.
+Full verification and remaining hardware acceptance are tracked in
+[the stabilization ledger](reliability-stabilization.md). The original hardware/framework
+stall trigger and competitor parity remain unproven; this is not closure of all
+next-phase features. Public Sparkle delivery is authorized and in progress.

@@ -450,3 +450,29 @@ Service configuration edits use **Save service configuration**. Restart Vox afte
 The iOS host also has dictation and cleanup provider controls, separate provider keys, and service settings. Its experimental App Intent continues to bypass Smart Cleanup. Generic iOS compilation does not verify physical-device permissions or keyboard insertion.
 
 Provider environment overrides are `VOX_DICTATION_PROVIDER`, `VOX_CLEANUP_PROVIDER`, `VOX_SUMMARY_PROVIDER`, and `VOX_MEETING_PROVIDER`. Text providers accept `followDictation`, `openai`, or `openrouter`; dictation accepts `openai` or `openrouter`. Meeting audio accepts `deepgram`, `openai`, `openrouter`, or the documented `automatic` startup selection (Deepgram when its key is configured, otherwise OpenAI). This startup policy never switches providers in response to a request failure.
+
+### Capture reliability and recovery
+
+Vox shows **Starting…** until usable microphone frames arrive, then reports
+receiving audio. Missing or stalled frames, conversion errors, and file errors
+show **Mic error**, an error sound, and recovery guidance in the menu instead of
+silently treating a broken recording as quiet speech. Open the menu and choose
+**Restart Vox to reconnect microphone** when needed; this action is unavailable
+while dictation processing or a meeting is active. Repeat the failed dictation.
+Restart is a recovery action, not a guarantee against USB/Core Audio stalls.
+
+`captureHealthTimeout` defaults to 2 seconds in the shared service configuration
+(valid range 0.25–30 seconds). Settings → advanced service controls or
+`VOX_CAPTURE_HEALTH_TIMEOUT` can override it; environment overrides saved settings.
+Quiet frames count as healthy capture. Recording audio remains ephemeral.
+
+Meeting microphone capture stays continuous during quiet periods. Available
+sources are transcribed if another source fails, including Phone/FaceTime for
+OpenAI and OpenRouter. Partial capture and dropped-audio warnings are saved with
+the meeting and shown in its detail view. OpenRouter meeting network failures
+use the configured retry policy. Genuine voiced “thank you” and similar phrases
+are no longer unconditionally suppressed.
+
+See [stabilization status](docs/reliability-stabilization.md) and
+[competitor evidence](docs/competitor-reliability-evidence.md) for verification
+and remaining hardware/comparative checks.
