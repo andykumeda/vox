@@ -81,10 +81,13 @@ public enum DictationSilenceGate {
 public enum DictationHallucinationGuard {
     /// Known model fillers on silent / low-energy audio. Matched after
     /// case-insensitive, punctuation-stripped, whitespace-collapsed normalisation.
-    public static let fillerPhrases: Set<String> = [
+    private static let prosePromptEchoes: Set<String> = [
         "the quick brown fox jumps over the lazy dog",
         "the cat sat on the mat",
         "the cat is on the mat",
+    ]
+
+    public static let fillerPhrases: Set<String> = prosePromptEchoes.union([
         "you",
         "thank you",
         "thanks",
@@ -95,7 +98,7 @@ public enum DictationHallucinationGuard {
         "bye",
         "goodbye",
         "see you next time",
-    ]
+    ])
 
     /// Command-mode prompt examples that the model echoes on near-silent audio.
     /// Stored already-normalized (punctuation stripped) so they match `normalize(_:)`.
@@ -143,7 +146,12 @@ public enum DictationHallucinationGuard {
         let stripped = normalize(raw)
         guard !stripped.isEmpty else { return false }
 
-        if fillerPhrases.contains(stripped) { return true }
+        if prosePromptEchoes.contains(stripped) { return true }
+        // Common polite phrases are real dictation unless the audio itself fails the silence gate.
+        if fillerPhrases.contains(stripped),
+           DictationSilenceGate.shouldSkip(durationSec: durationSec, rms: rms) {
+            return true
+        }
 
         if mode == .command,
            durationSec < promptEchoMaxDurationSec,

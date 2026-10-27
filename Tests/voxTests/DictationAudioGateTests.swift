@@ -121,6 +121,20 @@ final class DictationAudioGateTests: XCTestCase {
         ))
     }
 
+    func testAllowsGenuinePoliteSpeech() {
+        for phrase in ["Thank you.", "Thanks!", "Bye.", "Goodbye.", "You.", "Thank you for watching."] {
+            XCTAssertFalse(DictationHallucinationGuard.shouldSuppress(
+                phrase, mode: .prose, durationSec: 1.2, rms: 800
+            ), phrase)
+        }
+    }
+
+    func testSuppressesPoliteFillerOnQuietEmptyClip() {
+        XCTAssertTrue(DictationHallucinationGuard.shouldSuppress(
+            "Thank you.", mode: .prose, durationSec: 0.74, rms: 301
+        ))
+    }
+
     func testSuppressesCommandPromptEchoOnShortQuietClip() {
         XCTAssertTrue(DictationHallucinationGuard.shouldSuppress(
             "ls -l",

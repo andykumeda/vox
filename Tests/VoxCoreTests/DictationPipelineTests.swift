@@ -62,6 +62,19 @@ final class DictationPipelineTests: XCTestCase {
         XCTAssertEqual(result.text, "Testing 1 2 3.")
     }
 
+    func testGenuinePoliteSpeechSurvivesPipeline() async throws {
+        let pipeline = DictationPipeline { _, _ in "Thank you." }
+        let recording = DictationRecording(
+            wav: Data([0]),
+            metrics: WAVAudioMetrics(durationSec: 1.2, rms: 800, voicedDurationSec: 0.6)
+        )
+        let result = try await pipeline.transcribe(
+            recording: recording, configuration: DictationConfiguration()
+        )
+        XCTAssertEqual(result.rawText, "Thank you.")
+        XCTAssertEqual(result.text, "Thank you.")
+    }
+
     func testRunawayTranscriptionIsSuppressed() async {
         let pipeline = DictationPipeline { _, _ in String(repeating: "word ", count: 100) }
         let recording = DictationRecording(
