@@ -1,16 +1,16 @@
 # P1 — MacBook USB-to-built-in capture failure
 
-Reported 2026-10-27. Owner: Codex. Overall state: In progress.
-Priority: P1, ahead of deferred transcription features. Keep open until live
-MacBook capture across USB disconnect/reconnect is verified. Correct route labels
-and successful app restarts alone do not satisfy acceptance.
+Reported 2026-10-27. Owner: Codex. Overall state: Verified for the reported built-in-keyboard/built-in-microphone incident.
+Priority: P1 follow-up for repeated USB disconnect/reconnect validation, ahead of
+deferred transcription features. The reported incident is recovered; repeated route
+cycles and external-keyboard hotkey compatibility remain unverified.
 
 | Work | State | Acceptance / scope | Verification |
 | --- | --- | --- | --- |
-| Capture incident diagnosis | In progress | Distinguish short release, no callbacks, converter failure, and hotkey release | MacBook 0.7.78/102 logs: USB delivered frames; fallback selected; next attempt stopped about 0.1 s after start with no callback |
+| Capture incident diagnosis | Verified | Distinguish short release, no callbacks, converter failure, and hotkey release | MacBook 0.7.78/102 logs: USB delivered frames; fallback selected; next attempt stopped about 0.1 s after start with no callback; later missing Fn events traced to external-keyboard use by user |
 | Early-release classification | Verified | AudioRecorder and MenuBarController: empty release during Starting cancels; timeout, conversion and save errors remain failures | Original regression failed with the screenshot error; 526 macOS + 21 VoxCore tests pass; seven dictation fixtures quality 1.0/failure rate 0.0 |
 | Local production deployment | Deployed | Unique unreleased 0.7.79/103 signed install/restart on Mini and MacBook | Mini and MacBook installed/restarted; strict signatures pass, executable SHA-256 matches; public Sparkle stays 0.7.78/102; no push/publication requested |
-| Actual microphone-switch validation | Not started | Hold Fn for 3–5 s and dictate on built-in after USB disconnect, repeat; reconnect USB and repeat; verify raw and converted frames plus transcription | User test requested; sustained capture stall not established by current trace |
+| Actual microphone-switch validation | In progress | Hold Fn for 3–5 s and dictate on built-in after USB disconnect, repeat; reconnect USB and repeat; verify raw and converted frames plus transcription | Two built-in fallback dictations completed on 0.7.79/103 using built-in keyboard; repeated USB reconnect cycles remain pending |
 
 Scope reaches AudioRecorder.captureFailure, its MenuBarController completion caller,
 recorder route regressions, README, Help, bundle identity, and handoff. No engine
@@ -39,11 +39,18 @@ microphone permission, Accessibility trust, hotkey setup, and built-in routing.
 README and Help document short-release cancellation; timeout policy is unchanged.
 `git diff --check` passes. This build is local and unreleased.
 
-The user reports that a subsequent 3–5 second Fn hold still does not work and
-shows no message. The reopened 0.7.78 app logged no new Fn press, so that attempt
-did not reach capture. An OS event-tap inventory showed its listener enabled;
-a process sample showed the main run loop idle rather than blocked. Do not
-claim the microphone switch is resolved. Keyboard type and local/remote event
-path clarification is pending, followed by a new 0.7.79 live test. Track hotkey
-delivery separately from a confirmed capture stall; neither startup nor the
-early-release regression establishes successful built-in dictation.
+The user confirmed switching from the external keyboard to the MacBook's built-in
+keyboard explained the missing Fn events. On 0.7.79/103, MacBook logs at 12:30 and
+12:31 Pacific show two built-in fallback recordings: 3.878 s and 5.650 s, both with
+raw callbacks, converted frames, STT, cleanup, and completed paste paths (3.678 s
+and 3.352 s processing respectively). This verifies actual capture and pipeline
+completion on the affected Mac; it is stronger than startup/route evidence.
+No captured transcript content is included here. A sustained capture stall is not
+established by this incident. Repeated USB disconnect/reconnect cycles and an
+external-keyboard-compatible binding remain unverified; no binding was changed.
+
+The documentation-only follow-up uses unique local identity 0.7.80/104 under the
+project deployment rule. It contains the same capture logic as 0.7.79/103. Both Macs were installed/restarted; strict signatures and matching installed/package
+SHA-256 `34a470335e8b0116d30e959872302dd6593e3735344e814354df50b915c2a545`
+pass. Plist validation and diff whitespace pass; runtime tests were not repeated
+for this documentation-only follow-up. No public release was requested.

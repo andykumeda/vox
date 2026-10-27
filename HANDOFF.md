@@ -1,6 +1,6 @@
 # Vox Handoff
 
-## P1 open — MacBook microphone switch, unreleased 0.7.79 build 103 (2026-10-27)
+## MacBook capture recovered — unreleased 0.7.80 build 104 (2026-10-27)
 
 - User prioritizes failed dictation after USB-to-built-in input switching. Keep
   this ahead of deferred features until real MacBook route/capture smoke passes.
@@ -13,12 +13,17 @@
   failure rate 0.0. Diff whitespace, strict signatures, and equal installed/built
   executable hashes pass. Local 0.7.79/103 installed/restarted on both Macs;
   public Sparkle remains 0.7.78/102. No push/publication performed.
-- User's later long-hold test still failed with no message. The reopened MacBook
-  app logged no Fn press despite microphone permission, Accessibility trust,
-  enabled event tap and idle main loop. Keyboard/local-vs-remote input path is
-  pending clarification; successful dictation after route switching is NOT verified.
+- User confirmed external-keyboard use explained the missing Fn events. Built-in
+  keyboard tests on MacBook 0.7.79/103 now deliver raw/converted built-in fallback
+  audio, STT, cleanup and completed paste paths: 3.878 s and 5.650 s recordings at
+  12:30/12:31 Pacific. No sustained capture stall is established by this incident.
+- Documentation-only 0.7.80/104 records the recovery; capture code is unchanged.
+  Both Macs installed/restarted; strict signatures, installed/package hash, plist
+  and whitespace checks pass. Repeated USB disconnect/reconnect
+  and external-keyboard binding compatibility remain unverified.
 - Current ledger and acceptance: `docs/macbook-microphone-capture-priority.md`.
-  Preserve pre-existing handoff/audit/fallback changes. P1 remains In progress.
+  Preserve pre-existing handoff/audit/fallback changes. P1 follow-up remains for
+  repeated USB route cycles; the reported built-in recording incident is recovered.
 
 ## Released — reliability stabilization, 0.7.78 build 102 (2026-10-26)
 
