@@ -15,6 +15,28 @@ public enum AudioRecorderError: Error {
     case inputDeviceFormatUnavailable(String)
 }
 
+enum DictationCaptureHealth: Equatable {
+    case starting, receiving, failed(String)
+}
+
+/// Tracks frame delivery, not loudness: quiet samples still prove capture is alive.
+struct DictationCaptureProgress {
+    var startedAt: TimeInterval = 0
+    var lastFrameAt: TimeInterval?
+    var callbackCount = 0
+    var failure: String?
+
+    func health(at now: TimeInterval, timeout: TimeInterval) -> DictationCaptureHealth {
+        if let failure { return .failed(failure) }
+        if now - (lastFrameAt ?? startedAt) >= timeout {
+            return .failed(lastFrameAt == nil
+                ? "Microphone did not deliver usable audio. Reconnect it or choose another input in Settings, then record again."
+                : "Microphone audio stopped during recording. Please record again; this recording is incomplete.")
+        }
+        return lastFrameAt == nil ? .starting : .receiving
+    }
+}
+
 protocol AudioEngineControlling: AnyObject {
     var isRunning: Bool { get }
 
@@ -120,7 +142,24 @@ public final class AudioRecorder {
     private var converter: AVAudioConverter?
     private let targetSampleRate: Double = 16_000
     private let lock = NSLock()
+    private let lifecycleLock = NSLock()
     private var isRecording = false
+    private var progress = DictationCaptureProgress()
+    private let monotonicTime: () -> TimeInterval
+
+    func captureHealth(timeout: TimeInterval) -> DictationCaptureHealth {
+        lock.lock()
+        defer { lock.unlock() }
+        return progress.health(at: monotonicTime(), timeout: timeout)
+    }
+
+    var captureFailure: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let failure = progress.failure { return failure }
+        return pcmBytesWritten == 0 ? "No audio was captured. Check the microphone and record again." : nil
+    }
+
 
     private var fileHandle: FileHandle?
     private var currentURL: URL?
@@ -149,8 +188,10 @@ public final class AudioRecorder {
         hardwareInputFormat: @escaping (AudioDeviceID) -> AVAudioFormat? = { _ in nil },
         inputVolumeScalar: @escaping (AudioDeviceID) -> Float32? = { _ in nil },
         setInputVolumeScalar: @escaping (AudioDeviceID, Float32) -> Bool = { _, _ in false },
-        routeRecoverySleep: @escaping (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+        routeRecoverySleep: @escaping (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
+        monotonicTime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
+        self.monotonicTime = monotonicTime
         self.mode = mode
         self.engine = engine
         self.selectedInputDeviceUID = selectedInputDeviceUID
@@ -181,9 +222,12 @@ public final class AudioRecorder {
 
     /// Begins capture and opens a temporary WAV stream with a placeholder header.
     public func start(mode modeOverride: String? = nil) throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         lock.lock()
-        defer { lock.unlock() }
-        guard !isRecording else { return }
+        let alreadyRecording = isRecording
+        lock.unlock()
+        guard !alreadyRecording else { return }
 
         let resolvedMode = modeOverride ?? mode
         let url: URL
@@ -287,6 +331,7 @@ public final class AudioRecorder {
         self.fileHandle = handle
         self.currentURL = url
         self.pcmBytesWritten = 0
+        self.progress = DictationCaptureProgress(startedAt: monotonicTime())
 
         // A pinned device's Core Audio hardware format is authoritative. The
         // AVAudioEngine input node may still expose the prior Bluetooth/output
@@ -359,7 +404,9 @@ public final class AudioRecorder {
                 throw AudioRecorderError.engineStartFailed(error)
             }
         }
+        lock.lock()
         isRecording = true
+        lock.unlock()
     }
 
     private func restorePinnedInputVolumeIfNeeded(uid: String, deviceID: AudioDeviceID) {
@@ -383,6 +430,8 @@ public final class AudioRecorder {
     /// Returns nil if no recording was in progress.
     @discardableResult
     public func stop() -> URL? {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         lock.lock()
         guard isRecording else {
             lock.unlock()
@@ -400,8 +449,14 @@ public final class AudioRecorder {
         lock.lock()
         defer { lock.unlock() }
         guard let handle = self.fileHandle, let url = self.currentURL else { return nil }
-        finaliseHeader(handle: handle, pcmByteCount: pcmBytesWritten)
-        try? handle.close()
+        do {
+            try finaliseHeader(handle: handle, pcmByteCount: pcmBytesWritten)
+            try handle.close()
+        } catch {
+            progress.failure = "Vox could not finish saving audio. Check available disk space and record again."
+            dlog("AudioRecorder WAV finalization failed")
+            try? handle.close()
+        }
         self.fileHandle = nil
         self.currentURL = nil
         self.converter = nil
@@ -452,6 +507,11 @@ public final class AudioRecorder {
     }
 
     private func handle(buffer: AVAudioPCMBuffer, targetFormat: AVAudioFormat) {
+        lock.lock()
+        progress.callbackCount += 1
+        let firstCallback = progress.callbackCount == 1
+        lock.unlock()
+        if firstCallback { dlog("AudioRecorder first input callback frames=\(buffer.frameLength)") }
         guard let converter else { return }
         let frameCapacity = AVAudioFrameCount(
             Double(buffer.frameLength) * targetFormat.sampleRate / buffer.format.sampleRate + 1024
@@ -472,7 +532,15 @@ public final class AudioRecorder {
 
         guard status != .error, error == nil,
               let int16Channel = outBuf.int16ChannelData?[0]
-        else { return }
+        else {
+            lock.lock()
+            let firstFailure = progress.failure == nil
+            progress.failure = "Microphone audio conversion failed. Check the input device and record again."
+            lock.unlock()
+            if firstFailure { dlog("AudioRecorder conversion failed code=\(error?.code ?? -1)") }
+            return
+        }
+        guard outBuf.frameLength > 0 else { return }
 
         let bytes = Int(outBuf.frameLength) * 2
         let data = Data(bytes: int16Channel, count: bytes)
@@ -494,11 +562,12 @@ public final class AudioRecorder {
         if let handle = fileHandle {
             do {
                 try handle.write(contentsOf: data)
+                progress.lastFrameAt = monotonicTime()
                 let nextTotal = UInt64(pcmBytesWritten) + UInt64(bytes)
                 pcmBytesWritten = UInt32(min(nextTotal, UInt64(UInt32.max)))
             } catch {
-                // Don't crash the audio thread; the next stop() will still
-                // finalize the bytes that were written before the failure.
+                if progress.failure == nil { dlog("AudioRecorder audio file write failed") }
+                progress.failure = "Vox could not save microphone audio. Check available disk space and record again."
             }
         }
         lock.unlock()
@@ -533,12 +602,12 @@ public final class AudioRecorder {
         return header
     }
 
-    private func finaliseHeader(handle: FileHandle, pcmByteCount: UInt32) {
+    private func finaliseHeader(handle: FileHandle, pcmByteCount: UInt32) throws {
         let riffSize = UInt32(36) &+ pcmByteCount
-        try? handle.seek(toOffset: 4)
-        try? handle.write(contentsOf: RecordingArchive.littleEndianBytes(riffSize))
-        try? handle.seek(toOffset: 40)
-        try? handle.write(contentsOf: RecordingArchive.littleEndianBytes(pcmByteCount))
+        try handle.seek(toOffset: 4)
+        try handle.write(contentsOf: RecordingArchive.littleEndianBytes(riffSize))
+        try handle.seek(toOffset: 40)
+        try handle.write(contentsOf: RecordingArchive.littleEndianBytes(pcmByteCount))
     }
 }
 

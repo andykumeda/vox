@@ -3,12 +3,12 @@ import ApplicationServices
 import Sparkle
 
 enum MenuIconState {
-    case idle, recording, transcribing, error
+    case idle, starting, recording, transcribing, error
 
     var acceptsRecordingAttempt: Bool {
         switch self {
         case .idle, .transcribing, .error: return true
-        case .recording: return false
+        case .starting, .recording: return false
         }
     }
 
@@ -16,7 +16,7 @@ enum MenuIconState {
         remainingPipelines: Int,
         hadError: Bool
     ) -> MenuIconState {
-        guard self != .recording else { return .recording }
+        guard self != .recording && self != .starting else { return self }
         if remainingPipelines > 0 { return .transcribing }
         return hadError ? .error : .idle
     }
@@ -58,6 +58,10 @@ enum MenuBarCommand: CaseIterable {
 
 final class MenuBarController: NSObject {
     static let pasteLastFocusSettleDelay: TimeInterval = 0.20
+
+    static func canRestartCapture(activePipelines: Int, meetingActive: Bool) -> Bool {
+        activePipelines == 0 && !meetingActive
+    }
 
     /// Shared entry point for dictation paste and Paste Last.
     /// The awaited body permits actor reentrancy, so this does not serialize
@@ -115,6 +119,10 @@ final class MenuBarController: NSObject {
     private var currentVerbatim: Bool = false
     private var activeDictationPipelines = 0
     private var pulseTimer: Timer?
+    private var captureTimer: Timer?
+    private var captureTimeout: TimeInterval = 0
+    private var captureError: String?
+
     private var state: MenuIconState = .idle {
         didSet { refreshIcon() }
     }
@@ -219,6 +227,7 @@ final class MenuBarController: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            if self?.captureError != nil { self?.configureMenu() }
             self?.refreshIcon()
         }
         NotificationCenter.default.addObserver(
@@ -285,6 +294,15 @@ final class MenuBarController: NSObject {
         _ = updaterController
 
         let menu = NSMenu()
+        menu.autoenablesItems = false
+        if let captureError {
+            let notice = NSMenuItem(title: captureError, action: nil, keyEquivalent: "")
+            notice.isEnabled = false
+            menu.addItem(notice)
+            let restart = makeMenuItem(title: "Restart Vox to reconnect microphone", symbol: "arrow.clockwise", action: #selector(restartAfterCaptureFailure))
+            restart.isEnabled = Self.canRestartCapture(activePipelines: activeDictationPipelines, meetingActive: MeetingTranscriptionSession.shared.isActive)
+            menu.addItem(restart)
+        }
         if PinnedAudioInputMonitor.shared.isUsingBuiltInFallback {
             let notice = NSMenuItem(
                 title: "Using built-in microphone (automatic)",
@@ -471,6 +489,9 @@ final class MenuBarController: NSObject {
         case .idle:
             button.image = appIconForMenuBar(commandMode: cmd)
             button.contentTintColor = nil
+        case .starting:
+            button.image = appIconForMenuBar(badgeColor: .systemOrange, commandMode: cmd)
+            button.contentTintColor = nil
         case .recording:
             button.image = appIconForMenuBar(badgeColor: .systemRed, commandMode: cmd)
             button.contentTintColor = nil
@@ -487,7 +508,7 @@ final class MenuBarController: NSObject {
             button.contentTintColor = NSColor.labelColor
         }
         // Fallback: status item collapses to zero width if image is nil.
-        button.title = (button.image == nil) ? "Vox" : ""
+        button.title = captureError != nil ? "Mic error" : (state == .starting ? "Starting…" : ((button.image == nil) ? "Vox" : ""))
         if state == .transcribing {
             startPulsing()
         } else {
@@ -498,9 +519,10 @@ final class MenuBarController: NSObject {
         button.toolTip = {
             switch state {
             case .idle: return "Vox — idle"
-            case .recording: return "Vox — recording…"
+            case .starting: return "Vox — waiting for microphone audio…"
+            case .recording: return "Vox — receiving microphone audio…"
             case .transcribing: return "Vox — transcribing…"
-            case .error: return "Vox — error"
+            case .error: return captureError.map { "Vox — " + $0 } ?? "Vox — error"
             }
         }() + fallbackNotice
     }
@@ -557,6 +579,8 @@ final class MenuBarController: NSObject {
             return
         }
         PinnedAudioInputMonitor.shared.reassertPinnedInput(reason: "recording start")
+        captureError = nil
+        configureMenu()
         currentVerbatim = verbatim
         switch AppSettings.modeOverride {
         case .auto:    currentMode = contextDetector.modeForFrontmost()
@@ -564,23 +588,70 @@ final class MenuBarController: NSObject {
         case .command: currentMode = .command
         }
         do {
+            captureTimeout = try ServiceConfiguration.number(.captureHealthTimeout)
             try SoundPlayer.playStartCueThenOpenCapture(
                 playStart: { sound.play(.start) },
                 openCapture: {
                     try recorder.start(mode: currentMode == .prose ? "prose" : "command")
                 }
             )
-            state = .recording
+            state = .starting
+            captureTimer?.invalidate()
+            let timer = Timer(timeInterval: min(0.1, captureTimeout / 2), repeats: true) { [weak self] _ in
+                self?.checkCaptureHealth()
+            }
+            captureTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
         } catch {
-            state = .error
-            sound.play(.error)
-            NSLog("[vox] recorder.start failed: \(error)")
+            showCaptureFailure("Microphone could not start. Check the input in Settings and try again.")
+            dlog("recorder.start failed type=\(type(of: error))")
+        }
+    }
+
+    @objc private func restartAfterCaptureFailure() {
+        guard captureError != nil,
+              Self.canRestartCapture(activePipelines: activeDictationPipelines, meetingActive: MeetingTranscriptionSession.shared.isActive) else { return }
+        if !AutoRelaunch.restartAfterCaptureFailure() {
+            showCaptureFailure("Restart unavailable. Quit and reopen Vox to reconnect the microphone.")
+        }
+    }
+
+    private func showCaptureFailure(_ message: String) {
+        captureTimer?.invalidate()
+        captureTimer = nil
+        captureError = message
+        state = .error
+        configureMenu()
+        sound.play(.error)
+    }
+
+    private func checkCaptureHealth() {
+        guard state == .starting || state == .recording else { return }
+        switch recorder.captureHealth(timeout: captureTimeout) {
+        case .starting: break
+        case .receiving:
+            if state != .recording { state = .recording }
+        case .failed(let message):
+            if let url = recorder.stop() { try? FileManager.default.removeItem(at: url) }
+            dlog("dictation capture failed: \(message)")
+            showCaptureFailure(message)
         }
     }
 
     private func endRecordingAndTranscribe() {
-        guard state == .recording else { return }
+        guard state == .starting || state == .recording else { return }
+        let health = recorder.captureHealth(timeout: captureTimeout)
+        captureTimer?.invalidate()
+        captureTimer = nil
         let recordingURL = recorder.stop()
+        let failure: String?
+        if case .failed(let message) = health { failure = message }
+        else { failure = recorder.captureFailure }
+        if let failure {
+            if let url = recordingURL { try? FileManager.default.removeItem(at: url) }
+            showCaptureFailure(failure)
+            return
+        }
         sound.play(.stop)
         let mode = currentMode
         let verbatimMode = currentVerbatim
@@ -592,7 +663,13 @@ final class MenuBarController: NSObject {
         }
         // The recording is already on disk (streamed during capture). Read it
         // back as a buffer for the transcription API call.
-        let wav = (try? Data(contentsOf: url)) ?? Data()
+        let wav: Data
+        do { wav = try Data(contentsOf: url) }
+        catch {
+            try? FileManager.default.removeItem(at: url)
+            showCaptureFailure("Vox could not read the recording. Check available disk space and record again.")
+            return
+        }
         dlog("recording saved: \(url.path) bytes=\(wav.count)")
 
         // Silence gate: skip the transcription API on clearly empty clips.
@@ -743,12 +820,13 @@ final class MenuBarController: NSObject {
         activeDictationPipelines = max(0, activeDictationPipelines - 1)
         state = state.resolvedAfterPipelineCompletion(
             remainingPipelines: activeDictationPipelines,
-            hadError: hadError
+            hadError: hadError || captureError != nil
         )
+        if captureError != nil { configureMenu() }
         guard hadError, state == .error else { return }
         sound.play(.error)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self, self.state == .error else { return }
+            guard let self, self.state == .error, self.captureError == nil else { return }
             self.state = self.activeDictationPipelines > 0 ? .transcribing : .idle
         }
     }

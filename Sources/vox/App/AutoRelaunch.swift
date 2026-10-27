@@ -8,6 +8,11 @@ enum AutoRelaunch {
         CommandLine.arguments.contains(launchAgentArgument)
     }
 
+    static func restartAfterCaptureFailure() -> Bool {
+        guard isLaunchAgentInstance else { return false }
+        return runLaunchctl(["kickstart", "-k", "gui/\(getuid())/\(label)"])
+    }
+
     static func installAndHandOffIfNeeded() {
         guard !isLaunchAgentInstance else { return }
         guard Bundle.main.bundlePath.hasSuffix(".app") else { return }

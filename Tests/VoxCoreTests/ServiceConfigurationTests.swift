@@ -41,6 +41,13 @@ final class ServiceConfigurationTests: XCTestCase {
         }
     }
 
+    func testCaptureHealthTimeoutHasSafeBounds() throws {
+        for value in ["0.25", "2", "30"] { try ServiceConfiguration.validate(value, for: .captureHealthTimeout) }
+        for value in ["0", "0.001", "31", "NaN", "inf"] {
+            XCTAssertThrowsError(try ServiceConfiguration.validate(value, for: .captureHealthTimeout))
+        }
+    }
+
     func testInvalidOverridesAreRejectedWithoutProviderFallback() {
         for url in ["http://example.com/chat", "not-a-url", "https://user:password@example.com/chat", "https://example.com/#fragment"] {
             XCTAssertThrowsError(try ServiceConfiguration.validate(url, for: .openaiChatURL))

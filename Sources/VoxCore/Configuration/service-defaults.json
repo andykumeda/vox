@@ -15,6 +15,7 @@
   "openrouterMeetingProviderOptions": "{}",
   "openrouterMeetingUSDPerHour": "0.10",
   "language": "en",
+  "captureHealthTimeout": "2",
   "dictationTimeout": "8",
   "dictationMaximumTimeout": "24",
   "dictationTimeoutPerAudioSecond": "0.25",

@@ -7,6 +7,8 @@ final class MenuBarControllerTests: XCTestCase {
         XCTAssertTrue(MenuIconState.error.acceptsRecordingAttempt)
         XCTAssertTrue(MenuIconState.transcribing.acceptsRecordingAttempt)
         XCTAssertFalse(MenuIconState.recording.acceptsRecordingAttempt)
+        XCTAssertFalse(MenuIconState.starting.acceptsRecordingAttempt)
+        XCTAssertEqual(MenuIconState.starting.resolvedAfterPipelineCompletion(remainingPipelines: 0, hadError: false), .starting)
     }
 
     func testCompletingOlderPipelineDoesNotOverrideNewRecordingState() {
@@ -31,6 +33,12 @@ final class MenuBarControllerTests: XCTestCase {
             ),
             .idle
         )
+    }
+
+    func testCaptureRestartCannotInterruptDictationOrMeetingWork() {
+        XCTAssertTrue(MenuBarController.canRestartCapture(activePipelines: 0, meetingActive: false))
+        XCTAssertFalse(MenuBarController.canRestartCapture(activePipelines: 1, meetingActive: false))
+        XCTAssertFalse(MenuBarController.canRestartCapture(activePipelines: 0, meetingActive: true))
     }
 
     func testMenuContainsOnlyRequestedCommandsInOrder() {

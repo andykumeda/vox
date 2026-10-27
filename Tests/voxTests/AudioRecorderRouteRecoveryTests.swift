@@ -3,6 +3,32 @@ import XCTest
 @testable import vox
 
 final class AudioRecorderRouteRecoveryTests: XCTestCase {
+    func testEmptyEngineStartReportsCaptureFailureAndQuietFramesProveReadiness() throws {
+        var now: TimeInterval = 10
+        let engine = RouteChangingAudioEngine(initialSampleRate: 48_000, settledSampleRate: 48_000, failFirstStart: false)
+        let recorder = AudioRecorder(mode: "prose", engine: engine, monotonicTime: { now })
+        try recorder.start()
+        XCTAssertEqual(recorder.captureHealth(timeout: 2), .starting)
+        now = 12
+        guard case .failed = recorder.captureHealth(timeout: 2) else { return XCTFail("Missing frames must fail") }
+        let emptyURL = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: emptyURL) }
+        XCTAssertNotNil(recorder.captureFailure)
+        XCTAssertEqual(try Data(contentsOf: emptyURL).count, 44)
+
+        try recorder.start()
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4800))
+        buffer.frameLength = 4800
+        buffer.floatChannelData![0].initialize(repeating: 0, count: 4800)
+        engine.handler?(buffer, AVAudioTime(sampleTime: 0, atRate: 48_000))
+        XCTAssertEqual(recorder.captureHealth(timeout: 2), .receiving)
+        let quietURL = try XCTUnwrap(recorder.stop())
+        defer { try? FileManager.default.removeItem(at: quietURL) }
+        XCTAssertNil(recorder.captureFailure)
+        XCTAssertGreaterThan(try Data(contentsOf: quietURL).count, 44)
+    }
+
     func testStartRecoversWhenInputFormatChangesDuringEngineStartup() throws {
         let engine = RouteChangingAudioEngine(
             initialSampleRate: 8_000,
@@ -279,6 +305,7 @@ private final class RouteChangingAudioEngine: AudioEngineControlling {
     private let failFirstTap: Bool
     private let failFirstSelection: Bool
     var isRunning = false
+    var handler: AVAudioNodeTapBlock?
 
     init(
         initialSampleRate: Double,
@@ -320,6 +347,7 @@ private final class RouteChangingAudioEngine: AudioEngineControlling {
         format: AVAudioFormat?,
         handler: @escaping AVAudioNodeTapBlock
     ) throws {
+        self.handler = handler
         operations.append("tap")
         tapInstallAttempts += 1
         installedTapSampleRates.append(format?.sampleRate ?? 0)
