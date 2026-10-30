@@ -381,6 +381,12 @@ See [docs/dictation-regression.md](docs/dictation-regression.md) for thresholds 
 
 ## Releasing
 
+Every production update must finish with matching version/build in the installed
+app, local and GitHub source, published GitHub DMG, and public Sparkle appcast.
+A local-only production build requires an explicit user exception. Packaging and
+publication are one delivery; verify the live feed and anonymous DMG download
+before reporting completion.
+
 The Sparkle EdDSA private key for signing updates lives only on the Mac mini
 (`AKsMini`). Releases must be cut there, even when development happened on the
 MacBook.
@@ -403,8 +409,7 @@ transcription, and paste log entries before calling the update complete.
 
 ```sh
 # 1. Bump CFBundleShortVersionString + CFBundleVersion in Resources/Info.plist.
-#    These values must be newer than the latest appcast item, even for an
-#    unreleased production deployment; never reuse a public version/build.
+#    Exceed both the latest appcast item and installed version/build.
 # 2. Build + sign DMG
 ./scripts/make-dmg.sh
 .build/artifacts/sparkle/Sparkle/bin/sign_update dist/Vox.dmg

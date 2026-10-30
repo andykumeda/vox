@@ -4,13 +4,18 @@ How to install a newer release of Vox over an existing install.
 
 ## Development production deployments
 
-A development Mac may run an unreleased production deployment for live validation.
-Such a deployment must always use a new `CFBundleShortVersionString` and
-`CFBundleVersion` that are higher/distinct from the latest public appcast item.
-Check `docs/appcast.xml`, `Resources/Info.plist`, and the installed bundle
-before choosing the next identity. Do not reuse any prior public or unreleased
-identity for changed code, and do not add an unreleased build to the public
-appcast. Record the current deployment and its verification in `HANDOFF.md`.
+Production updates finish with the same version/build in the installed app,
+`Resources/Info.plist` on local and GitHub source, the published GitHub release
+DMG, and the public Sparkle feed. A local-only production build requires an
+explicit user exception. Temporary differences during packaging/publication
+must be resolved before handoff; do not report a local install as a completed
+release while Sparkle advertises an older version.
+
+Choose a new `CFBundleShortVersionString` and `CFBundleVersion` newer than both
+the installed app and latest public appcast item. Never reuse a deployed identity
+for changed code. Build/sign on AKsMini, publish the matching DMG and source,
+update the appcast, and verify the live feed and anonymous download as described
+in the README. Record the release and verification in `HANDOFF.md`.
 After `./scripts/build-app.sh`, restart the installed app with:
 
 ```sh

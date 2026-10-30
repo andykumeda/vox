@@ -10,7 +10,7 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
 - Use `rg`/`rg --files` for repo search.
 - Keep edits scoped to the current task. Do not rewrite unrelated release history or stale design docs unless the task needs it.
 - After every change, deploy the resulting state to production before handing it back. For Vox, the standard production deployment is `./scripts/build-app.sh` (which installs `/Applications/Vox.app`) followed by restarting `com.andykumeda.vox` with `launchctl kickstart -k "gui/$(id -u)/com.andykumeda.vox"`; verify the deployed app when the change affects runtime behavior.
-- Every production deployment must have a new, unique bundle identity. Before deploying, bump both `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`; never deploy changed code while reusing the latest published version/build. If the deployment is not being published through Sparkle, label it as an unreleased build in `HANDOFF.md` and keep it distinguishable from the public appcast release.
+- Every production deployment must have a new, unique bundle identity. Before deploying, bump both `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`; never deploy changed code while reusing the latest published version/build. Complete each production deployment as a coordinated release: the installed app, committed local/GitHub source, GitHub release DMG, and public Sparkle feed must agree on version/build before handoff. Local-only production builds require an explicit user exception; a successful local install alone is not completion.
 - Fully document and commit every completed change before handing it back. Record pending manual smoke for paste, remote insertion, TCC, meeting capture, or Sparkle behavior accurately; pending smoke does not waive the commit requirement. Preserve unrelated work and stage only intended changes.
 - Use `git commit --no-gpg-sign`; pinentry is unreliable in non-tty shells on this machine.
 - Stage only intended files. Do not include `.build/`, `dist/`, `.worktrees/`, `tools/`, local logs, credentials, or generated junk.
@@ -46,7 +46,7 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
   from a MacBook clone or Codex Desktop is displaying a remote mini workspace.
 - Self-signed/non-notarized updates can require re-granting Mic, Input
   Monitoring, Accessibility, and Screen Recording permissions.
-- A user-authorized push of Vox changes includes authorization for its required matching Sparkle release; no second approval is required for that delivery. A local-only change still requires documentation, commit, and production deployment, but does not independently authorize a push. Bump `Resources/Info.plist` for every changed production deployment and verify the signed release before publication.
+- A user-authorized push of Vox changes includes authorization for its required matching Sparkle release; no second approval is required for that delivery. A requested production update includes its matching source push and Sparkle release; do not leave a local-only production version ahead of GitHub or Sparkle unless the user explicitly requests that exception. Bump `Resources/Info.plist` for every changed production deployment and verify the signed release before publication.
 
 ## Operational configuration
 
