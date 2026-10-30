@@ -6,6 +6,23 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.81</title>
+            <pubDate>Fri, 30 Oct 2026 17:13:43 GMT</pubDate>
+            <sparkle:version>105</sparkle:version>
+            <sparkle:shortVersionString>0.7.81</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul>
+                    <li>Cancel an empty Fn release during microphone startup without reporting a capture failure.</li>
+                    <li>Keep actual microphone timeouts, conversion failures, and saving failures visible.</li>
+                    <li>Align the installed production app, GitHub release, and Sparkle feed.</li>
+                </ul>
+            ]]></description>
+            <enclosure url="https://github.com/andykumeda/vox/releases/download/v0.7.81/Vox.dmg"
+                sparkle:edSignature="ZN27w7nmZxux6sYSyx9shZ47KkJ3vtt0i59sUKLqw955dzU9cMJk3HuGG5qISCMJ6zGJyiFi6WXZY2Kq/SzJDA==" length="2774940"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.78</title>
             <pubDate>Tue, 27 Oct 2026 01:43:10 +0000</pubDate>
             <sparkle:version>102</sparkle:version>
