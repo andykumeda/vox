@@ -1,5 +1,29 @@
 # Vox Handoff
 
+## Released — aligned production delivery, 0.7.81 build 105 (2026-10-30)
+
+- Installed AKsMini app, local/GitHub Info.plist, GitHub release v0.7.81 and
+  public Sparkle feed now match 0.7.81/105. This publishes the early-Fn-release
+  fix previously deployed locally in 0.7.79/103 and documented in 0.7.80/104.
+- AGENTS, README and UPDATING now require coordinated source/DMG/Sparkle
+  delivery for every production update; local-only production builds require
+  an explicit user exception. No capture/provider/routing code changed here.
+- 526 macOS + 21 VoxCore tests and seven dictation fixtures pass (quality 1.0,
+  failure rate 0.0). Existing Sendable warnings remain. Strict signatures,
+  unchanged designated requirement, DMG checksums, EdDSA against bundled public
+  key, mounted DMG version/build and installed executable equality pass.
+- Mini LaunchAgent restarted as PID 1189; hotkey startup and mic permission
+  pass. Source 99f2ad5 and appcast e346731 pushed. Anonymous public DMG matches
+  SHA-256 `e30eea55ae57e5984e5b5f06d82d4468d1a27674a190fa486c6c39e7248e4ceb`
+  and 2,774,940-byte length. Raw/live feeds match signed enclosure metadata;
+  Pages deployment 41097272279 passed.
+- Second-Mac Sparkle installation, live Fn/paste, USB reconnect cycling, and
+  permission preservation remain manual checks. No new MacBook install is
+  claimed. Unrelated existing handoff/audit/fallback edits are preserved.
+- GitHub source regression 41097193603, Release Gate 41097235396, and
+  appcast regression 41097273830 passed.
+- Ledger: `docs/release-alignment.md`.
+
 ## MacBook capture recovered — unreleased 0.7.80 build 104 (2026-10-27)
 
 - User prioritizes failed dictation after USB-to-built-in input switching. Keep

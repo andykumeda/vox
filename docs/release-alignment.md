@@ -13,7 +13,7 @@ local-only 0.7.79 early-release fix.
 | Align delivery rules | Verified | AGENTS.md, README, and UPDATING require a matching release for each production update unless the user explicitly requests local-only delivery |
 | Tests and package | Verified | 526 macOS + 21 VoxCore tests pass; seven dictation fixtures quality 1.0/failure rate 0.0; DMG checksums, strict codesign and EdDSA against bundled public key pass |
 | Local production install | Deployed | AKsMini installed/restarted 0.7.81/105, PID 1189; hotkey startup and mic permission pass; installed executable matches mounted DMG; prior signing requirement unchanged |
-| GitHub and Sparkle publication | In progress | Push source/tag, publish signed DMG and appcast, verify live feed and anonymous download |
+| GitHub and Sparkle publication | Deployed | Source 99f2ad5 and tag/release v0.7.81 pushed; appcast e346731; public DMG bytes match signed artifact; raw/live feed identity, URL, signature and length match; Pages 41097272279 passed |
 
 Manual checks: actual Sparkle installation on a second Mac, live Fn/paste and USB
 route cycling remain pending. Release verification does not prove those behaviors.
@@ -25,3 +25,8 @@ Final DMG SHA-256: `e30eea55ae57e5984e5b5f06d82d4468d1a27674a190fa486c6c39e7248e
 `06664bd34a1cc8ea3d391bc90320eacda190d5f35bffc88e6e2c2bba2589eaaa`.
 Existing Swift Sendable warnings remain. Initial sandboxed compiler/cache and
 code-signing trust checks required rerunning outside the sandbox; final checks pass.
+
+GitHub verification: source Dictation Regression `41097193603`, tag Release Gate
+`41097235396`, appcast Dictation Regression `41097273830`, and Pages
+`41097272279` all passed. The earlier source-only Pages run was superseded/cancelled
+by the successful appcast deployment.
