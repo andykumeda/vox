@@ -1,12 +1,12 @@
 # Meeting controls and recording retention
 
-**Status: In progress. Authorized: November 4, 2026.** Andy approved implementation
+**Status: Deployed. Authorized: November 4, 2026.** Andy approved implementation
 and the choices below. Playback, audio export and retranscription remain deferred.
 
 | Workstream | Owner | Status | Acceptance criteria | Verification | Release |
 | --- | --- | --- | --- | --- | --- |
-| Meeting control panel | Panel implementer | In progress | Hide/restore without stopping capture; remember dragged position across reopening/restarts; keep controls on an available display. | Four geometry tests pass; live move/hide/restore, screen changes and Spaces smoke pending. | Not deployed |
-| Recording retention | Retention implementer | In progress | Opt-in encrypted source recordings; 7/30/90 days, default 30; expiry from meeting end; apply changes to existing audio; retain available failed/cancelled captures; meeting deletion removes audio. | 569 Swift tests and seven dictation fixtures pass; live Mac smoke pending. | Not deployed |
+| Meeting control panel | Panel implementer | Deployed | Hide/restore without stopping capture; remember dragged position across reopening/restarts; keep controls on an available display. | Four geometry tests pass; live move/hide/restore, screen changes and Spaces smoke pending. | 0.7.84 / 108 |
+| Recording retention | Retention implementer | Deployed | Opt-in encrypted source recordings; 7/30/90 days, default 30; expiry from meeting end; apply changes to existing audio; retain available failed/cancelled captures; meeting deletion removes audio. | 569 Swift tests and seven dictation fixtures pass; live Mac smoke pending. | 0.7.84 / 108 |
 
 ## Approved policy
 
@@ -42,9 +42,22 @@ The default Swift 6.4 build system stalled at SDK stat-cache provisioning; verif
 used SwiftPM's native build system via a temporary wrapper for repository scripts.
 Native UI inspection timed out; no rendered UI or physical recording proof is claimed.
 
-Implementation is not yet released. Record actual test and production evidence here
-and in HANDOFF.md before handoff. The coordinated release must align installed app,
-committed source, signed GitHub DMG and public Sparkle feed on a unique version/build.
+Released [Vox 0.7.84 / 108](https://github.com/andykumeda/vox/releases/tag/v0.7.84).
+Panel commit `917009f`, retention commit `7173b5f`, appcast commit `aa629a9`.
+`build-app.sh` installed the production app; `make-dmg.sh` packaged it on AKsMini.
+The final signed bundle was installed and LaunchAgent restarted (PID 67758).
+Strict codesign, unchanged designated requirement, mounted DMG version/build,
+installed/package executable equality, DMG checksum, bundled-key Ed25519 signature,
+raw/live feed enclosure fields and anonymous public-download equality all pass.
+Startup reports microphone permission, hotkey start and Accessibility trust.
+
+Public DMG: **2,810,622 bytes**, SHA-256
+`53ea60801699210ba630a4ed643f2cea1ebee81a2960d1144c9182b512b515cc`.
+Installed/package executable SHA-256:
+`07792532479723e8e44b898f2e847514d51c4a3f1ff572a42b12210e5f7cfd99`.
+Source, installed bundle, GitHub release and public Sparkle feed agree on 0.7.84 / 108.
+Pages deployment `41910883193`, Release Gate `41910887578` and source Dictation
+Regression `41910883916` passed.
 
 Live checks still required: drag/hide/restore while recording, restart persistence,
 display removal/full-screen/Spaces, a real retained multi-source meeting, settings

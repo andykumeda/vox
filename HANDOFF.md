@@ -14,10 +14,19 @@
 - `swift test --build-system native`: 569 tests pass; seven dictation fixtures pass
   (quality 1.0, failure rate 0.0). Default Swift 6.4 SDK-cache provisioning stalled;
   repository scripts use a temporary native-build wrapper for this release.
-- Production packaging/publication is in progress; no completed deployment claimed.
-  Native UI inspection timed out. Live drag/hide/restore, screen/Spaces changes,
+- Deployed 0.7.84 / 108 on Mini; final signed bundle installed and LaunchAgent
+  restarted (PID 67758). Strict signatures, unchanged designated requirement,
+  mounted DMG identity, installed/package executable equality and Ed25519 against
+  bundled public key pass. Startup reports mic permission, hotkey and Accessibility.
+- Source commits `917009f` / `7173b5f`, appcast `aa629a9` and GitHub release/tag
+  `v0.7.84` are pushed/published. Raw and public Sparkle feeds match version/build,
+  URL, signature and 2,810,622-byte length. Anonymous public DMG matches SHA-256
+  `53ea60801699210ba630a4ed643f2cea1ebee81a2960d1144c9182b512b515cc`.
+  Pages deployment `41910883193`, release gate `41910887578` and source
+  dictation regression `41910883916` passed.
+- Native UI inspection timed out. Live drag/hide/restore, screen/Spaces changes,
   real retained multi-source capture, permission preservation and second-Mac
-  Sparkle installation remain manual checks.
+  Sparkle installation remain manual checks; deployed does not mean live-smoked.
 - Previous 0.7.83 / 107 was documentation-only and published/installed on the Mini.
   MacBook was last recorded on 0.7.82; no new MacBook install is claimed here.
 
