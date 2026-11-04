@@ -1,5 +1,15 @@
 # Vox Handoff
 
+## OpenRouter meeting fix — 0.7.82 / 106 (2026-11-04)
+
+- OpenRouter MAI-Transcribe-2 rejected synthetic M4A with HTTP 400 but accepted
+  equivalent WAV. Meeting audio now converts to mono WAV before upload. Full
+  Swift suite (526 app + 21 core) and seven dictation fixtures pass. See
+  `docs/openrouter-meeting-fix.md` for release state and outstanding live smoke.
+- The MacBook's failed November 4 meeting audio was purged under existing policy;
+  only its encrypted record remained in the session folder. Mini meetings were
+  configured for Deepgram; user reported a successful meeting two days earlier.
+
 ## Released — aligned production delivery, 0.7.81 build 105 (2026-10-30)
 
 - Installed AKsMini app, local/GitHub Info.plist, GitHub release v0.7.81 and

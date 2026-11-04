@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 public enum OpenRouterMeetingError: Error, CustomStringConvertible {
@@ -5,6 +6,7 @@ public enum OpenRouterMeetingError: Error, CustomStringConvertible {
     case invalidResponse
     case httpError(Int)
     case fileTooLarge
+    case audioConversionFailed
 
     public var description: String {
         switch self {
@@ -12,6 +14,7 @@ public enum OpenRouterMeetingError: Error, CustomStringConvertible {
         case .invalidResponse: return "OpenRouter did not return valid timestamped meeting segments. Choose a model supporting verbose_json."
         case .httpError(let status): return "OpenRouter meeting HTTP \(status). Check the key, credits, model, and provider options."
         case .fileTooLarge: return "OpenRouter meeting audio exceeds the 25 MB inline upload limit. Reduce the meeting chunk duration in advanced Settings."
+        case .audioConversionFailed: return "Could not convert meeting audio for OpenRouter."
         }
     }
 }
@@ -37,17 +40,14 @@ public enum OpenRouterMeetingTranscriber {
     ) async throws -> [TranscriptSegment] {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw OpenRouterMeetingError.missingAPIKey }
-        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-        guard (attributes[.size] as? NSNumber)?.intValue ?? 0 <= maxBytes else {
-            throw OpenRouterMeetingError.fileTooLarge
-        }
+        let audio = try wavAudio(fileURL)
         let endpoint = try ServiceConfiguration.url(.openrouterTranscriptionURL)
         let model = try ServiceConfiguration.string(.openrouterMeetingModel)
         let optionsJSON = try ServiceConfiguration.string(.openrouterMeetingProviderOptions)
         let options = try JSONSerialization.jsonObject(with: Data(optionsJSON.utf8))
         let body: [String: Any] = [
             "model": model,
-            "input_audio": ["data": try Data(contentsOf: fileURL).base64EncodedString(), "format": "m4a"],
+            "input_audio": ["data": audio.base64EncodedString(), "format": "wav"],
             "language": try ServiceConfiguration.string(.language),
             "temperature": try ServiceConfiguration.number(.temperature),
             "response_format": "verbose_json",
@@ -83,5 +83,55 @@ public enum OpenRouterMeetingTranscriber {
             return TranscriptSegment(startTime: $0.start + offsetSeconds, endTime: $0.end + offsetSeconds, text: text,
                                      source: source, speakerID: source == .local ? nil : $0.speaker)
         }
+    }
+
+    private static func wavAudio(_ url: URL) throws -> Data {
+        let file = try AVAudioFile(forReading: url)
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true),
+              let converter = AVAudioConverter(from: file.processingFormat, to: format),
+              let input = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 8192),
+              let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8192) else {
+            throw OpenRouterMeetingError.audioConversionFailed
+        }
+        var pcm = Data()
+        var readError: Error?
+        while true {
+            try Task.checkCancellation()
+            var conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { _, state in
+                guard file.framePosition < file.length else {
+                    state.pointee = .endOfStream
+                    return nil
+                }
+                do {
+                    try file.read(into: input)
+                    state.pointee = input.frameLength == 0 ? .endOfStream : .haveData
+                    return input.frameLength == 0 ? nil : input
+                } catch {
+                    readError = error
+                    state.pointee = .endOfStream
+                    return nil
+                }
+            }
+            if let readError { throw readError }
+            if let conversionError { throw conversionError }
+            guard status != .error else { throw OpenRouterMeetingError.audioConversionFailed }
+            if output.frameLength > 0, let samples = output.int16ChannelData?[0] {
+                pcm.append(Data(bytes: samples, count: Int(output.frameLength) * 2))
+                guard pcm.count + 44 <= maxBytes else { throw OpenRouterMeetingError.fileTooLarge }
+            }
+            if status == .endOfStream { break }
+        }
+        guard !pcm.isEmpty else { throw OpenRouterMeetingError.audioConversionFailed }
+        var wav = Data()
+        func word<T: FixedWidthInteger>(_ value: T) {
+            var little = value.littleEndian
+            withUnsafeBytes(of: &little) { wav.append(contentsOf: $0) }
+        }
+        wav.append(contentsOf: "RIFF".utf8); word(UInt32(pcm.count + 36))
+        wav.append(contentsOf: "WAVEfmt ".utf8); word(UInt32(16)); word(UInt16(1)); word(UInt16(1))
+        word(UInt32(16_000)); word(UInt32(32_000)); word(UInt16(2)); word(UInt16(16))
+        wav.append(contentsOf: "data".utf8); word(UInt32(pcm.count)); wav.append(pcm)
+        return wav
     }
 }

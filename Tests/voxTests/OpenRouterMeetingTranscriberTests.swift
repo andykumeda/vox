@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import vox
 
@@ -27,8 +28,19 @@ final class OpenRouterMeetingTranscriberTests: XCTestCase {
 
     private func fixture() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
-        try Data([1, 2, 3]).write(to: url)
+        try writeFixture(url)
         return url
+    }
+
+    private func writeFixture(_ url: URL) throws {
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 48_000))
+        buffer.frameLength = 48_000
+        for channel in 0..<2 {
+            for frame in 0..<48_000 { buffer.floatChannelData![channel][frame] = 0.2 }
+        }
+        let file = try AVAudioFile(forWriting: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 2])
+        try file.write(from: buffer)
     }
 
     func testRequestUsesRouterKeyModelAndTimestampContract() async throws {
@@ -41,7 +53,11 @@ final class OpenRouterMeetingTranscriberTests: XCTestCase {
             XCTAssertEqual(body["model"] as? String, try ServiceConfiguration.string(.openrouterMeetingModel))
             XCTAssertEqual(body["response_format"] as? String, "verbose_json")
             XCTAssertEqual(body["timestamp_granularities"] as? [String], ["segment"])
-            XCTAssertEqual((body["input_audio"] as? [String: String])?["format"], "m4a")
+            let audio = try XCTUnwrap(body["input_audio"] as? [String: String])
+            XCTAssertEqual(audio["format"], "wav")
+            let wav = try XCTUnwrap(Data(base64Encoded: XCTUnwrap(audio["data"])))
+            XCTAssertEqual(String(data: wav.prefix(12), encoding: .ascii), "RIFF\u{24}\u{7d}\0\0WAVE")
+            XCTAssertEqual(wav.count, 32_044)
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (response, Data(#"{"segments":[{"start":1,"end":2,"text":" hello ","speaker":2}]}"#.utf8))
         }
@@ -130,7 +146,7 @@ final class OpenRouterMeetingTranscriberTests: XCTestCase {
         meetingRoots.append(root)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let chunk = root.appendingPathComponent("chunk.m4a")
-        try Data([1, 2, 3]).write(to: chunk)
+        try writeFixture(chunk)
         let transport = URLProtocolStub.makeSession()
         defer { transport.invalidateAndCancel() }
         let session = MeetingTranscriptionSession(

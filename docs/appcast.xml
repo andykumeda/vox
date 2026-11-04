@@ -6,6 +6,19 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.82</title>
+            <pubDate>Wed, 04 Nov 2026 17:25:00 GMT</pubDate>
+            <sparkle:version>106</sparkle:version>
+            <sparkle:shortVersionString>0.7.82</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul><li>Fix OpenRouter meeting transcription failures by converting meeting audio to WAV before upload.</li></ul>
+            ]]></description>
+            <enclosure url="https://github.com/andykumeda/vox/releases/download/v0.7.82/Vox.dmg"
+                sparkle:edSignature="mmNBKM3jUvTIIgLyAxVnsM57Pm5/NmPHSfgjiWyANer4UqJQOtlxp8bXhGkxs0UYdyPKCX810O6VxMpwaU6wBg==" length="2778561"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.81</title>
             <pubDate>Fri, 30 Oct 2026 17:13:43 GMT</pubDate>
             <sparkle:version>105</sparkle:version>
