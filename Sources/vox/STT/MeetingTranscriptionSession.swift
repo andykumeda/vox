@@ -266,7 +266,7 @@ public final class MeetingTranscriptionSession {
                 s.endedAt = Date()
                 s.failureReason = "Recorder start failed: \(error)"
             }
-            try? store.purgeAudio(for: id)
+            store.finalizeAudio(for: id)
             clearSession(ifMatching: id)
             throw SessionError.recorderStartFailed(String(describing: error))
         }
@@ -327,7 +327,7 @@ public final class MeetingTranscriptionSession {
                 s.status = .failed
                 s.failureReason = "Recorder missing during stop"
             }
-            try? store.purgeAudio(for: current.id)
+            store.finalizeAudio(for: current.id)
             clearSession(ifMatching: current.id)
             throw SessionError.notRecording
         }
@@ -393,7 +393,7 @@ public final class MeetingTranscriptionSession {
                 s.failureReason = "System audio: \(sysReason)" +
                     (micFailureReason.map { " | Mic: \($0)" } ?? "")
             }
-            try? store.purgeAudio(for: sid)
+            store.finalizeAudio(for: sid)
             if let systemStopError {
                 clearSession(ifMatching: sid)
                 throw systemStopError
@@ -453,11 +453,7 @@ public final class MeetingTranscriptionSession {
             if let terminal = store.load(id: sessionID)?.status {
                 switch terminal {
                 case .completed, .cancelled, .failed:
-                    do {
-                        try store.purgeAudio(for: sessionID)
-                    } catch {
-                        dlog("Meeting terminal audio cleanup failed id=\(sessionID): \(error)")
-                    }
+                    store.finalizeAudio(for: sessionID)
                 case .recording, .chunking, .transcribing:
                     break
                 }

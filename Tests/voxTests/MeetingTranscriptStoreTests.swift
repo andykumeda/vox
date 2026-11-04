@@ -260,7 +260,7 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         )
     }
 
-    func testStartupSweepPurgesOrphanAudioWithoutDecryptingTranscript() throws {
+    func testStartupRetentionPreservesAudioWhenTranscriptCannotBeRead() throws {
         let id = UUID()
         let directory = store.sessionDirectory(id: id)
         let orphanAudio = directory.appendingPathComponent("mixed.m4a")
@@ -272,9 +272,9 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         try Data("corrupt encrypted transcript".utf8)
             .write(to: store.transcriptFile(id: id))
 
-        XCTAssertEqual(store.purgeAllAudioArtifacts(), 1)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: orphanAudio.path))
-        XCTAssertFalse(
+        XCTAssertEqual(store.applyAudioRetention(), 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphanAudio.path))
+        XCTAssertTrue(
             FileManager.default.fileExists(
                 atPath: directory.appendingPathComponent("chunks-system").path
             )

@@ -202,7 +202,7 @@ Click the menu-bar Vox icon → **Settings**. While Settings is selected, the Vo
 - **Mode override** — `Auto (detect by app)` / `Always prose` / `Always command`. Prose uses symbols for exact prices (`five dollars` → `$5`) while preserving approximate ranges in conventional words (`a few hundred dollars`, not `a few $100`).
 - **Smart cleanup** — opt-in LLM cleanup using the configured provider and model adjusts punctuation and capitalization in prose while preserving every dictated word. Prose formatting joins an STT-inserted `. And …` as `, and …` and removes a leading `And` before a full sentence; cleanup rejects any new sentence-initial “And” or semicolon. If the model adds, removes, or repeats wording, Vox discards that cleanup and uses the pre-cleanup transcription, preventing lost words and preventing questions or requests from becoming assistant answers. An explicit `scratch that, …` after an unfinished phrase replaces only that phrase back to the nearest clause boundary—even when the speech pause is transcribed as a comma, dash, or ellipsis—while the established sentence context remains. Personalization → **Custom Instructions** can use the inline `cleanup-profile.md` fallback or a linked Markdown file that is read fresh and sent to the configured cleanup provider with each eligible dictation. Bypassed by verbatim modifier or "verbatim"/"literal" prefix word.
 - **Meeting mode** — enable the meeting panel and Screen Recording capture. Includes a consent acknowledgement (you must inform participants before recording).
-- **Recordings storage** — audio is temporary and deleted after dictation or meeting processing reaches a terminal state. A startup sweep removes crash leftovers.
+- **Recordings storage** — dictation audio stays temporary. Meeting audio is temporary by default; opt in to encrypted local meeting recordings for 7, 30 (default), or 90 days. Changes apply to existing recordings. See the meeting retention policy below.
 - **Microphone** — choose **System Default** or pin Vox to a specific input device. A pinned device is selected by its persistent Core Audio UID and kept as macOS's default input while Vox runs, including across output changes and device reconnects. Vox also binds it before every dictation; if it is disconnected, Vox temporarily uses the built-in microphone and shows a notice in the menu and tooltip. Settings updates automatically and shows the active built-in microphone as “automatic” in the Input picker while the preferred microphone is unplugged. Vox remembers the preferred microphone for automatic return when it reconnects. The preferred selection is preserved and restored when it reconnects. If a USB microphone returns with a changed port-dependent UID, Vox recognizes a single available input with the same manufacturer, model, and audio interface. Multiple matching inputs require choosing the intended microphone again. If no built-in microphone is available, recording fails safely. If another app leaves that microphone's writable macOS input level below 70%, Vox restores it to 75% before recording. Devices without a software volume control are left untouched.
 - **Dictation history** — encrypted raw STT and final delivered text, with a **Raw vs final** disclosure when the texts differ and retention choices (forever / 1y / 90d / 30d). Prose transcription asks the STT provider for literal, non-interpretive speech; punctuation and formatting are handled afterward.
 - **Writing-voice skill export** — Personalization → Custom Instructions exports an import-ready `SKILL.md` for Codex, Claude, or another instruction-aware app. It infers style from attributable raw dictation transcripts before cleanup, while using final text only for raw-vs-final cleanup patterns. It does not embed transcript bodies or treat remote meeting participants as the user's voice. Users who already have a writing-voice skill can simply link it instead. About 100 prose dictations gives a rough first pass; roughly 500 dictations or 10,000–15,000 words across varied contexts is the recommended target for a relatively accurate guide.
@@ -241,6 +241,7 @@ A replacement that ends with one of these words fires that key after pasting:
 
 Enable **Meeting Transcription (Beta) → Enable Meeting Mode** in Settings and acknowledge participant consent before recording. Vox transcribes meetings by capturing **system audio** (Zoom/Meet/etc, via ScreenCaptureKit) and your **local mic** in parallel.
 
+- Drag the meeting panel background to move it; its position survives reopening and restarts and is kept on an available display. The minus button hides it while recording continues. Restore it with the meeting hotkey or **Meeting** menu.
 - Press the meeting hotkey (default `⌃⌥⇧M`) to toggle the floating panel. Pick **Meeting** from the menu bar or select the **Meeting** section in the Vox window to open the Meeting view and bring the floating panel forward.
 - Click the green **Record** disc to start. Click the red **Stop** square to end.
 - Closing the panel with `X` only hides the UI — recording continues. Re-open the panel via hotkey or menu to see the running timer or stop.
@@ -249,7 +250,9 @@ Enable **Meeting Transcription (Beta) → Enable Meeting Mode** in Settings and 
   - **OpenAI Whisper** — mic and system streams are chunked, transcribed independently, and tagged `You` (mic) vs `Other` (system). No within-stream speaker separation.
   - **OpenRouter** — uses the saved OpenRouter key and a separately configured meeting model (`openrouterMeetingModel`, default `microsoft/mai-transcribe-2`). Mic and system audio use timestamped chunks labeled `You` and `Other`. Audio is converted to mono WAV for the transcription request; unusually long chunks can exceed the upload limit. Optional provider options can enable speaker labels; identities remain scoped to each chunk and cannot be matched across chunks. Models without structured timestamps fail explicitly. Requests never switch providers after a failure.
   Provider is selectable in Settings → Meeting Transcription (Beta). OpenRouter uses the `openrouter-api-key` Keychain item; Deepgram uses `deepgram-api-key`. Under **API and service configuration**, set `openrouterMeetingModel`, optional JSON `openrouterMeetingProviderOptions`, and the estimated `openrouterMeetingUSDPerHour`. Save service configuration before starting a new meeting.
-- Meeting audio is temporary and deleted after transcription and optional summarization finish. Raw provider segments, final displayed segments, and summaries remain in authenticated encrypted transcript files.
+- Meeting audio is temporary by default. Settings → **Recordings storage** → **Retain encrypted meeting recordings** keeps original system, microphone and Phone/FaceTime streams locally for **7 / 30 / 90 days**, with **30 days** selected initially. Failed/cancelled captures are included when source files exist. Upload chunks are discarded. Raw provider segments, final displayed segments, and summaries remain in authenticated encrypted transcript files.
+- Recording expiry counts from meeting end (start time for older records without an end). Policy changes apply to existing audio; turning retention off purges eligible audio at the next check. Checks run at launch, activation, wake, day changes, after processing and during storage refresh. Active recordings/processing are protected; deleting a completed meeting also deletes its audio.
+- Retained source audio uses authenticated block encryption with the existing Keychain history key. Capture/upload files are temporarily unencrypted. Encryption/deletion failures preserve files for retry and appear as meeting warnings and Settings storage errors. If metadata is corrupt or Keychain is unavailable, audio is preserved until access is restored. Previously purged audio cannot be recovered. Playback, audio export and retranscription remain unavailable.
 - Select a saved meeting to use **Copy Transcript** for clipboard-ready plain text, or **Export…** to save plain or timestamped text.
 - The transcript browser exposes a raw-provider comparison when filtering or cleanup changed the delivered meeting transcript. Re-transcription from retained audio is intentionally unavailable.
 - Meeting silence handling does not guarantee that silent streams are skipped before upload. The optional Phone/FaceTime loopback track is currently consumed only by the Deepgram path; the OpenAI path uses the mic and system tracks.
@@ -295,7 +298,7 @@ Remote desktop apps need special paste handling. When Vox is running on the Mac 
 ## Privacy and local data
 
 Dictation audio is sent to OpenAI directly, or through OpenRouter to OpenAI when OpenRouter is selected. Meeting audio is sent to the selected OpenAI
-or Deepgram provider; optional summaries send meeting text to the configured summary provider. Smart
+or Deepgram provider (including OpenRouter when selected); optional summaries send meeting text to the configured summary provider. Smart
 Cleanup sends the processed dictation, dictionary guidance, and active style
 instructions to the configured cleanup provider. Both text services follow the dictation provider by default. Local history encryption does not change provider
 processing or retention.
@@ -312,7 +315,7 @@ text is readable by whichever application receives it.
 - Smart cleanup profile fallback: `~/Library/Application Support/Vox/cleanup-profile.md`; a user-selected external Markdown file can replace it while linked. If the linked file is unreadable, Vox uses the inline fallback. Linked files must be UTF-8 and no larger than 256 KB.
 - Encrypted dictation history: `~/Library/Application Support/Vox/DictationHistory/history.enc`
 - Temporary dictation recordings: `~/Library/Application Support/Vox/Recordings/` (empty after terminal processing/startup recovery)
-- Encrypted meeting transcripts: `~/Library/Application Support/Vox/MeetingTranscripts/<id>/transcript.enc` (audio is temporary)
+- Encrypted meeting transcripts: `~/Library/Application Support/Vox/MeetingTranscripts/<id>/transcript.enc`; opted-in source recordings use `audio.m4a.enc`, `mic.m4a.enc` and `phone.m4a.enc` alongside it
 - Logs: `~/Library/Logs/vox.log`
 
 ## Log file
@@ -473,7 +476,7 @@ without frames still reports a microphone failure.
 `captureHealthTimeout` defaults to 2 seconds in the shared service configuration
 (valid range 0.25–30 seconds). Settings → advanced service controls or
 `VOX_CAPTURE_HEALTH_TIMEOUT` can override it; environment overrides saved settings.
-Quiet frames count as healthy capture. Recording audio remains ephemeral.
+Quiet frames count as healthy capture. Dictation audio remains temporary; meeting audio follows the opt-in recording retention policy above.
 
 Meeting microphone capture stays continuous during quiet periods. Available
 sources are transcribed if another source fails, including Phone/FaceTime for

@@ -22,9 +22,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let transcriptStore = MeetingTranscriptStore()
         transcriptStore.recoverInFlightSessions()
         let dictDeleted = RecordingArchive.purgeOlderThan(.distantFuture)
-        let meetingDeleted = transcriptStore.purgeAllAudioArtifacts()
-        if dictDeleted > 0 || meetingDeleted > 0 {
-            dlog("privacy audio sweep: dictation=\(dictDeleted) meeting=\(meetingDeleted)")
+        Task.detached(priority: .utility) { transcriptStore.applyAudioRetention() }
+        if dictDeleted > 0 { dlog("privacy audio sweep: dictation=\(dictDeleted)") }
+        for name in [Notification.Name.NSCalendarDayChanged, NSApplication.didBecomeActiveNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                Task.detached(priority: .utility) { MeetingTranscriptStore().applyAudioRetention() }
+            }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { _ in
+            Task.detached(priority: .utility) { MeetingTranscriptStore().applyAudioRetention() }
         }
         menuController.start()
         try? CleanupProfileStore.shared.ensureFileExists()

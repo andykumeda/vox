@@ -1,18 +1,25 @@
 # Vox Handoff
 
-## Deferred meeting controls and retention (2026-11-04)
+## Meeting controls and retention — 0.7.84 / 108 (2026-11-04)
 
-- Andy requested movable/minimizable meeting controls and configurable meeting
-  recording retention with a 30-day default, for a later date TBD. Neither is
-  authorized for implementation yet. See `docs/deferred-meeting-controls-and-retention.md`.
-- `AGENTS.md` requires future agents to review and call out that deferred work
-  before other repository work. Resolve the document's privacy and UX decisions
-  with Andy when implementation is requested.
-- Documentation-only 0.7.83 / 107 was built, committed, published and installed
-  on the Mini; public feed advertises 0.7.83 and the downloaded signed DMG matches
-  SHA-256 `4699983a1e009ed229ad3d8d13afc40f16137eec7759244f31b6df064b1f164b`.
-  Deferred-document assertions, XML validation, signature and bundle checks pass;
-  no feature or runtime behavior was implemented. MacBook remains on 0.7.82.
+- Implementation authorized November 4: hide/restore meeting controls with remembered
+  dragged position; opt-in encrypted meeting recordings for 7/30/90 days, default 30.
+  Existing installs stay opted out. Policy changes apply to existing audio; active
+  captures/processing are protected. Audio export, playback and retranscription remain
+  deferred. See `docs/deferred-meeting-controls-and-retention.md` for exact policy.
+- All four terminal cleanup paths and startup now share the retention policy.
+  Original system/mic/Phone streams are encrypted in verified authenticated blocks;
+  chunks/conversions are discarded. Metadata/encryption/deletion failures preserve
+  audio for retry and are disclosed in meeting warnings/Settings.
+- `swift test --build-system native`: 569 tests pass; seven dictation fixtures pass
+  (quality 1.0, failure rate 0.0). Default Swift 6.4 SDK-cache provisioning stalled;
+  repository scripts use a temporary native-build wrapper for this release.
+- Production packaging/publication is in progress; no completed deployment claimed.
+  Native UI inspection timed out. Live drag/hide/restore, screen/Spaces changes,
+  real retained multi-source capture, permission preservation and second-Mac
+  Sparkle installation remain manual checks.
+- Previous 0.7.83 / 107 was documentation-only and published/installed on the Mini.
+  MacBook was last recorded on 0.7.82; no new MacBook install is claimed here.
 
 ## OpenRouter meeting fix — 0.7.82 / 106 (2026-11-04)
 

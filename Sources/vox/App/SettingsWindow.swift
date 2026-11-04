@@ -81,6 +81,9 @@ struct SettingsView: View {
     @State private var meetingBackendStatus: MeetingBackendStatus = MeetingPreflight.backendStatusProvider()
     @State private var model: TranscriptionModel = AppSettings.transcriptionModel
     @State private var totals: UsageTotals = UsageTracker.totals()
+    @State private var retainMeetingRecordings = AppSettings.retainMeetingRecordings
+    @State private var meetingRecordingRetentionDays = AppSettings.meetingRecordingRetentionDays
+    @State private var recordingMaintenanceMessage: String?
     @State private var storageUsageLine = "Calculating disk usage…"
     @State private var isRefreshingStorageUsage = false
     let keychain: KeychainStore
@@ -372,7 +375,39 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Recordings storage")
                     .font(.headline)
-                Text("Audio is temporary. Dictation and meeting recordings are deleted when processing finishes, fails, or is cancelled. Dictation history follows the retention setting below; meeting transcripts stay until you delete them.")
+                Toggle("Retain encrypted meeting recordings", isOn: Binding(
+                    get: { retainMeetingRecordings },
+                    set: { value in
+                        retainMeetingRecordings = value
+                        AppSettings.retainMeetingRecordings = value
+                        Task { await refreshStorageUsage() }
+                    }
+                ))
+                Picker("Keep meeting recordings for", selection: Binding(
+                    get: { meetingRecordingRetentionDays },
+                    set: { value in
+                        meetingRecordingRetentionDays = value
+                        AppSettings.meetingRecordingRetentionDays = value
+                        Task { await refreshStorageUsage() }
+                    }
+                )) {
+                    ForEach(MeetingRecordingRetentionDays.allCases, id: \.self) { days in
+                        Text(days.displayName).tag(days)
+                    }
+                }
+                .disabled(!retainMeetingRecordings)
+                Text(retainMeetingRecordings
+                     ? "Meeting source recordings are encrypted locally after processing, including failed or cancelled meetings. They expire \(meetingRecordingRetentionDays.rawValue) days after meeting end. Expiry is checked at launch, activation, wake, day changes and after processing. Changes apply to existing recordings. Deleting a meeting also deletes its audio."
+                     : "Meeting audio is deleted when processing finishes, fails or is cancelled. Turning retention off deletes existing retained audio at the next check. Active recordings are preserved until processing ends.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Capture and upload files are temporarily unencrypted. If encryption or deletion fails, files are preserved for retry and a warning appears in the meeting. Playback, audio export and retranscription are not available. Dictation audio remains temporary; meeting transcripts stay until deleted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let recordingMaintenanceMessage {
+                    Text(recordingMaintenanceMessage).font(.caption).foregroundStyle(.orange)
+                }
+                Text("Previously deleted recordings cannot be restored.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 6) {
@@ -687,10 +722,14 @@ struct SettingsView: View {
 
     @MainActor
     private func refreshStorageUsage() async {
-        guard !isRefreshingStorageUsage else { return }
+        // Every policy change must get its own cleanup pass, even during a refresh.
         isRefreshingStorageUsage = true
         defer { isRefreshingStorageUsage = false }
 
+        let failures = await Task.detached(priority: .utility) {
+            MeetingTranscriptStore().applyAudioRetention()
+        }.value
+        recordingMaintenanceMessage = failures == 0 ? nil : "Audio could not be maintained for \(failures) meeting(s). Files were preserved; check disk access and Keychain, then Refresh."
         let usage = await RecordingStorageUsage.load()
         guard !Task.isCancelled else { return }
         storageUsageLine = usage.formatted()

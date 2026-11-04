@@ -91,6 +91,7 @@ public final class MeetingTranscriptStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let keyProvider: () throws -> Data
+    private let retention: () -> MeetingRecordingRetention
 
     /// Default location: ~/Library/Application Support/Vox/MeetingTranscripts
     public static func defaultRoot() -> URL {
@@ -105,16 +106,19 @@ public final class MeetingTranscriptStore {
     public convenience init(rootDirectory: URL = MeetingTranscriptStore.defaultRoot()) {
         self.init(
             rootDirectory: rootDirectory,
-            keyProvider: { try TranscriptEncryptionKeyStore.shared.loadOrCreate() }
+            keyProvider: { try TranscriptEncryptionKeyStore.shared.loadOrCreate() },
+            retention: { AppSettings.meetingRecordingRetention }
         )
     }
 
     init(
         rootDirectory: URL,
-        keyProvider: @escaping () throws -> Data
+        keyProvider: @escaping () throws -> Data,
+        retention: @escaping () -> MeetingRecordingRetention = { .init(enabled: false, days: .defaultValue) }
     ) {
         self.rootDirectory = rootDirectory
         self.keyProvider = keyProvider
+        self.retention = retention
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -280,55 +284,108 @@ public final class MeetingTranscriptStore {
 
     public func delete(id: UUID) throws {
         try withOperationLock {
+            guard let session = loadWithoutLock(id: id) else { throw AudioRetentionError.unreadableSession }
+            guard Self.isTerminal(session.status) else { throw AudioRetentionError.activeSession }
             try FileManager.default.removeItem(at: sessionDirectory(id: id))
         }
         NotificationCenter.default.post(name: .meetingTranscriptStoreDidChange, object: nil)
     }
 
-    public func purgeAudio(for id: UUID) throws {
-        let fileManager = FileManager.default
-        for url in m4aFiles(in: sessionDirectory(id: id)) {
-            try fileManager.removeItem(at: url)
-        }
-        // chunk dirs are also raw audio; drop them along with the source files.
-        for dir in [chunksDirectory(id: id),
-                    chunksDirectory(id: id, source: .local),
-                    chunksDirectory(id: id, source: .remote)] {
-            if fileManager.fileExists(atPath: dir.path) {
-                try fileManager.removeItem(at: dir)
+    enum AudioRetentionError: LocalizedError {
+        case activeSession, unreadableSession
+        var errorDescription: String? {
+            switch self {
+            case .activeSession: return "Stop the meeting and wait for processing before deleting its recordings."
+            case .unreadableSession: return "Meeting metadata could not be read. Audio was preserved; check Keychain and disk access."
             }
         }
-        _ = try updateIfPresent(
-            id: id,
-            matching: { _ in true },
-            mutate: { $0.audioRetained = false }
-        )
     }
 
-    /// Startup privacy sweep independent of transcript decryption. A new app
-    /// process has no live meeting jobs, so audio found under any session
-    /// directory is terminal/orphaned even when its transcript is corrupt or
-    /// its Keychain key is temporarily unavailable.
-    @discardableResult
-    public func purgeAllAudioArtifacts() -> Int {
-        guard let directories = try? FileManager.default.contentsOfDirectory(
-            at: rootDirectory,
-            includingPropertiesForKeys: [.isDirectoryKey]
-        ) else { return 0 }
-        var purged = 0
-        for directory in directories {
-            guard (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
-                  hasAudioArtifacts(in: directory) else { continue }
-            purgeAudioArtifacts(in: directory)
-            if !hasAudioArtifacts(in: directory) { purged += 1 }
+    private static func isTerminal(_ status: TranscriptSession.Status) -> Bool {
+        [.completed, .cancelled, .failed].contains(status)
+    }
+
+    public func purgeAudio(for id: UUID) throws {
+        try withOperationLock {
+            guard let session = loadWithoutLock(id: id) else { throw AudioRetentionError.unreadableSession }
+            guard Self.isTerminal(session.status) else { throw AudioRetentionError.activeSession }
+            try removeAudioArtifacts(in: sessionDirectory(id: id), includingArchives: true)
+            _ = try updateIfPresent(id: id, matching: { _ in true }) { $0.audioRetained = false }
         }
-        return purged
+    }
+
+    /// Called only after every recorder and upload has stopped using the files.
+    func finishAudio(for id: UUID, now: Date = Date()) throws {
+        try withOperationLock {
+            guard let session = loadWithoutLock(id: id) else { throw AudioRetentionError.unreadableSession }
+            guard Self.isTerminal(session.status) else { return }
+            let policy = retention()
+            guard policy.enabled, policy.expiry(for: session) > now else {
+                try purgeAudio(for: id)
+                return
+            }
+            let directory = sessionDirectory(id: id)
+            // Keep original source streams, never duplicate upload chunks or conversions.
+            for source in [audioFile(id: id), micFile(id: id), phoneFile(id: id)] {
+                guard FileManager.default.fileExists(atPath: source.path),
+                      (try source.resourceValues(forKeys: [.fileSizeKey])).fileSize != 0 else { continue }
+                try MeetingAudioArchive.encrypt(source: source, destination: source.appendingPathExtension("enc"), key: keyProvider())
+            }
+            // All sources must be encrypted and verified before removing any plaintext.
+            try removeAudioArtifacts(in: directory, includingArchives: false)
+            let retained = audioArtifactFiles(in: directory).contains { $0.pathExtension == "enc" }
+            _ = try updateIfPresent(id: id, matching: { Self.isTerminal($0.status) }) { $0.audioRetained = retained }
+        }
+    }
+
+    private static let retentionWarning = "Recording storage cleanup failed. Temporary audio may remain unencrypted. Vox will retry when it next checks retention; check disk access and Keychain."
+
+    /// Fail visibly without deleting the only usable copy of a recording.
+    @discardableResult
+    func finalizeAudio(for id: UUID, now: Date = Date()) -> Bool {
+        do {
+            try finishAudio(for: id, now: now)
+            _ = try updateIfPresent(id: id, matching: { $0.captureWarnings.contains(Self.retentionWarning) }) {
+                $0.captureWarnings.removeAll { $0 == Self.retentionWarning }
+            }
+            return true
+        } catch {
+            dlog("Meeting recording maintenance failed id=\(id): \(error)")
+            _ = try? updateIfPresent(id: id, matching: { !$0.captureWarnings.contains(Self.retentionWarning) }) {
+                $0.captureWarnings.append(Self.retentionWarning)
+            }
+            return false
+        }
+    }
+
+    /// Only terminal sessions are eligible; unreadable metadata is preserved.
+    /// Startup recovery runs first, after the previous process's capture has ended.
+    @discardableResult
+    func applyAudioRetention(now: Date = Date()) -> Int {
+        guard let directories = try? FileManager.default.contentsOfDirectory(
+            at: rootDirectory, includingPropertiesForKeys: [.isDirectoryKey]
+        ) else { return 0 }
+        var failures = 0
+        for directory in directories {
+            guard let id = UUID(uuidString: directory.lastPathComponent),
+                  (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+            guard let session = load(id: id) else {
+                if hasAudioArtifacts(in: directory) {
+                    failures += 1
+                    dlog("Meeting recording metadata unavailable; preserving audio id=\(id)")
+                }
+                continue
+            }
+            guard Self.isTerminal(session.status), hasAudioArtifacts(in: directory) || session.audioRetained else { continue }
+            if !finalizeAudio(for: id, now: now) { failures += 1 }
+        }
+        return failures
     }
 
     /// Total bytes of all meeting audio artifacts under the transcript root.
     public func audioDiskBytes() -> UInt64 {
         var total: UInt64 = 0
-        for url in m4aFiles(in: rootDirectory) {
+        for url in audioArtifactFiles(in: rootDirectory) {
             guard
                 let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
                 let size = values.fileSize,
@@ -340,28 +397,24 @@ public final class MeetingTranscriptStore {
     }
 
     private func hasAudioArtifacts(in directory: URL) -> Bool {
-        if !m4aFiles(in: directory).isEmpty {
-            return true
-        }
-        return ["chunks", "chunks-mic", "chunks-system"].contains {
-            FileManager.default.fileExists(
-                atPath: directory.appendingPathComponent($0, isDirectory: true).path
-            )
+        !audioArtifactFiles(in: directory).isEmpty || ["chunks", "chunks-mic", "chunks-system"].contains {
+            FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path)
         }
     }
 
-    private func purgeAudioArtifacts(in directory: URL) {
+    private func removeAudioArtifacts(in directory: URL, includingArchives: Bool) throws {
         let fileManager = FileManager.default
-        for url in m4aFiles(in: directory) { try? fileManager.removeItem(at: url) }
+        for url in audioArtifactFiles(in: directory) {
+            if !includingArchives, url.pathExtension == "enc" { continue }
+            try fileManager.removeItem(at: url)
+        }
         for name in ["chunks", "chunks-mic", "chunks-system"] {
             let url = directory.appendingPathComponent(name, isDirectory: true)
-            if fileManager.fileExists(atPath: url.path) {
-                try? fileManager.removeItem(at: url)
-            }
+            if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) }
         }
     }
 
-    private func m4aFiles(in directory: URL) -> [URL] {
+    private func audioArtifactFiles(in directory: URL) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -370,7 +423,9 @@ public final class MeetingTranscriptStore {
 
         var files: [URL] = []
         for case let url as URL in enumerator {
-            guard url.pathExtension.caseInsensitiveCompare("m4a") == .orderedSame else {
+            let name = url.lastPathComponent.lowercased()
+            guard ["m4a", "wav"].contains(url.pathExtension.lowercased()) || name.hasSuffix(".m4a.enc") ||
+                  (name.hasPrefix(".audio-") && name.hasSuffix(".candidate")) else {
                 continue
             }
             guard

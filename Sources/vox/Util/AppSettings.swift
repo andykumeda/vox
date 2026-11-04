@@ -89,7 +89,39 @@ public enum ModeOverride: String, CaseIterable, Sendable {
     }
 }
 
+enum MeetingRecordingRetentionDays: Int, CaseIterable, Sendable {
+    case seven = 7, thirty = 30, ninety = 90
+    static let defaultValue: Self = .thirty
+    var displayName: String { "\(rawValue) days" }
+}
+
+struct MeetingRecordingRetention: Equatable, Sendable {
+    var enabled: Bool
+    var days: MeetingRecordingRetentionDays
+
+    func expiry(for session: TranscriptSession) -> Date {
+        (session.endedAt ?? session.startedAt).addingTimeInterval(Double(days.rawValue) * 24 * 60 * 60)
+    }
+}
+
 enum AppSettings {
+    static var retainMeetingRecordings: Bool {
+        get { UserDefaults.standard.bool(forKey: "retainMeetingRecordings") }
+        set { UserDefaults.standard.set(newValue, forKey: "retainMeetingRecordings") }
+    }
+
+    static var meetingRecordingRetentionDays: MeetingRecordingRetentionDays {
+        get {
+            MeetingRecordingRetentionDays(rawValue: UserDefaults.standard.integer(forKey: "meetingRecordingRetentionDays"))
+                ?? .defaultValue
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "meetingRecordingRetentionDays") }
+    }
+
+    static var meetingRecordingRetention: MeetingRecordingRetention {
+        MeetingRecordingRetention(enabled: retainMeetingRecordings, days: meetingRecordingRetentionDays)
+    }
+
     private static let audioInputDeviceUIDKey = "audioInputDeviceUID"
     private static let keepKey = "keepTranscriptionOnClipboard"
     private static let remoteControlModeKey = "remoteControlModeEnabled"

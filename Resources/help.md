@@ -73,16 +73,29 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   section in the Vox window to open the Meeting view and bring the panel
   forward.
 - Click the **green Record disc** to start the session. Click the **red Stop square** to end it.
-- Closing the panel with the `X` only hides the UI — recording continues.
-  Re-open the panel via hotkey or menu to see the running timer or stop.
+- Drag the panel background to move it. Vox remembers its position across reopening
+  and restarts, keeping it on an available display. The minus button hides controls
+  while recording continues. Restore them via the meeting hotkey or Meeting menu.
 - Choose the provider under Settings → **Meeting Transcription (Beta)**. Deepgram Nova-3 uses a Deepgram API key, transcribes each captured source separately, and labels your microphone as You and remote voices with anonymous speaker labels; OpenAI Whisper uses your OpenAI key and separates your microphone (You) from system audio (Other). OpenRouter uses your saved OpenRouter key with a separate meeting model (default `microsoft/mai-transcribe-2`), converting meeting chunks to mono WAV for upload. Change `openrouterMeetingModel` under **API and service configuration** and click **Save service configuration**. The model must return timestamps. Optional JSON `openrouterMeetingProviderOptions` can enable speaker labels, which remain scoped to each chunk rather than identifying the same person throughout a meeting.
 - When you click Stop, Vox transcribes via the configured meeting provider,
   interleaves segments by time, and opens the transcript browser.
 - Select a saved meeting and click **Copy Transcript** to put its plain-text
   transcript on the clipboard. Use **Export…** to save plain or timestamped text.
-- Meeting audio is temporary and deleted after transcription and optional
-  summarization finish. Raw provider segments, final displayed segments, and
-  summaries are retained in authenticated encrypted transcript files.
+- Meeting audio is temporary by default. Under Settings → **Recordings storage**,
+  enable **Retain encrypted meeting recordings** to keep system, mic and Phone/FaceTime
+  source recordings for **7 / 30 / 90 days** (default **30 days**). Failed/cancelled
+  recordings are included when source files exist; upload chunks are discarded.
+- Expiry counts from meeting end (start for older records without an end). Changes
+  apply to existing recordings; turning retention off deletes eligible audio at the
+  next check. Checks run at launch, activation, wake, day changes, after processing
+  and storage refresh. Active recording/processing is protected. Deleting a completed
+  meeting deletes its recordings too. Previously deleted audio cannot be recovered.
+- Recordings are encrypted locally with the Keychain history key after processing;
+  capture/upload files are temporarily unencrypted. Encryption/deletion failures
+  preserve files for retry and produce a meeting warning and Settings storage error.
+  Unreadable metadata preserves audio until disk/Keychain access is restored.
+  Playback, audio export and retranscription remain unavailable. Raw provider segments,
+  final displayed segments and summaries remain in encrypted transcript files.
 
 ### Permissions for Meetings
 

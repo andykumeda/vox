@@ -112,7 +112,7 @@ private final class MeetingTranscriptsModel: ObservableObject {
     func delete(_ id: UUID) {
         let alert = NSAlert()
         alert.messageText = "Delete this transcript?"
-        alert.informativeText = "This permanently removes the saved transcript and summary."
+        alert.informativeText = "This permanently removes the saved transcript, summary and any retained recordings."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
@@ -200,6 +200,7 @@ struct MeetingTranscriptsView: View {
                         Button("Timestamped Text") { model.export(s, format: .timestamped) }
                     }
                     Button("Delete") { model.delete(s.id) }
+                        .disabled([.recording, .chunking, .transcribing].contains(s.status))
                 }.padding()
                 Divider()
                 if !s.captureWarnings.isEmpty {

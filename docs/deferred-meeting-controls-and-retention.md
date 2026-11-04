@@ -1,57 +1,51 @@
-# Deferred: meeting controls and recording retention
+# Meeting controls and recording retention
 
-**Status: Not started. Timing: TBD.** Andy requested this document on November 4,
-2026, for implementation at a later date. Do not implement these items merely
-because an agent reads this document. At the start of future repository work,
-review this document and call out these deferred requests and their status to
-Andy before proceeding with the new task. Work on them when Andy explicitly asks.
+**Status: In progress. Authorized: November 4, 2026.** Andy approved implementation
+and the choices below. Playback, audio export and retranscription remain deferred.
 
-| Workstream | Owner | Status | Acceptance criteria | Dependencies and verification | Release |
+| Workstream | Owner | Status | Acceptance criteria | Verification | Release |
 | --- | --- | --- | --- | --- | --- |
-| Meeting control panel | Future implementer | Not started | Allow the meeting control popup to be minimized or moved, while recording continues and controls remain readily accessible. Confirm the intended behavior with Andy if the current hide behavior already satisfies the minimize request. | Inspect `Sources/vox/App/MeetingHUDPanel.swift` and callers; verify moving, hiding/restoring, active recording, screen changes and full-screen/Spaces behavior on a Mac. | Not deployed |
-| Recording retention | Future implementer | Not started | Add a setting to retain meeting recordings and configure when they may be purged, with a **30-day default retention period**. Clearly show the setting and effective policy. | Resolve the decisions below before implementation. Review capture, store, cleanup, startup recovery and settings; use focused tests plus a live Mac verification. | Not deployed |
+| Meeting control panel | Panel implementer | In progress | Hide/restore without stopping capture; remember dragged position across reopening/restarts; keep controls on an available display. | Four geometry tests pass; live move/hide/restore, screen changes and Spaces smoke pending. | Not deployed |
+| Recording retention | Retention implementer | In progress | Opt-in encrypted source recordings; 7/30/90 days, default 30; expiry from meeting end; apply changes to existing audio; retain available failed/cancelled captures; meeting deletion removes audio. | 569 Swift tests and seven dictation fixtures pass; live Mac smoke pending. | Not deployed |
 
-## Current behavior and scope
+## Approved policy
 
-- `MeetingHUDPanel` has a close/hide action that does not stop a meeting, and
-  configures the panel as movable by its background. It recreates and positions
-  the panel near the menu bar on show. Actual usability and position persistence
-  need verification; don't assume a drag setting alone meets the request.
-- Meeting audio is currently temporary and is purged when processing completes,
-  fails or is cancelled, and by a startup privacy sweep. Meeting transcripts are
-  encrypted separately and remain until deleted. Review all `purgeAudio` and
-  `purgeAllAudioArtifacts` callers, including failed-start and recovery paths.
-- This request concerns **meeting recordings**, not dictation history or
-  transcript retention. Previously purged recordings cannot be restored by a
-  new setting. Avoid changing existing data or privacy behavior before the
-  implementation is authorized and the decisions below are resolved.
+- Existing and new installs keep temporary meeting audio unless retention is enabled.
+- Settings → Recordings storage exposes the toggle, duration and effective policy.
+- Retain original system, microphone and Phone/FaceTime source streams locally;
+  upload chunks and derived audio remain temporary. Dictation retention is unchanged.
+- Count 24-hour days from meeting end (fall back to start for old records lacking
+  an end). Changes apply to existing recordings. Disabling retention purges eligible
+  existing audio at the next check; active recording/processing remains protected.
+- Check expiry at launch, activation, wake, calendar day changes, after processing,
+  and when Settings refreshes storage. Sleeping or stopped apps clean up on return.
+- Each source is encrypted in bounded-memory authenticated ordered blocks using
+  the existing Keychain history key. Verify the complete candidate before replacing
+  an archive; remove plaintext only after every source has been encrypted successfully.
+  Capture/upload files are temporarily unencrypted, as before.
+- Preserve files on encryption/deletion failure and retry at the next check. Meeting
+  warnings and Settings report maintenance failures. Unreadable/corrupt transcript
+  metadata preserves audio, including during startup; check disk and Keychain access.
+- Startup first marks interrupted sessions failed, then applies retention. Previously
+  purged recordings cannot be recovered. Meeting deletion removes encrypted audio
+  and transcript together; deletion is unavailable during recording/processing.
+- Playback, audio export, retranscription, custom durations and never-purge are deferred.
 
-## Decisions to resolve with Andy before implementation
+## Verification and delivery
 
-1. Is recording retention enabled by default, or opt-in with 30 days as the
-   default duration once enabled? How should existing installations migrate?
-2. Which duration choices or custom values are wanted, and should there be a
-   never-purge option? Define when the retention clock starts and whether a
-   changed policy applies to existing recordings.
-3. Should failed and cancelled meetings retain any usable recordings, and which
-   source streams should be retained? Define manual deletion, meeting deletion,
-   startup recovery, disk-space reporting, storage protection/encryption and
-   behavior if retention or deletion fails. Preserve active recordings.
-4. Is playback, export, or retranscription of retained recordings wanted? Those
-   features are not authorized by this planning request and must not be assumed.
-5. For the panel, clarify whether minimize means hide with a clear way to restore,
-   a compact state, or a standard Dock-minimized window; confirm whether moved
-   positions should persist across reopening, app restarts and display changes.
+`swift test --build-system native`: **569 tests pass**, zero failures. Archive tests
+cover tampering, ordering, truncation, cross-archive splicing and key errors. Store
+checks cover defaults, exact expiry, changes, active protection, all source streams,
+startup recovery, failures, deletion and a full mocked meeting lifecycle. The required
+dictation regression script passes seven fixtures, quality 1.0 / failure rate 0.0.
+The default Swift 6.4 build system stalled at SDK stat-cache provisioning; verification
+used SwiftPM's native build system via a temporary wrapper for repository scripts.
+Native UI inspection timed out; no rendered UI or physical recording proof is claimed.
 
-## Implementation and verification notes
+Implementation is not yet released. Record actual test and production evidence here
+and in HANDOFF.md before handoff. The coordinated release must align installed app,
+committed source, signed GitHub DMG and public Sparkle feed on a unique version/build.
 
-Use the existing settings and meeting-store patterns; make deletion explicit,
-bounded, and testable. Do not allow the startup sweep to erase eligible retained
-audio or a timer to delete an active/in-progress capture. Account for corrupt or
-inaccessible transcript metadata without silently deleting retained audio. Test
-the default, policy changes, expiry boundaries, failures, restart recovery,
-individual meeting deletion, and all recorded source streams. Verify that audio
-retention and purging are accurately disclosed in Settings, Help and README.
-Document actual tests, deployment and any remaining live checks in `HANDOFF.md`
-and this ledger when work is eventually authorized. Follow the repository's
-coordinated release procedure for implementation.
+Live checks still required: drag/hide/restore while recording, restart persistence,
+display removal/full-screen/Spaces, a real retained multi-source meeting, settings
+policy changes, permission preservation and second-Mac Sparkle installation.
