@@ -1,5 +1,14 @@
 # Vox Handoff
 
+## Deferred meeting controls and retention (2026-11-04)
+
+- Andy requested movable/minimizable meeting controls and configurable meeting
+  recording retention with a 30-day default, for a later date TBD. Neither is
+  authorized for implementation yet. See `docs/deferred-meeting-controls-and-retention.md`.
+- `AGENTS.md` requires future agents to review and call out that deferred work
+  before other repository work. Resolve the document's privacy and UX decisions
+  with Andy when implementation is requested.
+
 ## OpenRouter meeting fix — 0.7.82 / 106 (2026-11-04)
 
 - OpenRouter MAI-Transcribe-2 rejected synthetic M4A with HTTP 400 but accepted

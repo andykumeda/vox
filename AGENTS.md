@@ -6,7 +6,8 @@ Vox is a macOS Swift package/app for push-to-talk dictation and meeting transcri
 
 ## Workflow
 
-- Read `HANDOFF.md` first when picking up work; it carries operational state and release caveats that may not belong in `README.md`.
+- Before doing any other repository work, read `docs/deferred-meeting-controls-and-retention.md` and explicitly call out its deferred requests and current status to the user. This reminder does not authorize implementation; leave the requests deferred until the user asks to proceed.
+- Then read `HANDOFF.md` before other repository work; it carries operational state and release caveats that may not belong in `README.md`.
 - Use `rg`/`rg --files` for repo search.
 - Keep edits scoped to the current task. Do not rewrite unrelated release history or stale design docs unless the task needs it.
 - After every change, deploy the resulting state to production before handing it back. For Vox, the standard production deployment is `./scripts/build-app.sh` (which installs `/Applications/Vox.app`) followed by restarting `com.andykumeda.vox` with `launchctl kickstart -k "gui/$(id -u)/com.andykumeda.vox"`; verify the deployed app when the change affects runtime behavior.
