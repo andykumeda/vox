@@ -6,13 +6,21 @@ import SwiftUI
 /// itself is started/stopped only when the user clicks Record/Stop in the
 /// panel.
 @MainActor
-public final class MeetingHUDPanel {
+public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
     public static let shared = MeetingHUDPanel()
 
     private var panel: NSPanel?
     private var isVisible = false
 
-    private init() {}
+    private static let positionKey = "meetingHUDPosition"
+
+    private override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screensChanged),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil
+        )
+    }
 
     /// Toggle panel visibility. If the meeting session is recording when
     /// the panel is hidden, the recording continues — the panel is purely
@@ -22,8 +30,10 @@ public final class MeetingHUDPanel {
     }
 
     public func show() {
-        if isVisible, let panel = panel {
+        if let panel {
+            keepOnScreen(panel)
             panel.orderFrontRegardless()
+            isVisible = true
             return
         }
 
@@ -78,7 +88,17 @@ public final class MeetingHUDPanel {
         p.backgroundColor = .clear
         p.hasShadow = true
         p.contentView = hosting
-        positionNearMenuBar(p)
+        p.delegate = self
+        let saved = UserDefaults.standard.array(forKey: Self.positionKey) as? [Double]
+        if let saved, saved.count == 2, saved.allSatisfy({ $0.isFinite }) {
+            p.setFrameOrigin(NSPoint(x: saved[0], y: saved[1]))
+        } else if let screen = NSScreen.main {
+            p.setFrameOrigin(NSPoint(
+                x: screen.visibleFrame.maxX - p.frame.width - 12,
+                y: screen.visibleFrame.maxY - p.frame.height - 12
+            ))
+        }
+        keepOnScreen(p)
         p.orderFrontRegardless()
         self.panel = p
         self.isVisible = true
@@ -86,18 +106,35 @@ public final class MeetingHUDPanel {
 
     public func hide() {
         panel?.orderOut(nil)
-        panel = nil
         isVisible = false
     }
 
-    private func positionNearMenuBar(_ panel: NSPanel) {
-        guard let screen = NSScreen.main else { return }
-        let inset: CGFloat = 12
-        let menuBarHeight: CGFloat = 24
-        let frame = panel.frame
-        let x = screen.frame.maxX - frame.width - inset
-        let y = screen.frame.maxY - frame.height - menuBarHeight - inset
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+    public func windowDidMove(_ notification: Notification) {
+        guard let panel = notification.object as? NSPanel else { return }
+        UserDefaults.standard.set(
+            [Double(panel.frame.minX), Double(panel.frame.minY)], forKey: Self.positionKey
+        )
+    }
+
+    @objc private func screensChanged() {
+        if let panel { keepOnScreen(panel) }
+    }
+
+    private func keepOnScreen(_ panel: NSPanel) {
+        let screens = NSScreen.screens.map(\.visibleFrame)
+        panel.setFrameOrigin(Self.visibleOrigin(for: panel.frame, screens: screens))
+    }
+
+    nonisolated static func visibleOrigin(for frame: NSRect, screens: [NSRect]) -> NSPoint {
+        guard let screen = screens.max(by: {
+            let a = $0.intersection(frame)
+            let b = $1.intersection(frame)
+            return (a.isNull ? 0 : a.width * a.height) < (b.isNull ? 0 : b.width * b.height)
+        }) else { return frame.origin }
+        return NSPoint(
+            x: min(max(frame.minX, screen.minX), max(screen.minX, screen.maxX - frame.width)),
+            y: min(max(frame.minY, screen.minY), max(screen.minY, screen.maxY - frame.height))
+        )
     }
 }
 
@@ -129,14 +166,16 @@ struct MeetingHUDView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 6) {
                     Button(action: onClose) {
-                        Image(systemName: "xmark.circle.fill")
+                        Image(systemName: "minus.circle.fill")
                             .imageScale(.medium)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("Hide panel (recording continues if active)")
+                    .accessibilityLabel("Minimize meeting controls")
+                    .help("Hide controls; recording continues. Restore from the Meeting menu or meeting hotkey.")
                     Text("Meeting")
                         .font(.system(size: 13, weight: .semibold))
+                        .help("Drag the background to move meeting controls")
                 }
 
                 HStack(spacing: 12) {
