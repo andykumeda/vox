@@ -8,6 +8,11 @@
 - `AGENTS.md` requires future agents to review and call out that deferred work
   before other repository work. Resolve the document's privacy and UX decisions
   with Andy when implementation is requested.
+- Documentation-only 0.7.83 / 107 was built, committed, published and installed
+  on the Mini; public feed advertises 0.7.83 and the downloaded signed DMG matches
+  SHA-256 `4699983a1e009ed229ad3d8d13afc40f16137eec7759244f31b6df064b1f164b`.
+  Deferred-document assertions, XML validation, signature and bundle checks pass;
+  no feature or runtime behavior was implemented. MacBook remains on 0.7.82.
 
 ## OpenRouter meeting fix — 0.7.82 / 106 (2026-11-04)
 
