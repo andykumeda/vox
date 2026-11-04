@@ -6,6 +6,10 @@
   equivalent WAV. Meeting audio now converts to mono WAV before upload. Full
   Swift suite (526 app + 21 core) and seven dictation fixtures pass. See
   `docs/openrouter-meeting-fix.md` for release state and outstanding live smoke.
+- Mini and MacBook run 0.7.82 / 106 from the signed public DMG; both reported
+  microphone permission and hotkey startup. GitHub release is published, but
+  Pages run 41877845128 is queued and the public feed still advertises 0.7.81.
+  Confirm the public feed and CI; a real MacBook meeting remains unverified.
 - The MacBook's failed November 4 meeting audio was purged under existing policy;
   only its encrypted record remained in the session folder. Mini meetings were
   configured for Deepgram; user reported a successful meeting two days earlier.
