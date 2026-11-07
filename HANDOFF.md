@@ -1,5 +1,15 @@
 # Vox Handoff
 
+## Startup resource fix — 0.7.85 / 109 (2026-11-06)
+
+- Fixed the packaged SwiftPM service resource lookup that crashed 0.7.84 on the
+  MacBook. The Mini's build-tree resource had masked the defect.
+- 570 Swift tests and seven dictation fixtures pass. Signed 0.7.85 is installed
+  on both Macs; MacBook startup, microphone permission and hotkey initialization
+  pass with the temporary build-tree workaround removed. Spoken dictation and
+  paste remain manual checks. Source `6407bfe` and GitHub release published;
+  public Sparkle propagation verification is pending. See `docs/startup-resource-fix.md`.
+
 ## Meeting controls and retention — 0.7.84 / 108 (2026-11-04)
 
 - Implementation authorized November 4: hide/restore meeting controls with remembered
