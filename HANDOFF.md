@@ -7,8 +7,9 @@
 - 570 Swift tests and seven dictation fixtures pass. Signed 0.7.85 is installed
   on both Macs; MacBook startup, microphone permission and hotkey initialization
   pass with the temporary build-tree workaround removed. Spoken dictation and
-  paste remain manual checks. Source `6407bfe` and GitHub release published;
-  public Sparkle propagation verification is pending. See `docs/startup-resource-fix.md`.
+  paste remain manual checks. Source `6407bfe`, GitHub release and public Sparkle
+  feed agree; Pages run `42329427351` passed. The public DMG hash and Sparkle
+  signature verify. See `docs/startup-resource-fix.md`.
 
 ## Meeting controls and retention — 0.7.84 / 108 (2026-11-04)
 
