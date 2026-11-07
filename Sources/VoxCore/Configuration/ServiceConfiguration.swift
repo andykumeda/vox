@@ -99,10 +99,14 @@ public enum ServiceConfiguration {
         public var errorDescription: String? { "Invalid service setting: \(key.rawValue). Check Settings or \(key.environmentName)." }
     }
 
+    static func packagedDefaultsURL(in bundle: Bundle) -> URL? {
+        bundle.url(forResource: "service-defaults", withExtension: "json", subdirectory: "vox_VoxCore.bundle")
+    }
+
     private static let defaults: [String: String] = {
         // A missing packaged resource is a build defect, never a reason to
         // silently route private content to a different service.
-        guard let url = Bundle.module.url(forResource: "service-defaults", withExtension: "json"),
+        guard let url = packagedDefaultsURL(in: .main) ?? Bundle.module.url(forResource: "service-defaults", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let values = try? JSONDecoder().decode([String: String].self, from: data)
         else { preconditionFailure("Missing service-defaults.json") }

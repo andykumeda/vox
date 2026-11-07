@@ -2,6 +2,17 @@ import XCTest
 @testable import VoxCore
 
 final class ServiceConfigurationTests: XCTestCase {
+    func testFindsDefaultsInsidePackagedApp() throws {
+        let app = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID()).app")
+        let resources = app.appendingPathComponent("Contents/Resources/vox_VoxCore.bundle")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: app) }
+        let expected = resources.appendingPathComponent("service-defaults.json")
+        try Data("{}".utf8).write(to: expected)
+        let bundle = try XCTUnwrap(Bundle(url: app))
+        XCTAssertEqual(ServiceConfiguration.packagedDefaultsURL(in: bundle)?.standardizedFileURL, expected.standardizedFileURL)
+    }
+
     func testEveryDefaultIsPresentAndValid() throws {
         for key in ServiceConfiguration.Key.allCases {
             try ServiceConfiguration.validate(ServiceConfiguration.defaultValue(key), for: key)
