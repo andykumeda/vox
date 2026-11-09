@@ -68,15 +68,18 @@ policy changes, permission preservation and second-Mac Sparkle installation.
 
 | Work | Status | Acceptance and verification |
 | --- | --- | --- |
-| Native panel | Deployed | AppKit title bar with close, minimize and zoom. The installed Mini window displayed all three controls and minimizing removed it from view. Automation did not establish title-bar movement or restore after minimize. A real recording through close/restore and display/Spaces behavior remain manual checks. |
+| Native panel | Deployed | AppKit title bar with close, minimize and zoom. The installed Mini window displayed all three controls and minimizing removed it from view. A live title-bar drag moved the panel and updated its saved position. Restore after minimize, close during live capture, and display/Spaces behavior remain manual checks. |
 | Post-meeting hang | Deployed | A Mini process sample showed audio cleanup holding the transcript lock while synchronous notification delivery waited for the main thread. The UI was waiting to read that same store. Restart recovered the process. Cleanup now publishes changes after unlocking, and the regression verifies that an observer can read the updated store before notification delivery returns. |
 
 Vox 0.7.86 / 110 is installed on the Mini and available via Sparkle. Panel
 commit `38661f8`, store commit `b9a7c02` and release commit `edcda5a`.
 The restarted LaunchAgent reported microphone permission, hotkey initialization
 and Accessibility trust. A post-install sample showed an idle AppKit event loop.
-A real post-meeting completion with the new build and a second-Mac update remain
-unverified.
+A 46-second synthetic meeting reached Done on the Mini. The encrypted transcript
+contained the synthetic speech, temporary audio was removed, and Vox remained
+responsive with the same process running. A second-Mac update remains unverified.
+The close handler hides the panel and leaves recording running. Use Stop to end
+capture.
 
 All 571 local Swift tests and seven dictation regression fixtures passed using the
 native SwiftPM build system. Hosted Release Gate `42719049828` and Dictation

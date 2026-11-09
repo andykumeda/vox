@@ -3,16 +3,18 @@
 ## Native Meeting panel and Mini hang fix — 0.7.86 / 110 (2026-11-09)
 
 - Native Meeting title bar and macOS window buttons. All three buttons rendered
-  on the Mini and minimizing removed the panel from view. Live drag, restore,
-  display/Spaces behavior and recording continuity remain manual checks.
+  on the Mini. Dragging moved the panel and saved its new position. Minimize
+  removed it from view. Restore, display/Spaces behavior and closing during live
+  capture remain manual checks. The close handler only hides the panel.
 - Restart recovered the stuck Mini. The sample showed transcript-store lock
   contention caused by synchronous notification delivery while cleanup held the
   lock. Cleanup now notifies after unlocking. The regression tests observer reads.
 - All 571 local Swift tests and seven dictation fixtures pass. Hosted Release Gate
   and Dictation Regression jobs were canceled because GitHub rejected the macOS
   runner. Pages passed. The Mini runs the signed public 0.7.86 build, and the public
-  Sparkle feed, DMG and installed executable match. Real meeting completion and
-  second-Mac installation remain unverified. See
+  Sparkle feed, DMG and installed executable match. A 46-second synthetic meeting
+  reached Done, saved its encrypted transcript and removed temporary audio. Vox
+  stayed responsive without a restart. Second-Mac installation remains unverified. See
   `docs/deferred-meeting-controls-and-retention.md`.
 
 ## Startup resource fix — 0.7.85 / 109 (2026-11-06)
