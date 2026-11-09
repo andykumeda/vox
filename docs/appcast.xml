@@ -6,6 +6,19 @@
         <description>Updates for Vox — push-to-talk dictation for macOS.</description>
         <language>en</language>
         <item>
+            <title>Vox 0.7.86</title>
+            <pubDate>Mon, 09 Nov 2026 23:16:01 GMT</pubDate>
+            <sparkle:version>110</sparkle:version>
+            <sparkle:shortVersionString>0.7.86</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <ul><li>Drag the Meeting panel by its native title bar and use standard macOS window buttons.</li><li>Fix a hang when meeting audio cleanup and the transcript view waited for each other.</li></ul>
+            ]]></description>
+            <enclosure url="https://github.com/andykumeda/vox/releases/download/v0.7.86/Vox.dmg"
+                sparkle:edSignature="Gor0NG67aRH4+36z4MrxsL/HmKUBLUzvoQYJdxpLr7vW+LXCZ8DG59xFMjpPMYzAXqfbzm89g/FQjlmEKfkZCg==" length="2799733"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Vox 0.7.85</title>
             <pubDate>Sat, 07 Nov 2026 02:27:01 GMT</pubDate>
             <sparkle:version>109</sparkle:version>
