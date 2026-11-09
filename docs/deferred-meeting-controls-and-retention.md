@@ -62,3 +62,28 @@ Regression `41910883916` passed.
 Live checks still required: drag/hide/restore while recording, restart persistence,
 display removal/full-screen/Spaces, a real retained multi-source meeting, settings
 policy changes, permission preservation and second-Mac Sparkle installation.
+
+
+## Native controls and Mini hang follow-up (2026-11-09)
+
+| Work | Status | Acceptance and verification |
+| --- | --- | --- |
+| Native panel | Deployed | AppKit title bar with close, minimize and zoom. The installed Mini window displayed all three controls and minimizing removed it from view. Automation did not establish title-bar movement or restore after minimize. A real recording through close/restore and display/Spaces behavior remain manual checks. |
+| Post-meeting hang | Deployed | A Mini process sample showed audio cleanup holding the transcript lock while synchronous notification delivery waited for the main thread. The UI was waiting to read that same store. Restart recovered the process. Cleanup now publishes changes after unlocking, and the regression verifies that an observer can read the updated store before notification delivery returns. |
+
+Vox 0.7.86 / 110 is installed on the Mini and available via Sparkle. Panel
+commit `38661f8`, store commit `b9a7c02` and release commit `edcda5a`.
+The restarted LaunchAgent reported microphone permission, hotkey initialization
+and Accessibility trust. A post-install sample showed an idle AppKit event loop.
+A real post-meeting completion with the new build and a second-Mac update remain
+unverified.
+
+All 571 local Swift tests and seven dictation regression fixtures passed using the
+native SwiftPM build system. Hosted Release Gate `42719049828` and Dictation
+Regression `42719049755` were canceled before execution because GitHub rejected
+the configured `macos-14-arm64-us-default` runner. Pages `42719048323` passed.
+
+The public DMG matches the installed executable and passed strict signing,
+version/build, checksum and bundled-key Ed25519 checks. The live feed matches
+the signed enclosure URL, signature and 2,799,733-byte length. DMG SHA-256
+`199a6ce0a29e54ade574c0abc1d37534775ba41aaeba0c81082b940e24255c64`.
