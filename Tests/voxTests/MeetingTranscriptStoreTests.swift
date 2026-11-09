@@ -284,6 +284,29 @@ final class MeetingTranscriptStoreTests: XCTestCase {
         )
     }
 
+    func testAudioCleanupReleasesStoreLockBeforeNotifyingObservers() throws {
+        let session = makeSession(status: .completed, audioRetained: true)
+        try store.save(session)
+        let store = try XCTUnwrap(store)
+        let notified = expectation(description: "cleanup notification delivered")
+        let observer = NotificationCenter.default.addObserver(
+            forName: .meetingTranscriptStoreDidChange, object: nil, queue: nil
+        ) { _ in
+            let readFinished = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async {
+                XCTAssertEqual(store.load(id: session.id)?.audioRetained, false)
+                readFinished.signal()
+            }
+            XCTAssertEqual(readFinished.wait(timeout: .now() + 2), .success)
+            notified.fulfill()
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        try store.finishAudio(for: session.id)
+        wait(for: [notified], timeout: 2)
+        XCTAssertEqual(store.load(id: session.id)?.audioRetained, false)
+    }
+
     func testConditionalUpdateCannotResurrectAConcurrentlyDeletedSession() throws {
         let session = makeSession(status: .completed)
         try store.save(session)

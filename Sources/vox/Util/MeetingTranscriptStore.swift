@@ -306,35 +306,41 @@ public final class MeetingTranscriptStore {
     }
 
     public func purgeAudio(for id: UUID) throws {
-        try withOperationLock {
-            guard let session = loadWithoutLock(id: id) else { throw AudioRetentionError.unreadableSession }
-            guard Self.isTerminal(session.status) else { throw AudioRetentionError.activeSession }
-            try removeAudioArtifacts(in: sessionDirectory(id: id), includingArchives: true)
-            _ = try updateIfPresent(id: id, matching: { _ in true }) { $0.audioRetained = false }
-        }
+        try maintainAudio(for: id, policy: nil, now: Date())
     }
 
     /// Called only after every recorder and upload has stopped using the files.
     func finishAudio(for id: UUID, now: Date = Date()) throws {
-        try withOperationLock {
-            guard let session = loadWithoutLock(id: id) else { throw AudioRetentionError.unreadableSession }
-            guard Self.isTerminal(session.status) else { return }
-            let policy = retention()
-            guard policy.enabled, policy.expiry(for: session) > now else {
-                try purgeAudio(for: id)
-                return
+        try maintainAudio(for: id, policy: retention(), now: now)
+    }
+
+    private func maintainAudio(for id: UUID, policy: MeetingRecordingRetention?, now: Date) throws {
+        let changed = try withOperationLock {
+            guard var session = loadWithoutLock(id: id) else { throw AudioRetentionError.unreadableSession }
+            guard Self.isTerminal(session.status) else {
+                if policy == nil { throw AudioRetentionError.activeSession }
+                return false
             }
+            let retain = policy.map { $0.enabled && $0.expiry(for: session) > now } ?? false
             let directory = sessionDirectory(id: id)
-            // Keep original source streams, never duplicate upload chunks or conversions.
-            for source in [audioFile(id: id), micFile(id: id), phoneFile(id: id)] {
-                guard FileManager.default.fileExists(atPath: source.path),
-                      (try source.resourceValues(forKeys: [.fileSizeKey])).fileSize != 0 else { continue }
-                try MeetingAudioArchive.encrypt(source: source, destination: source.appendingPathExtension("enc"), key: keyProvider())
+            if retain {
+                for source in [audioFile(id: id), micFile(id: id), phoneFile(id: id)] {
+                    guard FileManager.default.fileExists(atPath: source.path),
+                          (try source.resourceValues(forKeys: [.fileSizeKey])).fileSize != 0 else { continue }
+                    try MeetingAudioArchive.encrypt(source: source, destination: source.appendingPathExtension("enc"), key: keyProvider())
+                }
             }
-            // All sources must be encrypted and verified before removing any plaintext.
-            try removeAudioArtifacts(in: directory, includingArchives: false)
-            let retained = audioArtifactFiles(in: directory).contains { $0.pathExtension == "enc" }
-            _ = try updateIfPresent(id: id, matching: { Self.isTerminal($0.status) }) { $0.audioRetained = retained }
+            // Remove plaintext only after all sources have been encrypted and verified.
+            try removeAudioArtifacts(in: directory, includingArchives: !retain)
+            let retained = retain && audioArtifactFiles(in: directory).contains { $0.pathExtension == "enc" }
+            guard session.audioRetained != retained else { return false }
+            session.audioRetained = retained
+            try saveWithoutNotification(session)
+            return true
+        }
+        // Observers may synchronously wait for the main thread to read this store.
+        if changed {
+            NotificationCenter.default.post(name: .meetingTranscriptStoreDidChange, object: nil)
         }
     }
 
