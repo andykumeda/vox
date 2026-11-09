@@ -10,7 +10,6 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
     public static let shared = MeetingHUDPanel()
 
     private var panel: NSPanel?
-    private var isVisible = false
 
     private static let positionKey = "meetingHUDPosition"
 
@@ -26,14 +25,18 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
     /// the panel is hidden, the recording continues — the panel is purely
     /// a UI surface, not the session lifecycle.
     public func toggle() {
-        if isVisible { hide() } else { show() }
+        if let panel, panel.isVisible && !panel.isMiniaturized {
+            hide()
+        } else {
+            show()
+        }
     }
 
     public func show() {
         if let panel {
+            if panel.isMiniaturized { panel.deminiaturize(nil) }
             keepOnScreen(panel)
             panel.orderFrontRegardless()
-            isVisible = true
             return
         }
 
@@ -63,30 +66,27 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
                     // the just-finished meeting without an extra step.
                     MeetingTranscriptsWindow.shared.show()
                 }
-            },
-            onClose: { [weak self] in
-                self?.hide()
             }
         )
         let hosting = NSHostingView(rootView: view)
-        hosting.frame = NSRect(x: 0, y: 0, width: 270, height: 95)
+        hosting.frame = NSRect(x: 0, y: 0, width: 270, height: 54)
 
         let p = NSPanel(
             contentRect: hosting.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
+        p.title = "Meeting"
+        p.isReleasedWhenClosed = false
+        p.contentMinSize = hosting.frame.size
+        p.tabbingMode = .disallowed
         p.level = .statusBar
         p.isFloatingPanel = true
         p.hidesOnDeactivate = false
-        p.isMovableByWindowBackground = true
         // Follow the user across Spaces and into full-screen apps so the
         // recording controls stay reachable no matter which desktop is active.
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        p.isOpaque = false
-        p.backgroundColor = .clear
-        p.hasShadow = true
         p.contentView = hosting
         p.delegate = self
         let saved = UserDefaults.standard.array(forKey: Self.positionKey) as? [Double]
@@ -101,12 +101,15 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
         keepOnScreen(p)
         p.orderFrontRegardless()
         self.panel = p
-        self.isVisible = true
     }
 
     public func hide() {
         panel?.orderOut(nil)
-        isVisible = false
+    }
+
+    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        return false
     }
 
     public func windowDidMove(_ notification: Notification) {
@@ -142,7 +145,6 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
 struct MeetingHUDView: View {
     let onStart: () -> Void
     let onStop: () -> Void
-    let onClose: () -> Void
 
     var body: some View {
         // TimelineView re-evaluates its content every 0.5s, which re-reads
@@ -163,46 +165,25 @@ struct MeetingHUDView: View {
         }()
 
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 6) {
-                    Button(action: onClose) {
-                        Image(systemName: "minus.circle.fill")
-                            .imageScale(.medium)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Minimize meeting controls")
-                    .help("Hide controls; recording continues. Restore from the Meeting menu or meeting hotkey.")
-                    Text("Meeting")
-                        .font(.system(size: 13, weight: .semibold))
-                        .help("Drag the background to move meeting controls")
-                }
-
-                HStack(spacing: 12) {
-                    // Solid green Record disc. Stays prominently green even
-                    // while a recording is in progress (just dimmed slightly
-                    // and disabled) so the control's affordance is visible.
-                    Button(action: onStart) {
-                        Circle()
-                            .fill(isActive ? Color.green.opacity(0.45) : Color.green)
-                            .frame(width: 30, height: 30)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isActive)
-                    .help(isActive ? "Already recording" : "Start recording")
-
-                    // Solid red Stop square. Faintly red when idle so the
-                    // affordance reads as a button, fully red when armed.
-                    Button(action: onStop) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(isRecording ? Color.red : Color.red.opacity(0.45))
-                            .frame(width: 30, height: 30)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!isRecording)
-                    .help(isRecording ? "Stop recording" : "Not recording")
-                }
+            Button(action: onStart) {
+                Circle()
+                    .fill(isActive ? Color.green.opacity(0.45) : Color.green)
+                    .frame(width: 30, height: 30)
             }
+            .buttonStyle(.plain)
+            .disabled(isActive)
+            .accessibilityLabel("Start recording")
+            .help(isActive ? "Already recording" : "Start recording")
+
+            Button(action: onStop) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isRecording ? Color.red : Color.red.opacity(0.45))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .disabled(!isRecording)
+            .accessibilityLabel("Stop recording")
+            .help(isRecording ? "Stop recording" : "Not recording")
 
             Spacer(minLength: 4)
 
@@ -216,17 +197,8 @@ struct MeetingHUDView: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isRecording ? Color.red.opacity(0.6) : Color.gray.opacity(0.4), lineWidth: 1)
-        )
     }
 
     private func statusLabel(isActive: Bool) -> String {

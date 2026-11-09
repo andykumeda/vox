@@ -241,10 +241,10 @@ A replacement that ends with one of these words fires that key after pasting:
 
 Enable **Meeting Transcription (Beta) → Enable Meeting Mode** in Settings and acknowledge participant consent before recording. Vox transcribes meetings by capturing **system audio** (Zoom/Meet/etc, via ScreenCaptureKit) and your **local mic** in parallel.
 
-- Drag the meeting panel background to move it; its position survives reopening and restarts and is kept on an available display. The minus button hides it while recording continues. Restore it with the meeting hotkey or **Meeting** menu.
+- Drag the meeting panel by its title bar. Vox remembers its position across reopening and restarts and keeps it on an available display.
 - Press the meeting hotkey (default `⌃⌥⇧M`) to toggle the floating panel. Pick **Meeting** from the menu bar or select the **Meeting** section in the Vox window to open the Meeting view and bring the floating panel forward.
 - Click the green **Record** disc to start. Click the red **Stop** square to end.
-- Closing the panel with `X` only hides the UI — recording continues. Re-open the panel via hotkey or menu to see the running timer or stop.
+- Close or minimize the panel with the macOS window buttons while recording continues. Reopen it with the meeting hotkey or **Meeting** menu to see the timer or stop.
 - On Stop, Vox transcribes via the configured provider:
   - **Deepgram Nova-3 (default if a Deepgram key is set)** — each captured source is submitted in a separate whole-meeting request and the resulting segments are aligned on the meeting timeline. The microphone is labeled `You`; diarization within the system and optional Phone/FaceTime streams produces anonymous `Speaker` labels. Vox preserves separate speaker-ID ranges for those remote sources.
   - **OpenAI Whisper** — mic and system streams are chunked, transcribed independently, and tagged `You` (mic) vs `Other` (system). No within-stream speaker separation.

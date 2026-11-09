@@ -73,9 +73,10 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   section in the Vox window to open the Meeting view and bring the panel
   forward.
 - Click the **green Record disc** to start the session. Click the **red Stop square** to end it.
-- Drag the panel background to move it. Vox remembers its position across reopening
-  and restarts, keeping it on an available display. The minus button hides controls
-  while recording continues. Restore them via the meeting hotkey or Meeting menu.
+- Drag the panel by its title bar. Vox remembers its position across reopening and
+  restarts and keeps it on an available display. Close or minimize it with the macOS
+  window buttons while recording continues. Reopen it with the meeting hotkey or
+  **Meeting** menu.
 - Choose the provider under Settings → **Meeting Transcription (Beta)**. Deepgram Nova-3 uses a Deepgram API key, transcribes each captured source separately, and labels your microphone as You and remote voices with anonymous speaker labels; OpenAI Whisper uses your OpenAI key and separates your microphone (You) from system audio (Other). OpenRouter uses your saved OpenRouter key with a separate meeting model (default `microsoft/mai-transcribe-2`), converting meeting chunks to mono WAV for upload. Change `openrouterMeetingModel` under **API and service configuration** and click **Save service configuration**. The model must return timestamps. Optional JSON `openrouterMeetingProviderOptions` can enable speaker labels, which remain scoped to each chunk rather than identifying the same person throughout a meeting.
 - When you click Stop, Vox transcribes via the configured meeting provider,
   interleaves segments by time, and opens the transcript browser.
