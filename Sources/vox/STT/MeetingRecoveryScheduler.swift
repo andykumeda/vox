@@ -62,7 +62,7 @@ final class MeetingRecoveryScheduler {
                 let description = String(describing: error)
                 _ = try? store.updateIfPresent(id: item.id,
                     matching: { $0.status == .failed || ($0.status == .completed && !MeetingTranscriptStore.hasConfirmedTranscript($0)) },
-                    mutate: { $0.status = .failed; $0.failureReason = "Automatic recovery needs attention: " + description })
+                    mutate: { $0.status = .failed; MeetingTranscriptionSession.setRecoveryNotice("Needs attention: " + description, in: &$0) })
             }
         }
     }

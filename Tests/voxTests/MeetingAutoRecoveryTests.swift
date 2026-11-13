@@ -70,6 +70,7 @@ final class MeetingAutoRecoveryTests: XCTestCase {
         XCTAssertEqual(saved.segments, old.segments)
         XCTAssertEqual(saved.rawSegments, old.rawSegments)
         XCTAssertEqual(saved.summary, old.summary)
+        XCTAssertEqual(saved.failureReason, old.failureReason)
         XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
         try MeetingAudioArchive.verify(archive: archive, key: key)
     }

@@ -79,6 +79,20 @@ final class MeetingRecoverySchedulerTests: XCTestCase {
     }
 
     @MainActor
+    func testUnavailableRecoveryKeepsOriginalFailureReason() async throws {
+        let (id, _) = try failedMeeting()
+        var record = try XCTUnwrap(store.load(id: id))
+        record.sourceAvailability = nil
+        try store.save(record)
+        let session = pipeline { _, _, _ in XCTFail("Missing manifest must not upload"); return [] }
+        let scheduler = MeetingRecoveryScheduler(session: session, store: store, interval: { 3600 }, now: { 100 })
+        await scheduler.sweep()
+        let saved = try XCTUnwrap(store.load(id: id))
+        XCTAssertEqual(saved.failureReason, "Provider unavailable")
+        XCTAssertTrue(saved.captureWarnings.contains { $0.contains("Automatic recovery:") })
+    }
+
+    @MainActor
     func testSweepDoesNotInterruptActiveRecording() async throws {
         let (id, archive) = try failedMeeting()
         let attempts = AtomicInt()

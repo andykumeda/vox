@@ -471,6 +471,13 @@ public final class MeetingTranscriptionSession {
         }
     }
 
+    static let recoveryNoticePrefix = "Automatic recovery: "
+
+    static func setRecoveryNotice(_ message: String, in session: inout TranscriptSession) {
+        session.captureWarnings.removeAll { $0.hasPrefix(recoveryNoticePrefix) }
+        session.captureWarnings.append(recoveryNoticePrefix + message)
+    }
+
     enum RecoveryError: Error, CustomStringConvertible {
         case unavailable(String)
         var description: String {
@@ -489,7 +496,7 @@ public final class MeetingTranscriptionSession {
             "One or more audio chunks produced no usable transcript; the recording is retained for review.",
             "One or more audio sources produced no usable transcript; the recording is retained for review."
         ]
-        let permanentWarnings = previous.captureWarnings.filter { !transientWarnings.contains($0) }
+        let permanentWarnings = previous.captureWarnings.filter { !transientWarnings.contains($0) && !$0.hasPrefix(Self.recoveryNoticePrefix) }
         guard permanentWarnings.isEmpty else {
             throw RecoveryError.unavailable("Capture warnings require review; the existing transcript and audio were preserved.")
         }
@@ -578,7 +585,7 @@ public final class MeetingTranscriptionSession {
             var candidate = previous
             candidate.status = .transcribing
             candidate.failureReason = nil
-            candidate.captureWarnings.removeAll { warnings.contains($0) }
+            candidate.captureWarnings.removeAll { warnings.contains($0) || $0.hasPrefix(Self.recoveryNoticePrefix) }
             candidate.rawSegments = []
             candidate.segments = []
             candidate.summary = nil
@@ -617,7 +624,7 @@ public final class MeetingTranscriptionSession {
             let reason = Task.isCancelled ? "Automatic retranscription was cancelled; existing text and audio were preserved." : "Automatic retranscription failed; existing text and audio were preserved: \(error)"
             if let restored = try? store.updateIfPresent(id: id, matching: { $0.status == .transcribing }, mutate: { original in
                 original.status = Task.isCancelled ? .cancelled : .failed
-                original.failureReason = reason
+                Self.setRecoveryNotice(reason, in: &original)
             }) {
                 withSessionLock { if session?.id == id { session = restored } }
             } else {
