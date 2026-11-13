@@ -125,6 +125,21 @@ final class OpenRouterMeetingTranscriberTests: XCTestCase {
         XCTAssertEqual(stored.rawSegments.first?.text, "recovered")
     }
 
+    func testMeetingRetriesRateLimitAndPreservesTranscript() async throws {
+        var attempts = 0
+        URLProtocolStub.handler = { request in
+            attempts += 1
+            let status = attempts == 1 ? 429 : 200
+            let body = status == 429 ? "limited" : #"{"segments":[{"start":0,"end":1,"text":"recovered"}]}"#
+            return (HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, Data(body.utf8))
+        }
+        let session = try await runMeeting()
+        XCTAssertEqual(session.statusSnapshot, .completed)
+        XCTAssertEqual(attempts, 2)
+        let stored = try XCTUnwrap(session.store.load(id: XCTUnwrap(session.activeSessionID)))
+        XCTAssertEqual(stored.rawSegments.first?.text, "recovered")
+    }
+
     func testMeetingDoesNotRetryRouterAuthenticationFailure() async throws {
         var attempts = 0
         URLProtocolStub.handler = { request in

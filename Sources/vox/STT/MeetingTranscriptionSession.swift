@@ -938,16 +938,19 @@ public final class MeetingTranscriptionSession {
             do {
                 guard let client = activeClients.chunk else { throw TranscriptionError.invalidResponse }
                 return try await client(url, offset, source)
-            } catch TranscriptionError.transportError(let underlying) {
+            } catch {
+                let retryable: Bool
+                if case TranscriptionError.transportError = error { retryable = true }
+                else if case OpenRouterMeetingError.httpError(429) = error { retryable = true }
+                else { retryable = false }
+                guard retryable else { throw error }
                 if Date() >= deadline {
-                    dlog("Meeting transport retry budget exhausted after \(attempt) attempts")
-                    throw TranscriptionError.transportError(underlying)
+                    dlog("Meeting retry budget exhausted after \(attempt) attempts")
+                    throw error
                 }
                 let delay = backoffSchedule[min(attempt, backoffSchedule.count - 1)]
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 attempt += 1
-            } catch {
-                throw error
             }
         }
     }

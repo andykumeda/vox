@@ -488,3 +488,5 @@ are no longer unconditionally suppressed.
 See [stabilization status](docs/reliability-stabilization.md) and
 [competitor evidence](docs/competitor-reliability-evidence.md) for verification
 and remaining hardware/comparative checks.
+
+OpenRouter meeting transcription retries HTTP 429 responses within the configured meeting retry budget; persistent limits still report a failure.
