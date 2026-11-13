@@ -5,9 +5,10 @@
 - Recovery notices no longer overwrite an existing meeting failure explanation;
   they appear as warnings and can clear after successful recovery. The initial
   0.7.90 install may already have replaced some older failure explanations.
-- 613 Swift tests pass; the 0.7.90 dictation regression passed seven fixtures.
-  Signed 0.7.91 is built; MacBook installation and public feed verification
-  remain pending. A real provider recovery remains unverified. See
+- 613 Swift tests pass; the dictation regression passed seven fixtures. Signed
+  0.7.91 is installed on Mini and MacBook; public feed and download match.
+  MacBook microphone and hotkey startup pass. Hosted checks were canceled and a
+  real provider recovery remains unverified. See
   `docs/meeting-automatic-recovery.md`.
 
 ## Automatic meeting retranscription — 0.7.90 / 114 (2026-11-13)
