@@ -397,8 +397,8 @@ struct SettingsView: View {
                 }
                 .disabled(!retainMeetingRecordings)
                 Text(retainMeetingRecordings
-                     ? "Meeting source recordings are encrypted locally after processing, including failed or cancelled meetings. They expire \(meetingRecordingRetentionDays.rawValue) days after meeting end. Expiry is checked at launch, activation, wake, day changes and after processing. Changes apply to existing recordings. Deleting a meeting also deletes its audio."
-                     : "Meeting audio is deleted when processing finishes, fails or is cancelled. Turning retention off deletes existing retained audio at the next check. Active recordings are preserved until processing ends.")
+                     ? "Audio for meetings with a complete saved transcript is retained for \(meetingRecordingRetentionDays.rawValue) days after meeting end. Audio for incomplete, failed or cancelled meetings is protected until the transcript is complete or you delete the meeting."
+                     : "Audio for meetings with a complete saved transcript is deleted after processing. Audio for incomplete, failed or cancelled meetings is protected until the transcript is complete or you delete the meeting.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("Capture and upload files are temporarily unencrypted. If encryption or deletion fails, files are preserved for retry and a warning appears in the meeting. Playback, audio export and retranscription are not available. Dictation audio remains temporary; meeting transcripts stay until deleted.")

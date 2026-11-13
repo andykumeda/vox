@@ -305,6 +305,12 @@ public final class MeetingTranscriptStore {
         [.completed, .cancelled, .failed].contains(status)
     }
 
+    static func hasConfirmedTranscript(_ session: TranscriptSession) -> Bool {
+        session.status == .completed && session.chunksTotal > 0 &&
+            session.chunksCompleted == session.chunksTotal && session.captureWarnings.isEmpty &&
+            session.failureReason == nil && session.segments.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
     public func purgeAudio(for id: UUID) throws {
         try maintainAudio(for: id, policy: nil, now: Date())
     }
@@ -321,17 +327,27 @@ public final class MeetingTranscriptStore {
                 if policy == nil { throw AudioRetentionError.activeSession }
                 return false
             }
-            let retain = policy.map { $0.enabled && $0.expiry(for: session) > now } ?? false
+            let protectIncomplete = policy != nil && !Self.hasConfirmedTranscript(session)
+            let retain = policy.map { protectIncomplete || ($0.enabled && $0.expiry(for: session) > now) } ?? false
             let directory = sessionDirectory(id: id)
+            var encryptedSources: [URL] = []
             if retain {
-                for source in [audioFile(id: id), micFile(id: id), phoneFile(id: id)] {
+                let sources = protectIncomplete
+                    ? audioArtifactFiles(in: directory).filter { ["m4a", "wav"].contains($0.pathExtension.lowercased()) }
+                    : [audioFile(id: id), micFile(id: id), phoneFile(id: id)]
+                for source in sources {
                     guard FileManager.default.fileExists(atPath: source.path),
                           (try source.resourceValues(forKeys: [.fileSizeKey])).fileSize != 0 else { continue }
                     try MeetingAudioArchive.encrypt(source: source, destination: source.appendingPathExtension("enc"), key: keyProvider())
+                    encryptedSources.append(source)
                 }
             }
             // Remove plaintext only after all sources have been encrypted and verified.
-            try removeAudioArtifacts(in: directory, includingArchives: !retain)
+            if protectIncomplete {
+                for source in encryptedSources { try FileManager.default.removeItem(at: source) }
+            } else {
+                try removeAudioArtifacts(in: directory, includingArchives: !retain)
+            }
             let retained = retain && audioArtifactFiles(in: directory).contains { $0.pathExtension == "enc" }
             guard session.audioRetained != retained else { return false }
             session.audioRetained = retained
@@ -430,7 +446,7 @@ public final class MeetingTranscriptStore {
         var files: [URL] = []
         for case let url as URL in enumerator {
             let name = url.lastPathComponent.lowercased()
-            guard ["m4a", "wav"].contains(url.pathExtension.lowercased()) || name.hasSuffix(".m4a.enc") ||
+            guard ["m4a", "wav"].contains(url.pathExtension.lowercased()) || name.hasSuffix(".m4a.enc") || name.hasSuffix(".wav.enc") ||
                   (name.hasPrefix(".audio-") && name.hasSuffix(".candidate")) else {
                 continue
             }

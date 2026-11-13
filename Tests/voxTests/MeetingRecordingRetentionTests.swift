@@ -32,8 +32,8 @@ final class MeetingRecordingRetentionTests: XCTestCase {
     private func session(status: TranscriptSession.Status = .completed) throws -> TranscriptSession {
         let session = TranscriptSession(
             id: UUID(), title: "Retention test", startedAt: endedAt.addingTimeInterval(-7200),
-            endedAt: endedAt, status: status, chunksTotal: 0, chunksCompleted: 0,
-            segments: [], audioRetained: false
+            endedAt: endedAt, status: status, chunksTotal: 1, chunksCompleted: 1,
+            segments: [TranscriptSegment(startTime: 0, endTime: 1, text: "complete")], audioRetained: false
         )
         try store.save(session)
         return session
@@ -243,6 +243,95 @@ final class MeetingRecordingRetentionTests: XCTestCase {
         XCTAssertFalse(exists(mic))
         XCTAssertEqual(try firstBlockPayload(at: archive(system)), Data([12]))
         XCTAssertEqual(try firstBlockPayload(at: archive(mic)), Data([13]))
+    }
+
+    func testIncompleteSessionsRemainEncryptedEvenAfterRestartAndOptOutExpiry() throws {
+        policy = .init(enabled: false, days: .seven)
+        var cases: [TranscriptSession] = []
+        for status in [TranscriptSession.Status.failed, .cancelled, .transcribing] {
+            cases.append(try session(status: status))
+        }
+        var empty = try session()
+        empty.segments = []
+        try store.save(empty)
+        cases.append(empty)
+        var blank = try session()
+        blank.segments = [TranscriptSegment(startTime: 0, endTime: 1, text: "   ")]
+        try store.save(blank)
+        cases.append(blank)
+        var noChunks = try session()
+        noChunks.chunksTotal = 0
+        noChunks.chunksCompleted = 0
+        try store.save(noChunks)
+        cases.append(noChunks)
+        var warning = try session()
+        warning.chunksTotal = 1
+        warning.chunksCompleted = 1
+        warning.segments = [TranscriptSegment(startTime: 0, endTime: 1, text: "partial")]
+        warning.captureWarnings = ["Missing microphone"]
+        try store.save(warning)
+        cases.append(warning)
+        var partial = try session()
+        partial.chunksTotal = 2
+        partial.chunksCompleted = 1
+        partial.segments = [TranscriptSegment(startTime: 0, endTime: 1, text: "partial")]
+        try store.save(partial)
+        cases.append(partial)
+        for meeting in cases {
+            try write(Data([14, 15]), to: store.audioFile(id: meeting.id))
+        }
+        let restarted = MeetingTranscriptStore(rootDirectory: root, keyProvider: { self.key }, retention: { self.policy })
+        restarted.recoverInFlightSessions()
+        XCTAssertEqual(restarted.applyAudioRetention(now: endedAt.addingTimeInterval(365 * 86400)), 0)
+        for meeting in cases {
+            let source = store.audioFile(id: meeting.id)
+            XCTAssertFalse(exists(source))
+            XCTAssertTrue(exists(archive(source)), "\(meeting.status)")
+            try MeetingAudioArchive.verify(archive: archive(source), key: key)
+        }
+    }
+
+    func testIncompleteMeetingPreservesDerivedAudioWhenOriginalIsMissing() throws {
+        policy.enabled = false
+        let meeting = try session(status: .failed)
+        let chunk = store.chunksDirectory(id: meeting.id).appendingPathComponent("part.wav")
+        let derived = store.sessionDirectory(id: meeting.id).appendingPathComponent("converted.m4a")
+        try write(Data("only chunk".utf8), to: chunk)
+        try write(Data("derived".utf8), to: derived)
+        XCTAssertEqual(store.applyAudioRetention(now: .distantFuture), 0)
+        XCTAssertFalse(exists(chunk))
+        XCTAssertTrue(exists(archive(chunk)))
+        XCTAssertTrue(exists(archive(derived)))
+        XCTAssertEqual(try firstBlockPayload(at: archive(chunk)), Data("only chunk".utf8))
+        XCTAssertEqual(store.applyAudioRetention(now: .distantFuture), 0)
+        XCTAssertTrue(exists(archive(chunk)))
+        try store.delete(id: meeting.id)
+        XCTAssertFalse(exists(store.sessionDirectory(id: meeting.id)))
+    }
+
+    func testIncompleteAudioEncryptionFailureLeavesEverySourceInPlace() throws {
+        policy.enabled = false
+        let meeting = try session(status: .failed)
+        let source = store.audioFile(id: meeting.id)
+        let chunk = store.chunksDirectory(id: meeting.id).appendingPathComponent("part.wav")
+        let candidate = store.sessionDirectory(id: meeting.id).appendingPathComponent(".audio-interrupted.candidate")
+        let empty = store.sessionDirectory(id: meeting.id).appendingPathComponent("empty.wav")
+        try write(Data(), to: empty)
+        try write(Data([1]), to: source)
+        try write(Data([2]), to: chunk)
+        try write(Data([3]), to: candidate)
+        keyCalls = 0
+        failKeyCall = 3
+        XCTAssertFalse(store.finalizeAudio(for: meeting.id, now: .distantFuture))
+        XCTAssertTrue(exists(source))
+        XCTAssertTrue(exists(chunk))
+        XCTAssertTrue(exists(candidate))
+        failKeyCall = nil
+        XCTAssertTrue(store.finalizeAudio(for: meeting.id, now: .distantFuture))
+        XCTAssertTrue(exists(archive(source)))
+        XCTAssertTrue(exists(archive(chunk)))
+        XCTAssertTrue(exists(candidate))
+        XCTAssertTrue(exists(empty))
     }
 
     func testStartupRecoveryAllowsInterruptedCaptureToBeEncrypted() throws {

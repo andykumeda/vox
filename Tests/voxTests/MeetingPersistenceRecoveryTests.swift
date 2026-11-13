@@ -30,6 +30,14 @@ final class MeetingPersistenceRecoveryTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: store.audioFile(id: id).path))
         XCTAssertNotEqual(store.load(id: id)?.status, .completed)
         XCTAssertTrue(reported)
+        let restarted = MeetingTranscriptStore(rootDirectory: root,
+            keyProvider: { Data(repeating: 0x7C, count: 32) },
+            retention: { .init(enabled: false, days: .seven) })
+        restarted.recoverInFlightSessions()
+        XCTAssertEqual(restarted.applyAudioRetention(now: .distantFuture), 0)
+        let archive = store.audioFile(id: id).appendingPathExtension("enc")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
+        try MeetingAudioArchive.verify(archive: archive, key: Data(repeating: 0x7C, count: 32))
         do {
             try await session.start()
             XCTFail("A new meeting must not replace an unsaved transcript")

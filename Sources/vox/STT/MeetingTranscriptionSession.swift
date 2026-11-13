@@ -640,6 +640,9 @@ public final class MeetingTranscriptionSession {
                         speakerID: seg.speakerID.flatMap { provider == .openrouter ? speakerLabels[$0] : $0 }
                     )
                 }
+                if shifted.isEmpty {
+                    addCaptureWarning("One or more audio chunks produced no usable transcript; the recording is retained for review.")
+                }
                 updateSession { s in
                     s.segments.append(contentsOf: shifted)
                     completed += 1
@@ -660,7 +663,12 @@ public final class MeetingTranscriptionSession {
         guard updateSession({ s in
             s.segments.sort(by: TranscriptSegment.byStartTime)
             s.status = .completed
+            if !MeetingTranscriptStore.hasConfirmedTranscript(s) {
+                s.status = .failed
+                s.failureReason = "The transcript may be incomplete. Available meeting audio was retained for review."
+            }
         }) else { return }
+        guard statusSnapshot == .completed else { return }
         for (_, _, dir, _, _) in streams {
             try? FileManager.default.removeItem(at: dir)
         }
@@ -932,6 +940,9 @@ public final class MeetingTranscriptionSession {
                     speakerID: speakerID
                 )
             }
+            if tagged.isEmpty {
+                addCaptureWarning("One or more audio sources produced no usable transcript; the recording is retained for review.")
+            }
             allSegments.append(contentsOf: tagged)
             updateSession { s in
                 s.rawSegments.append(contentsOf: tagged)
@@ -948,7 +959,12 @@ public final class MeetingTranscriptionSession {
             s.segments = allSegments.sorted(by: TranscriptSegment.byStartTime)
             s.summary = nil
             s.status = .completed
+            if !MeetingTranscriptStore.hasConfirmedTranscript(s) {
+                s.status = .failed
+                s.failureReason = "The transcript may be incomplete. Available meeting audio was retained for review."
+            }
         }) else { return }
+        guard statusSnapshot == .completed else { return }
 
         await runSummarizationIfEnabled(sessionID: sessionID)
     }
@@ -1039,7 +1055,7 @@ public final class MeetingTranscriptionSession {
         } catch {
             dlog("Meeting session save failed id=\(s.id) status=\(s.status): \(error)")
             if [.completed, .cancelled, .failed].contains(s.status) {
-                let message = "Check storage and Keychain access. Available audio remains for now, but may be removed after restarting if recording retention is off. Starting another meeting retries saving the transcript first."
+                let message = "Check storage and Keychain access. Available audio is protected for recovery; starting another meeting retries saving the transcript first. If storage or encryption is unavailable, restart protection may not be guaranteed."
                 withSessionLock {
                     guard session?.id == s.id else { return }
                     unsavedSession = s

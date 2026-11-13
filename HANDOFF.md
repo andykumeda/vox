@@ -1,5 +1,16 @@
 # Vox Handoff
 
+## Transcript-first meeting audio — 0.7.89 / 113 (2026-11-13)
+
+- Protect incomplete, failed, cancelled and interrupted meeting audio, including
+  derived chunks, independently of normal retention expiry. Complete saved
+  transcripts remain subject to normal retention; explicit meeting deletion
+  removes audio. Empty or warning-bearing results are marked incomplete.
+- 588 Swift tests and seven dictation fixtures pass. The signed build is ready;
+  MacBook installation, public feed and a real meeting remain to be verified.
+  Previously purged audio cannot be recovered. Saved audio is not automatically
+  retranscribed. See `docs/meeting-transcript-first-protection.md`.
+
 ## Meeting reliability — 0.7.88 / 112 (2026-11-13)
 
 - OpenAI/OpenRouter 429s and Deepgram transient failures use bounded retries;

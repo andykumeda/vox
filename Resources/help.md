@@ -77,19 +77,20 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   restarts and keeps it on an available display. Close or minimize it with the macOS
   window buttons while recording continues. Reopen it with the meeting hotkey or
   **Meeting** menu.
-- Choose the provider under Settings → **Meeting Transcription (Beta)**. Deepgram Nova-3 uses a Deepgram API key, transcribes each captured source separately, and labels your microphone as You and remote voices with anonymous speaker labels; OpenAI Whisper uses your OpenAI key and separates your microphone (You) from system audio (Other). OpenRouter uses your saved OpenRouter key with a separate meeting model (default `microsoft/mai-transcribe-2`), converting meeting chunks to mono WAV for upload. Change `openrouterMeetingModel` under **API and service configuration** and click **Save service configuration**. The model must return timestamps. Optional JSON `openrouterMeetingProviderOptions` can enable speaker labels, which remain scoped to each chunk rather than identifying the same person throughout a meeting. Vox retries temporary meeting provider failures within the configured meeting retry budget, honors OpenRouter Retry-After, and reports persistent failures. Completed Deepgram sources remain visible if a later source fails. If a transcript cannot be saved, Vox alerts you and retries the save before starting another meeting. Available audio may be removed on restart when recording retention is off.
+- Choose the provider under Settings → **Meeting Transcription (Beta)**. Deepgram Nova-3 uses a Deepgram API key, transcribes each captured source separately, and labels your microphone as You and remote voices with anonymous speaker labels; OpenAI Whisper uses your OpenAI key and separates your microphone (You) from system audio (Other). OpenRouter uses your saved OpenRouter key with a separate meeting model (default `microsoft/mai-transcribe-2`), converting meeting chunks to mono WAV for upload. Change `openrouterMeetingModel` under **API and service configuration** and click **Save service configuration**. The model must return timestamps. Optional JSON `openrouterMeetingProviderOptions` can enable speaker labels, which remain scoped to each chunk rather than identifying the same person throughout a meeting. Vox retries temporary meeting provider failures within the configured meeting retry budget, honors OpenRouter Retry-After, and reports persistent failures. Completed Deepgram sources remain visible if a later source fails. If a transcript cannot be saved, Vox alerts you and retries the save before starting another meeting. Available audio for an incomplete meeting is protected across restart, including when recording retention is off.
 - When you click Stop, Vox transcribes via the configured meeting provider,
   interleaves segments by time, and opens the transcript browser.
 - Select a saved meeting and click **Copy Transcript** to put its plain-text
   transcript on the clipboard. Use **Export…** to save plain or timestamped text.
-- Meeting audio is temporary by default. Under Settings → **Recordings storage**,
-  enable **Retain encrypted meeting recordings** to keep system, mic and Phone/FaceTime
-  source recordings for **7 / 30 / 90 days** (default **30 days**). Failed/cancelled
-  recordings are included when source files exist; upload chunks are discarded.
+- Audio for a complete saved transcript is temporary by default. Under Settings →
+  **Recordings storage**, enable **Retain encrypted meeting recordings** to keep it
+  for **7 / 30 / 90 days** (default **30 days**). Failed, cancelled, empty or
+  potentially incomplete meetings keep available audio encrypted until the transcript
+  is complete or you delete the meeting, even when normal retention is off.
 - Expiry counts from meeting end (start for older records without an end). Changes
   apply to existing recordings; turning retention off deletes eligible audio at the
   next check. Checks run at launch, activation, wake, day changes, after processing
-  and storage refresh. Active recording/processing is protected. Deleting a completed
+  and storage refresh. Active recording/processing is protected. Deleting a
   meeting deletes its recordings too. Previously deleted audio cannot be recovered.
 - Recordings are encrypted locally with the Keychain history key after processing;
   capture/upload files are temporarily unencrypted. Encryption/deletion failures
@@ -230,7 +231,7 @@ Use the menu → **Check for Updates…**. Your saved settings and API keys rema
   captures can also indicate a route or permission problem; reselect the input,
   restart Vox, and verify a new short recording.
 
-Service configuration edits use **Save service configuration**. Restart Vox after changing meeting chunk duration or meeting retry delays; other service fields apply to new requests. Custom models/endpoints must support the selected client’s response format.
+Service configuration edits use **Save service configuration**. Restart Vox after changing meeting chunk duration; retry delays and other service fields apply to new requests. Custom models/endpoints must support the selected client’s response format.
 
 The iOS host also has dictation and cleanup provider controls, separate provider keys, and service settings. Its experimental App Intent continues to bypass Smart Cleanup. Generic iOS compilation does not verify physical-device permissions or keyboard insertion.
 

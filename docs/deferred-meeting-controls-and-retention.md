@@ -90,3 +90,19 @@ The public DMG matches the installed executable and passed strict signing,
 version/build, checksum and bundled-key Ed25519 checks. The live feed matches
 the signed enclosure URL, signature and 2,799,733-byte length. DMG SHA-256
 `199a6ce0a29e54ade574c0abc1d37534775ba41aaeba0c81082b940e24255c64`.
+
+## Transcript-first protection (2026-11-13)
+
+Andy clarified that protecting meetings until a valid transcript exists takes
+priority over discarding audio. The earlier failed/cancelled purge and retention
+expiry rules above are superseded for incomplete meetings: available original and
+local derived audio are protected until a complete saved transcript exists or the
+meeting is explicitly deleted, even if normal retention is off. Empty results,
+missing chunks and capture warnings are treated as incomplete. Normal retention
+settings still govern audio after a complete saved transcript. A nonempty response
+and complete capture are signals, not proof of word-for-word accuracy. Audio
+already purged cannot be recovered. Playback, export and retranscription remain
+unavailable; preserved audio is not automatically retranscribed.
+
+Implementation and release verification are tracked in
+`docs/meeting-transcript-first-protection.md`.
