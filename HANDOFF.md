@@ -8,10 +8,11 @@
 - 615 Swift tests and seven dictation fixtures pass. Signed 0.7.92 is installed
   on Mini and MacBook; public feed, download SHA-256 and Sparkle signature match.
   Pages run 43479720878 passed; hosted release and regression jobs were cancelled.
-- The MacBook automatically retried the preserved synthetic test meeting and
-  generated a summary, after which temporary audio was removed. Screen sharing
-  was black; the actual transcript still requires visual verification. The normal
-  model and recovery interval were restored. See `docs/meeting-automatic-recovery.md`.
+- The MacBook automatically retried the preserved synthetic meeting; its Other
+  transcript contains the full test script through the last sentence. A second,
+  partially truncated You copy reflects microphone pickup of speaker audio.
+  The meeting is marked Done and temporary audio was removed. The normal model
+  and recovery interval were restored. See `docs/meeting-automatic-recovery.md`.
 
 
 ## Automatic recovery follow-up — 0.7.91 / 115 (2026-11-13)
