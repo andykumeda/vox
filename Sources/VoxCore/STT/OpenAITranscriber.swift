@@ -381,6 +381,7 @@ public struct OpenAITranscriber {
         do {
             (data, response) = try await sendWithRetry(request, session: urlSession)
         } catch {
+            try Task.checkCancellation()
             throw TranscriptionError.transportError(error)
         }
 

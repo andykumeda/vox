@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Foundation
 
 /// Coordinates a single end-to-end meeting capture: record system audio + local mic in
@@ -59,6 +60,14 @@ public final class MeetingTranscriptionSession {
             ).summarize(segments: segments)
         },
         summarizeEnabled: { AppSettings.meetingSummaryEnabled },
+        reportSaveFailure: { message in
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "Meeting transcript could not be saved"
+                alert.informativeText = message
+                alert.runModal()
+            }
+        },
         chunkDuration: chunkDuration
     )
     }()
@@ -80,10 +89,12 @@ public final class MeetingTranscriptionSession {
     private let summarize: Summarize?
     private let summarizeEnabledProvider: () -> Bool
     private let saveSession: (TranscriptSession) throws -> Void
+    private let reportSaveFailure: (String) -> Void
     /// Preflight gate. Default calls `MeetingPreflight.gate` with live
     /// AppSettings; tests pass `{ .success(()) }` to bypass.
     private let preflight: (() -> Result<Void, MeetingGateError>)?
-    private let backoffSchedule: [Double]
+    private let backoffSchedule: [Double]?
+    private let retryBudget: Double?
     private let chunkDuration: Double
 
     private var systemRecorder: MeetingAudioRecording?
@@ -92,6 +103,7 @@ public final class MeetingTranscriptionSession {
     private var uploadTask: Task<Void, Never>?
     private let lock = NSLock()
     private var session: TranscriptSession?
+    private var unsavedSession: TranscriptSession?
 
     public var activeSessionID: UUID? {
         withSessionLock { session?.id }
@@ -99,6 +111,10 @@ public final class MeetingTranscriptionSession {
 
     public var statusSnapshot: TranscriptSession.Status? {
         withSessionLock { session?.status }
+    }
+
+    public var failureReasonSnapshot: String? {
+        withSessionLock { session?.failureReason }
     }
 
     public var isRecording: Bool {
@@ -134,7 +150,9 @@ public final class MeetingTranscriptionSession {
         summarizeEnabled: @escaping () -> Bool = { false },
         preflight: (() -> Result<Void, MeetingGateError>)? = nil,
         saveSession: ((TranscriptSession) throws -> Void)? = nil,
-        backoffSchedule: [Double] = ServiceConfiguration.value(.meetingRetryDelays).split(separator: ",").compactMap { Double($0) },
+        reportSaveFailure: @escaping (String) -> Void = { _ in },
+        backoffSchedule: [Double]? = nil,
+        retryBudget: Double? = nil,
         systemRecorderFactory: (() -> MeetingAudioRecording)? = nil,
         chunkDuration: Double = ServiceConfiguration.estimate(.meetingChunkDuration)
     ) {
@@ -184,7 +202,9 @@ public final class MeetingTranscriptionSession {
         self.saveSession = saveSession ?? { try store.save($0) }
         self.preflight = preflight
         self.chunkDuration = chunkDuration
+        self.reportSaveFailure = reportSaveFailure
         self.backoffSchedule = backoffSchedule
+        self.retryBudget = retryBudget
     }
 
     public enum SessionError: Error, CustomStringConvertible {
@@ -204,6 +224,11 @@ public final class MeetingTranscriptionSession {
     }
 
     public func start() async throws {
+        if let unsaved = withSessionLock({ unsavedSession }) {
+            try saveSession(unsaved)
+            store.finalizeAudio(for: unsaved.id)
+            withSessionLock { if unsavedSession?.id == unsaved.id { unsavedSession = nil } }
+        }
         // Preflight: enforce Meeting Mode + consent + API key + backend gate.
         // The floating HUD's Record button calls start() directly.
         let selected = try providerProvider()
@@ -632,10 +657,10 @@ public final class MeetingTranscriptionSession {
             return
         }
 
-        updateSession { s in
+        guard updateSession({ s in
             s.segments.sort(by: TranscriptSegment.byStartTime)
             s.status = .completed
-        }
+        }) else { return }
         for (_, _, dir, _, _) in streams {
             try? FileManager.default.removeItem(at: dir)
         }
@@ -882,7 +907,10 @@ public final class MeetingTranscriptionSession {
             }
             let raw: [TranscriptSegment]
             do {
-                raw = try await deepgram(job.url)
+                raw = try await withMeetingRetry { try await deepgram(job.url) }
+            } catch is CancellationError {
+                updateSession { $0.status = .cancelled }
+                return
             } catch {
                 updateSession { s in
                     s.status = .failed
@@ -907,48 +935,79 @@ public final class MeetingTranscriptionSession {
             allSegments.append(contentsOf: tagged)
             updateSession { s in
                 s.rawSegments.append(contentsOf: tagged)
+                s.segments = allSegments.sorted(by: TranscriptSegment.byStartTime)
                 s.chunksCompleted += 1
             }
         }
 
-        updateSession { s in
+        if Task.isCancelled {
+            updateSession { $0.status = .cancelled }
+            return
+        }
+        guard updateSession({ s in
             s.segments = allSegments.sorted(by: TranscriptSegment.byStartTime)
             s.summary = nil
             s.status = .completed
-        }
+        }) else { return }
 
         await runSummarizationIfEnabled(sessionID: sessionID)
     }
 
-    /// Caps transport retries so a prolonged outage cannot block new meetings
-    /// via `.alreadyActive` forever. Matches the last backoff step (30s) for
-    /// roughly twenty minutes of attempts before failing the chunk.
-    private static var maxTransportRetryDuration: TimeInterval { ServiceConfiguration.estimate(.meetingRetryBudget) }
+    private enum RetryDeadline: Error, CustomStringConvertible {
+        case expired
+        var description: String { "Meeting transcription exceeded its retry time limit." }
+    }
 
     private func transcribeWithRetry(
         url: URL, offset: Double, source: SegmentSource
     ) async throws -> [TranscriptSegment] {
-        _ = try ServiceConfiguration.string(.meetingRetryDelays)
-        _ = try ServiceConfiguration.number(.meetingRetryBudget)
-        guard !backoffSchedule.isEmpty else { throw ServiceConfiguration.InvalidValue(key: .meetingRetryDelays) }
+        guard let client = activeClients.chunk else { throw TranscriptionError.invalidResponse }
+        return try await withMeetingRetry { try await client(url, offset, source) }
+    }
+
+    private func withMeetingRetry<T>(operation: @escaping () async throws -> T) async throws -> T {
+        let configured = try ServiceConfiguration.string(.meetingRetryDelays)
+        let schedule = backoffSchedule ?? configured.split(separator: ",").compactMap { Double($0) }
+        guard !schedule.isEmpty, schedule.allSatisfy({ $0.isFinite && $0 > 0 }) else {
+            throw ServiceConfiguration.InvalidValue(key: .meetingRetryDelays)
+        }
+        let configuredBudget = try ServiceConfiguration.number(.meetingRetryBudget)
+        let budget = retryBudget ?? configuredBudget
+        guard budget.isFinite, budget > 0, budget <= Double(Int32.max) else { throw ServiceConfiguration.InvalidValue(key: .meetingRetryBudget) }
+        let deadline = ProcessInfo.processInfo.systemUptime + budget
         var attempt = 0
-        let deadline = Date().addingTimeInterval(Self.maxTransportRetryDuration)
+        var lastError: Error?
         while true {
             try Task.checkCancellation()
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            guard remaining > 0 else { throw lastError ?? RetryDeadline.expired }
             do {
-                guard let client = activeClients.chunk else { throw TranscriptionError.invalidResponse }
-                return try await client(url, offset, source)
-            } catch {
-                let retryable: Bool
-                if case TranscriptionError.transportError = error { retryable = true }
-                else if case OpenRouterMeetingError.httpError(429) = error { retryable = true }
-                else { retryable = false }
-                guard retryable else { throw error }
-                if Date() >= deadline {
-                    dlog("Meeting retry budget exhausted after \(attempt) attempts")
-                    throw error
+                return try await withThrowingTaskGroup(of: T.self) { group in
+                    group.addTask { try await operation() }
+                    group.addTask {
+                        try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+                        throw RetryDeadline.expired
+                    }
+                    defer { group.cancelAll() }
+                    return try await group.next()!
                 }
-                let delay = backoffSchedule[min(attempt, backoffSchedule.count - 1)]
+            } catch {
+                try Task.checkCancellation()
+                if error is RetryDeadline { throw lastError ?? error }
+                var retryAfter: Double = 0
+                let retryable: Bool
+                switch error {
+                case TranscriptionError.transportError: retryable = true
+                case TranscriptionError.httpError(429, _): retryable = true
+                case OpenRouterMeetingError.rateLimited(let delay): retryable = true; retryAfter = delay ?? 0
+                case DeepgramError.transportError: retryable = true
+                case DeepgramError.httpError(let status, _): retryable = status == 429 || (500...599).contains(status)
+                default: retryable = false
+                }
+                guard retryable else { throw error }
+                lastError = error
+                let delay = max(schedule[min(attempt, schedule.count - 1)], retryAfter)
+                guard delay < deadline - ProcessInfo.processInfo.systemUptime else { throw error }
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 attempt += 1
             }
@@ -963,17 +1022,34 @@ public final class MeetingTranscriptionSession {
         }
     }
 
-    private func updateSession(_ mutate: (inout TranscriptSession) -> Void) {
+    @discardableResult
+    private func updateSession(_ mutate: (inout TranscriptSession) -> Void) -> Bool {
         guard let s: TranscriptSession = withSessionLock({
             guard var current = session else { return nil }
             mutate(&current)
-            session = current
+            if current.status != .completed { session = current }
             return current
-        }) else { return }
+        }) else { return false }
         do {
             try saveSession(s)
+            if s.status == .completed {
+                withSessionLock { if session?.id == s.id { session = s } }
+            }
+            return true
         } catch {
             dlog("Meeting session save failed id=\(s.id) status=\(s.status): \(error)")
+            if [.completed, .cancelled, .failed].contains(s.status) {
+                let message = "Check storage and Keychain access. Available audio remains for now, but may be removed after restarting if recording retention is off. Starting another meeting retries saving the transcript first."
+                withSessionLock {
+                    guard session?.id == s.id else { return }
+                    unsavedSession = s
+                    session = s
+                    session?.status = .failed
+                    session?.failureReason = "Meeting transcript could not be saved. " + message
+                }
+                reportSaveFailure(message)
+            }
+            return false
         }
     }
 

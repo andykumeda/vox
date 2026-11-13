@@ -5,6 +5,7 @@ public enum OpenRouterMeetingError: Error, CustomStringConvertible {
     case missingAPIKey
     case invalidResponse
     case httpError(Int)
+    case rateLimited(retryAfter: TimeInterval?)
     case fileTooLarge
     case audioConversionFailed
 
@@ -13,6 +14,7 @@ public enum OpenRouterMeetingError: Error, CustomStringConvertible {
         case .missingAPIKey: return "OpenRouter API key missing — save it in Settings."
         case .invalidResponse: return "OpenRouter did not return valid timestamped meeting segments. Choose a model supporting verbose_json."
         case .httpError(let status): return "OpenRouter meeting HTTP \(status). Check the key, credits, model, and provider options."
+        case .rateLimited: return "OpenRouter meeting HTTP 429. Check the key, credits, model, and provider options."
         case .fileTooLarge: return "OpenRouter meeting audio exceeds the 25 MB inline upload limit. Reduce the meeting chunk duration in advanced Settings."
         case .audioConversionFailed: return "Could not convert meeting audio for OpenRouter."
         }
@@ -71,6 +73,9 @@ public enum OpenRouterMeetingTranscriber {
         guard let http = response as? HTTPURLResponse else { throw OpenRouterMeetingError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             // Provider bodies may echo private content; don't put them in logs/UI.
+            if http.statusCode == 429 {
+                throw OpenRouterMeetingError.rateLimited(retryAfter: retryAfter(http.value(forHTTPHeaderField: "Retry-After")))
+            }
             throw OpenRouterMeetingError.httpError(http.statusCode)
         }
         guard let decoded = try? JSONDecoder().decode(Response.self, from: data),
@@ -83,6 +88,22 @@ public enum OpenRouterMeetingTranscriber {
             return TranscriptSegment(startTime: $0.start + offsetSeconds, endTime: $0.end + offsetSeconds, text: text,
                                      source: source, speakerID: source == .local ? nil : $0.speaker)
         }
+    }
+
+    static func retryAfter(_ header: String?, now: Date = Date()) -> TimeInterval? {
+        guard let value = header?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        if value.utf8.allSatisfy({ (48...57).contains($0) }) {
+            guard let seconds = Double(value), seconds.isFinite else { return nil }
+            return seconds
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        for format in ["EEE',' dd MMM yyyy HH':'mm':'ss 'GMT'", "EEEE',' dd-MMM-yy HH':'mm':'ss 'GMT'", "EEE MMM d HH':'mm':'ss yyyy"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) { return max(0, date.timeIntervalSince(now)) }
+        }
+        return nil
     }
 
     private static func wavAudio(_ url: URL) throws -> Data {

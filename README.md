@@ -489,4 +489,4 @@ See [stabilization status](docs/reliability-stabilization.md) and
 [competitor evidence](docs/competitor-reliability-evidence.md) for verification
 and remaining hardware/comparative checks.
 
-OpenRouter meeting transcription retries HTTP 429 responses within the configured meeting retry budget; persistent limits still report a failure.
+Vox retries temporary meeting provider failures within the configured meeting retry budget, honors OpenRouter Retry-After, and reports persistent failures. Completed Deepgram sources remain visible if a later source fails. If a transcript cannot be saved, Vox alerts you and retries the save before starting another meeting. Available audio may be removed on restart when recording retention is off.

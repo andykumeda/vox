@@ -213,7 +213,7 @@ struct MeetingHUDView: View {
             return "Transcribing…"
         case .completed:    return "Last meeting saved"
         case .cancelled:    return "Last meeting cancelled"
-        case .failed:       return "Last meeting failed"
+        case .failed:       return MeetingTranscriptionSession.shared.failureReasonSnapshot ?? "Last meeting failed"
         case .none:         return "Ready to record"
         }
     }

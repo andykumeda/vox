@@ -63,6 +63,7 @@ public struct DeepgramTranscriber {
         do {
             (data, response) = try await urlSession.data(for: request)
         } catch {
+            try Task.checkCancellation()
             throw DeepgramError.transportError(error)
         }
         guard let http = response as? HTTPURLResponse else {
