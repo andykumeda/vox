@@ -1,5 +1,13 @@
 # Vox Handoff
 
+## OpenRouter meeting rate-limit retry — 0.7.87 / 111 (2026-11-13)
+
+- Meeting chunks retry OpenRouter HTTP 429 using the configured meeting retry
+  budget; other HTTP errors remain immediate. 572 Swift tests and seven dictation
+  fixtures pass. The signed release is installed on Mini and MacBook. The public
+  Pages feed is pending deployment, and a real MacBook meeting remains unverified.
+  See `docs/openrouter-429-retry.md`.
+
 ## Native Meeting panel and Mini hang fix — 0.7.86 / 110 (2026-11-09)
 
 - Native Meeting title bar and macOS window buttons. All three buttons rendered
