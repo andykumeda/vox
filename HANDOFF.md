@@ -2,11 +2,13 @@
 
 ## Silent-source recovery — 0.7.92 / 116 (2026-11-13)
 
-- Mini recovery smoke remains unverified: a synthetic meeting started on the
-  Mini, but the agent restarted Vox after waiting for Stop. That interrupted
-  capture before source alignment was saved; recovery flagged it for review.
-  The three encrypted source files remain, and Deepgram and default retry
-  settings were restored. This is not a successful recovery test.
+- Mini recovery smoke passed on 0.7.92: a 47-second synthetic meeting was
+  stopped normally, intentionally failed with OpenRouter HTTP 400, then
+  automatically recovered after the test model was restored. Both displayed
+  sources contained the entire test script, the meeting showed Done, and
+  temporary audio was removed. Deepgram and the default retry interval were
+  restored. A prior agent-interrupted test lacks alignment; its three encrypted
+  sources remain for review. A real multi-person meeting remains unverified.
 - A separately captured source containing exact digital silence no longer blocks
   completion. Nonzero or unreadable audio remains eligible for transcription;
   recovery failures show the candidate's cause while preserving earlier text and audio.
