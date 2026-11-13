@@ -7,8 +7,10 @@
 - Final-save failure alerts the user, keeps the unsaved result in memory, and
   retries saving before another meeting. Available audio may be removed after
   restart under opt-out retention. A proposed exception awaits the user's choice.
-- 583 Swift tests and seven dictation fixtures pass. Signed release candidate
-  built; production, public feed and MacBook verification are pending. See
+- 583 Swift tests and seven dictation fixtures pass. Signed release installed on
+  Mini and MacBook; public feed and download match. MacBook microphone permission
+  and hotkey startup pass; a real meeting is unverified. Hosted Release Gate and
+  regression were canceled. See
   `docs/meeting-reliability-2026-11.md`.
 
 ## OpenRouter meeting rate-limit retry — 0.7.87 / 111 (2026-11-13)
