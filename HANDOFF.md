@@ -2,6 +2,11 @@
 
 ## Silent-source recovery — 0.7.92 / 116 (2026-11-13)
 
+- Mini recovery smoke remains unverified: a synthetic meeting started on the
+  Mini, but the agent restarted Vox after waiting for Stop. That interrupted
+  capture before source alignment was saved; recovery flagged it for review.
+  The three encrypted source files remain, and Deepgram and default retry
+  settings were restored. This is not a successful recovery test.
 - A separately captured source containing exact digital silence no longer blocks
   completion. Nonzero or unreadable audio remains eligible for transcription;
   recovery failures show the candidate's cause while preserving earlier text and audio.

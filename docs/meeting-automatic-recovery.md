@@ -7,6 +7,7 @@
 | Silent-source recovery | Codex | Verified | A valid speech result must not fail because a separate source is exact digital silence. Nonzero and unreadable sources must still be processed; all-silent recordings must not be claimed complete. A real-audio regression failed before the fix and passes afterward; 615 Swift tests and seven dictation fixtures pass. |
 | Failure detail | Codex | Verified | Failed recovery reports the candidate failure without replacing the original failure or deleting saved audio. Covered by recovery tests. |
 | Release and MacBook retry | Codex | Deployed | Signed 0.7.92 / 116 installed on Mini and MacBook; public feed, release asset, SHA-256 and Sparkle signature match. The preserved MacBook test retried automatically, reached Done, and its Other transcript visually matches the complete synthetic script. Temporary audio was removed. |
+| Mini recovery smoke | Codex | Blocked | A synthetic test was interrupted by an agent restart while waiting for Stop, before source alignment was saved. Vox retained the three encrypted sources and reported that review is required. Normal Deepgram provider and retry defaults were restored; a controlled stop and successful recovery are still required. |
 
 On the MacBook's 34-second synthetic test, the initial request was intentionally
 rejected and recovery sent three sources to OpenRouter; the phone source was logged
