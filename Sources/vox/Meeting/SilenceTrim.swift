@@ -53,6 +53,21 @@ public enum SilenceTrim {
     public static let rmsThreshold: Float = 0.005
     public static let windowSec: Double = 0.1
 
+    /// Only exact silence is safe to omit; quiet speech must still be transcribed.
+    public static func isDigitalSilence(url: URL) throws -> Bool {
+        let file = try AVAudioFile(forReading: url)
+        guard file.length > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 4096) else { return false }
+        while file.framePosition < file.length {
+            try file.read(into: buffer)
+            guard buffer.frameLength > 0, let channels = buffer.floatChannelData else { return false }
+            for channel in 0..<Int(buffer.format.channelCount) {
+                for frame in 0..<Int(buffer.frameLength) where channels[channel][frame] != 0 { return false }
+            }
+        }
+        return true
+    }
+
     public static func detectBounds(url: URL) throws -> AudibleBounds {
         let file = try AVAudioFile(forReading: url)
         let format = file.processingFormat

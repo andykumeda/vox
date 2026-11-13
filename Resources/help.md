@@ -87,6 +87,7 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   re-uploading audio may incur additional charges. The existing transcript remains
   available during retry, and original audio stays protected until a replacement is
   saved. Previously deleted audio cannot be recovered.
+- A source containing exact digital silence does not block a complete transcript. Quiet or unreadable audio still requires processing. If recovery fails, Vox reports the reason and preserves the original audio.
 - Audio for a complete saved transcript is temporary by default. Under Settings →
   **Recordings storage**, enable **Retain encrypted meeting recordings** to keep it
   for **7 / 30 / 90 days** (default **30 days**). Failed, cancelled, empty or

@@ -1,7 +1,22 @@
 import XCTest
+import AVFoundation
 @testable import vox
 
 final class SilenceTrimTests: XCTestCase {
+
+    func testDigitalSilenceCheckDoesNotDiscardQuietAudio() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: format.settings)
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4410))
+            buffer.frameLength = 4410
+            buffer.floatChannelData![0][2000] = 0.00001
+            try file.write(from: buffer)
+        }
+        XCTAssertFalse(try SilenceTrim.isDigitalSilence(url: url))
+    }
 
     // MARK: - hasAudibleContent guard semantics
 

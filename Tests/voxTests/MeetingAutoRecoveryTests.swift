@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 @testable import vox
 
 final class MeetingAutoRecoveryTests: XCTestCase {
@@ -60,6 +61,31 @@ final class MeetingAutoRecoveryTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: archive.path), "Opted-out audio is eligible for cleanup only after durable completion")
     }
 
+    func testRecoveryCompletesWhenPhoneSourceIsDigitalSilence() async throws {
+        var (old, _) = try failedMeeting()
+        old.sourceAvailability = [true, false, true]
+        try store.save(old)
+        let phone = store.phoneFile(id: old.id)
+        do {
+            let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
+            let file = try AVAudioFile(forWriting: phone, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1])
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100))
+            buffer.frameLength = 44_100
+            try file.write(from: buffer)
+        }
+        try MeetingAudioArchive.encrypt(source: phone, destination: phone.appendingPathExtension("enc"), key: key)
+        try FileManager.default.removeItem(at: phone)
+        let session = pipeline { url, _, _ in
+            if url.lastPathComponent == "phone.m4a" { return [] }
+            return [TranscriptSegment(startTime: 0, endTime: 1, text: "recovered speech")]
+        }
+        try await session.recoverMeeting(id: old.id)
+        let saved = try XCTUnwrap(store.load(id: old.id))
+        XCTAssertEqual(saved.status, .completed)
+        XCTAssertEqual(saved.segments.map(\.text), ["recovered speech"])
+    }
+
     func testFailedRecoveryPreservesExistingTranscriptAndOriginalArchive() async throws {
         struct ProviderFailure: Error {}
         let (old, archive) = try failedMeeting()
@@ -71,6 +97,7 @@ final class MeetingAutoRecoveryTests: XCTestCase {
         XCTAssertEqual(saved.rawSegments, old.rawSegments)
         XCTAssertEqual(saved.summary, old.summary)
         XCTAssertEqual(saved.failureReason, old.failureReason)
+        XCTAssertTrue(saved.captureWarnings.contains { $0.contains("Transcription failed") })
         XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
         try MeetingAudioArchive.verify(archive: archive, key: key)
     }

@@ -604,8 +604,12 @@ public final class MeetingTranscriptionSession {
                 micURL: available[1] ? targets[1] : nil, phoneURL: available[2] ? targets[2] : nil,
                 systemShift: offsets?.system ?? 0, micShift: offsets?.microphone ?? 0, phoneShift: offsets?.phone ?? 0, sessionID: id)
             try Task.checkCancellation()
-            guard let result = scratch.load(id: id), MeetingTranscriptStore.hasConfirmedTranscript(result) else {
-                throw RecoveryError.unavailable("Automatic retranscription did not produce a complete transcript; existing text and audio were preserved.")
+            guard let result = scratch.load(id: id) else {
+                throw RecoveryError.unavailable("Automatic retranscription result could not be read; existing text and audio were preserved.")
+            }
+            guard MeetingTranscriptStore.hasConfirmedTranscript(result) else {
+                let detail = result.failureReason ?? result.captureWarnings.first ?? "No complete transcript was produced."
+                throw RecoveryError.unavailable("\(detail) Existing text and audio were preserved.")
             }
             guard let saved = try store.updateIfPresent(id: id, matching: { $0.status == .transcribing }, mutate: { original in
                 original.rawSegments = result.rawSegments
@@ -681,7 +685,7 @@ public final class MeetingTranscriptionSession {
         // (source, chunks, dir, shift, audibleDurationSec)
         var streams: [(SegmentSource, [URL], URL, Double, Double)] = []
 
-        if let systemURL = systemURL {
+        if let systemURL = systemURL, (try? SilenceTrim.isDigitalSilence(url: systemURL)) != true {
             let dir = store.chunksDirectory(id: sessionID, source: .remote)
             let prepped = await prepareForChunking(streamURL: systemURL, baseShift: systemShift)
             do {
@@ -695,7 +699,7 @@ public final class MeetingTranscriptionSession {
                 addCaptureWarning("System audio could not be prepared and is missing from the transcript.")
             }
         }
-        if let micURL = micURL {
+        if let micURL = micURL, (try? SilenceTrim.isDigitalSilence(url: micURL)) != true {
             let dir = store.chunksDirectory(id: sessionID, source: .local)
             let prepped = await prepareForChunking(streamURL: micURL, baseShift: micShift)
             do {
@@ -710,7 +714,7 @@ public final class MeetingTranscriptionSession {
             }
         }
 
-        if let phoneURL {
+        if let phoneURL, (try? SilenceTrim.isDigitalSilence(url: phoneURL)) != true {
             let dir = store.chunksDirectory(id: sessionID).appendingPathComponent("phone")
             let prepped = await prepareForChunking(streamURL: phoneURL, baseShift: phoneShift)
             do {

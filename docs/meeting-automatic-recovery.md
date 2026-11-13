@@ -1,5 +1,21 @@
 # Automatic meeting retranscription
 
+## Silent-source recovery follow-up (2026-11-13)
+
+| Workstream | Owner | Status | Acceptance and evidence |
+| --- | --- | --- | --- |
+| Silent-source recovery | Codex | Verified | A valid speech result must not fail because a separate source is exact digital silence. Nonzero and unreadable sources must still be processed; all-silent recordings must not be claimed complete. A real-audio regression failed before the fix and passes afterward; 615 Swift tests and seven dictation fixtures pass. |
+| Failure detail | Codex | Verified | Failed recovery reports the candidate failure without replacing the original failure or deleting saved audio. Covered by recovery tests. |
+| Release and MacBook retry | Codex | In progress | Publish and install unique 0.7.92 / 116, then retry the preserved MacBook test and verify the displayed text and audio policy. |
+
+On the MacBook's 34-second synthetic test, the initial request was intentionally
+rejected and recovery sent three sources to OpenRouter; the phone source was logged
+below the existing silence threshold. The test reproduced rejection of a silent
+source, but the MacBook recording's exact sample values and the provider output were
+not retained in diagnostics; this is a supported hypothesis pending the live retry.
+Only an entire successfully decoded, nonempty source of zero samples is omitted.
+The silence threshold alone is not used to declare completion.
+
 | Workstream | Owner | Status | Acceptance |
 | --- | --- | --- | --- |
 | Authenticated archive extraction | Archive agent | Deployed | Decrypt to a private temporary candidate only after integrity verification; no overwrite or plaintext residue on failure. |
