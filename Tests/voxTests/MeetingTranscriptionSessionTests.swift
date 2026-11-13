@@ -24,6 +24,7 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
 
     final class MockRecorder: MeetingAudioRecording {
         var output: URL?
+        var audioStartedAt: Date? { Date(timeIntervalSince1970: 0) }
         private(set) var startCallCount = 0
         private(set) var stopCallCount = 0
         func start(outputURL: URL) async throws {
@@ -74,6 +75,8 @@ final class MeetingTranscriptionSessionTests: XCTestCase {
         XCTAssertEqual(session.statusSnapshot, .completed)
         let id = session.activeSessionID!
         let stored = try XCTUnwrap(store.load(id: id))
+        XCTAssertEqual(stored.sourceAvailability, [true, false, false])
+        XCTAssertNotNil(stored.sourceOffsets)
         XCTAssertEqual(stored.segments.count, 3)
         XCTAssertEqual(stored.segments[0].text, "chunk 0")
     }

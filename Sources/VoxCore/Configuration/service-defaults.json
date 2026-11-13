@@ -39,6 +39,7 @@
   "requestMaxAttempts": "3",
   "requestRetryDelay": "0.3",
   "meetingRetryBudget": "1200",
+  "meetingRecoveryInterval": "3600",
   "meetingRetryDelays": "1,2,4,8,16,30",
   "meetingChunkDuration": "300",
   "dictationProvider": "openai",

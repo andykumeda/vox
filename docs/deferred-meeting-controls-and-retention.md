@@ -106,3 +106,12 @@ unavailable; preserved audio is not automatically retranscribed.
 
 Implementation and release verification are tracked in
 `docs/meeting-transcript-first-protection.md`.
+
+## Automatic retranscription (2026-11-13)
+
+Andy explicitly requested automatic retranscription of preserved audio. Playback
+and audio export remain deferred. Recovery uses the current meeting provider and
+may incur charges; original audio and prior text are protected until a complete
+candidate is saved. Older sessions without a source manifest and alignment remain
+protected for review because Vox cannot establish that all sources are present.
+See `docs/meeting-automatic-recovery.md` for scheduling and release status.

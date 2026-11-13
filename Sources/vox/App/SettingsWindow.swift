@@ -401,7 +401,10 @@ struct SettingsView: View {
                      : "Audio for meetings with a complete saved transcript is deleted after processing. Audio for incomplete, failed or cancelled meetings is protected until the transcript is complete or you delete the meeting.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("Capture and upload files are temporarily unencrypted. If encryption or deletion fails, files are preserved for retry and a warning appears in the meeting. Playback, audio export and retranscription are not available. Dictation audio remains temporary; meeting transcripts stay until deleted.")
+                Text("Vox automatically retries eligible incomplete meetings at startup, on wake, and periodically using the current meeting provider. Retries send audio to that provider and may incur charges. The existing transcript remains available while Vox retries, and original audio stays protected until a replacement is saved.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Capture and upload files are temporarily unencrypted. If encryption or deletion fails, files are preserved for retry and a warning appears in the meeting. Playback and audio export are not available. Dictation audio remains temporary; meeting transcripts stay until deleted.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let recordingMaintenanceMessage {

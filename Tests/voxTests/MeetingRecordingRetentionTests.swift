@@ -33,7 +33,8 @@ final class MeetingRecordingRetentionTests: XCTestCase {
         let session = TranscriptSession(
             id: UUID(), title: "Retention test", startedAt: endedAt.addingTimeInterval(-7200),
             endedAt: endedAt, status: status, chunksTotal: 1, chunksCompleted: 1,
-            segments: [TranscriptSegment(startTime: 0, endTime: 1, text: "complete")], audioRetained: false
+            segments: [TranscriptSegment(startTime: 0, endTime: 1, text: "complete")], audioRetained: false,
+            sourceOffsets: .init(system: 0, microphone: 0, phone: 0), sourceAvailability: [true, false, false]
         )
         try store.save(session)
         return session
@@ -243,6 +244,19 @@ final class MeetingRecordingRetentionTests: XCTestCase {
         XCTAssertFalse(exists(mic))
         XCTAssertEqual(try firstBlockPayload(at: archive(system)), Data([12]))
         XCTAssertEqual(try firstBlockPayload(at: archive(mic)), Data([13]))
+    }
+
+    func testLegacyCompleteWithoutManifestRemainsProtected() throws {
+        policy.enabled = false
+        var meeting = try session()
+        meeting.sourceAvailability = nil
+        meeting.sourceOffsets = nil
+        try store.save(meeting)
+        let source = store.audioFile(id: meeting.id)
+        try write(Data([1, 2]), to: source)
+        XCTAssertEqual(store.applyAudioRetention(now: .distantFuture), 0)
+        XCTAssertTrue(exists(archive(source)))
+        try MeetingAudioArchive.verify(archive: archive(source), key: key)
     }
 
     func testIncompleteSessionsRemainEncryptedEvenAfterRestartAndOptOutExpiry() throws {

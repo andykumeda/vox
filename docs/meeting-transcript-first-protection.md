@@ -11,3 +11,7 @@ be restored by this change. Playback, audio export and retranscription remain
 deferred; preserved recordings are not automatically retranscribed.
 
 The MacBook Vox meeting-storage folder contained no audio files at the time of this release; previously purged recordings cannot be reconstructed from that folder.
+
+Automatic retranscription was subsequently requested on 2026-11-13; see
+`docs/meeting-automatic-recovery.md` for current behavior. Playback and audio
+export remain deferred.

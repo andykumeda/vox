@@ -70,6 +70,69 @@ final class MeetingAudioArchiveTests: XCTestCase {
         }
     }
 
+    func testDecryptsAuthenticatedMultiBlockArchiveWithPrivatePermissions() throws {
+        let source = directory.appendingPathComponent("original.m4a")
+        let archive = directory.appendingPathComponent("audio.enc")
+        let destination = directory.appendingPathComponent("recovered.m4a")
+        let original = Data(repeating: 0xA5, count: 2_100_001)
+        try original.write(to: source)
+        try MeetingAudioArchive.encrypt(source: source, destination: archive, key: key)
+        try Data("older contents".utf8).write(to: destination)
+        try MeetingAudioArchive.decrypt(archive: archive, destination: destination, key: key)
+        XCTAssertEqual(try Data(contentsOf: destination), original)
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: destination.path)[.posixPermissions] as? Int, 0o600)
+    }
+
+    func testFailedDecryptionPreservesDestinationAndRemovesPlaintextCandidate() throws {
+        let source = directory.appendingPathComponent("original.m4a")
+        let archive = directory.appendingPathComponent("audio.enc")
+        let destination = directory.appendingPathComponent("recovered.m4a")
+        try Data(repeating: 0xA5, count: 1_200_000).write(to: source)
+        try MeetingAudioArchive.encrypt(source: source, destination: archive, key: key)
+        let prior = Data("existing destination".utf8)
+        try prior.write(to: destination)
+        XCTAssertThrowsError(try MeetingAudioArchive.decrypt(archive: archive, destination: destination, key: Data(repeating: 0, count: 32)))
+        XCTAssertEqual(try Data(contentsOf: destination), prior)
+        var corrupted = try Data(contentsOf: archive)
+        corrupted[corrupted.count - 1] ^= 1
+        try corrupted.write(to: archive)
+        XCTAssertThrowsError(try MeetingAudioArchive.decrypt(archive: archive, destination: destination, key: key))
+        XCTAssertEqual(try Data(contentsOf: destination), prior)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted(), ["audio.enc", "original.m4a", "recovered.m4a"])
+        XCTAssertThrowsError(try MeetingAudioArchive.decrypt(archive: archive, destination: archive, key: key))
+    }
+
+    func testCancelledTaskCanEncryptAndVerifyForSafeCleanup() async throws {
+        let source = directory.appendingPathComponent("original.m4a")
+        let archive = directory.appendingPathComponent("audio.enc")
+        try Data(repeating: 0xA5, count: 1_200_000).write(to: source)
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            try MeetingAudioArchive.encrypt(source: source, destination: archive, key: key)
+            try MeetingAudioArchive.verify(archive: archive, key: key)
+        }
+        try await task.value
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
+    }
+
+    func testCancelledDecryptionLeavesNoPlaintextOutput() async throws {
+        let source = directory.appendingPathComponent("original.m4a")
+        let archive = directory.appendingPathComponent("audio.enc")
+        let destination = directory.appendingPathComponent("recovered.m4a")
+        try Data(repeating: 0xA5, count: 1_200_000).write(to: source)
+        try MeetingAudioArchive.encrypt(source: source, destination: archive, key: key)
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            try MeetingAudioArchive.decrypt(archive: archive, destination: destination, key: key)
+        }
+        do {
+            try await task.value
+            XCTFail("Cancelled decryption must not publish plaintext")
+        } catch is CancellationError { }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted(), ["audio.enc", "original.m4a"])
+    }
+
     func testFailedEncryptionPreservesExistingDestinationAndSource() throws {
         let source = directory.appendingPathComponent("audio.m4a")
         let destination = directory.appendingPathComponent("audio.enc")

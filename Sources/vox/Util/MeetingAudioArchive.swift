@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Block-encrypted meeting audio; each block binds its archive, length and order.
 enum MeetingAudioArchive {
@@ -47,7 +48,32 @@ enum MeetingAudioArchive {
         }
     }
 
+    static func decrypt(archive: URL, destination: URL, key: Data) throws {
+        guard archive.resolvingSymlinksInPath() != destination.resolvingSymlinksInPath() else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        let candidate = destination.deletingLastPathComponent()
+            .appendingPathComponent(".audio-\(UUID().uuidString).plaintext")
+        defer { try? FileManager.default.removeItem(at: candidate) }
+        guard FileManager.default.createFile(
+            atPath: candidate.path, contents: nil, attributes: [.posixPermissions: 0o600]
+        ) else { throw CocoaError(.fileWriteUnknown) }
+        let output = try FileHandle(forWritingTo: candidate)
+        defer { try? output.close() }
+        try readArchive(archive: archive, key: key, cancellable: true) { try output.write(contentsOf: $0) }
+        try Task.checkCancellation()
+        try output.synchronize()
+        try output.close()
+        guard rename(candidate.path, destination.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+    }
+
     static func verify(archive: URL, key: Data) throws {
+        try readArchive(archive: archive, key: key, cancellable: false) { _ in }
+    }
+
+    private static func readArchive(archive: URL, key: Data, cancellable: Bool, consume: (Data) throws -> Void) throws {
         let cipher = try TranscriptCipher(keyData: key)
         let input = try FileHandle(forReadingFrom: archive)
         defer { try? input.close() }
@@ -60,6 +86,7 @@ enum MeetingAudioArchive {
         var remaining = integer(context.suffix(8))
         var index: UInt64 = 0
         while remaining > 0 {
+            if cancellable { try Task.checkCancellation() }
             let count = Int(min(UInt64(blockSize), remaining))
             let plaintext = try cipher.open(readFrame(from: input))
             guard plaintext.count == contextSize + 8 + count,
@@ -67,6 +94,7 @@ enum MeetingAudioArchive {
                   integer(plaintext.dropFirst(contextSize).prefix(8)) == index else {
                 throw TranscriptEncryptionError.invalidEnvelope
             }
+            try consume(Data(plaintext.dropFirst(contextSize + 8)))
             remaining -= UInt64(count)
             index += 1
         }

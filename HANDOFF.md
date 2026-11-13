@@ -1,5 +1,18 @@
 # Vox Handoff
 
+## Automatic meeting retranscription — 0.7.90 / 114 (2026-11-13)
+
+- Eligible failed/incomplete meetings are retried automatically with the current
+  meeting provider, on launch/wake and at the configured interval (default one
+  hour). Retries may incur charges. Original audio and previous text remain intact
+  until a complete candidate is saved. Cancellation stops retries for that item.
+- New meetings save source availability and alignment; legacy records without both,
+  capture-loss warnings, missing sources and corrupt archives remain for review.
+  The MacBook had no retained audio for its earlier failed meetings.
+- 612 Swift tests and seven dictation fixtures pass. Signed candidate built;
+  MacBook install, public feed and live provider/meeting proof remain pending. See
+  `docs/meeting-automatic-recovery.md`. Playback and audio export remain deferred.
+
 ## Transcript-first meeting audio — 0.7.89 / 113 (2026-11-13)
 
 - Protect incomplete, failed, cancelled and interrupted meeting audio, including

@@ -40,4 +40,31 @@ final class MeetingTranscriptValidityTests: XCTestCase {
         XCTAssertFalse(saved.captureWarnings.isEmpty)
     }
 
+    func testMissingMultisourceTimingIsNotClaimedComplete() async throws {
+        final class UntimedRecorder: MeetingAudioRecording {
+            var output: URL?
+            func start(outputURL: URL) async throws {
+                try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data([1]).write(to: outputURL)
+                output = outputURL
+            }
+            func stop() async throws -> URL { try XCTUnwrap(output) }
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = MeetingTranscriptStore(rootDirectory: root, keyProvider: { Data(repeating: 0x7C, count: 32) })
+        let session = MeetingTranscriptionSession(store: store, recorder: UntimedRecorder(), micRecorder: UntimedRecorder(),
+            chunker: { url, _ in [url] }, transcribe: { _, _, source in
+                [TranscriptSegment(startTime: 0, endTime: 1, text: "speech", source: source)]
+            }, apiKey: { "test" }, preflight: { .success(()) })
+        try await session.start()
+        let id = try XCTUnwrap(session.activeSessionID)
+        try await session.stop()
+        await session.waitForCompletion()
+        let saved = try XCTUnwrap(store.load(id: id))
+        XCTAssertEqual(saved.status, .failed)
+        XCTAssertNil(saved.sourceOffsets)
+        XCTAssertTrue(saved.captureWarnings.contains { $0.contains("timing was unavailable") })
+    }
+
 }

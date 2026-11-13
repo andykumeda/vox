@@ -3,6 +3,7 @@ import AppKit
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let menuController = MenuBarController()
+    private var meetingRecovery: MeetingRecoveryScheduler?
 
     static func main() {
         let app = NSApplication.shared
@@ -33,6 +34,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { _ in
             Task.detached(priority: .utility) { MeetingTranscriptStore().applyAudioRetention() }
+        }
+        let recovery = MeetingRecoveryScheduler(session: .shared, store: transcriptStore)
+        meetingRecovery = recovery
+        recovery.start()
+        NotificationCenter.default.addObserver(forName: .meetingTranscriptStoreDidChange, object: nil, queue: .main) { [weak recovery] _ in
+            Task { @MainActor in recovery?.requestSweep() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak recovery] _ in
+            Task { @MainActor in recovery?.requestSweep() }
         }
         menuController.start()
         try? CleanupProfileStore.shared.ensureFileExists()

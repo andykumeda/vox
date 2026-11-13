@@ -15,6 +15,7 @@ public enum ServiceConfiguration {
         case requestRetryDelay
         case meetingRetryBudget
         case meetingRetryDelays
+        case meetingRecoveryInterval
         case meetingChunkDuration
         case openaiTranscriptionURL
         case openrouterTranscriptionURL
@@ -69,6 +70,7 @@ public enum ServiceConfiguration {
             case .requestMaxAttempts: return true
             case .requestRetryDelay: return true
             case .meetingRetryBudget: return true
+            case .meetingRecoveryInterval: return true
             case .meetingChunkDuration: return true
             case .captureHealthTimeout: return true
             case .dictationTimeout: return true
@@ -133,6 +135,8 @@ public enum ServiceConfiguration {
                   (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { throw InvalidValue(key: key) }
         } else if key == .captureHealthTimeout {
             guard let seconds = Double(value), seconds.isFinite, (0.25...30).contains(seconds) else { throw InvalidValue(key: key) }
+        } else if key == .meetingRecoveryInterval {
+            guard let seconds = Double(value), seconds.isFinite, (60...Double(Int32.max)).contains(seconds) else { throw InvalidValue(key: key) }
         } else if key == .meetingRetryDelays {
             let parts = value.split(separator: ",", omittingEmptySubsequences: false)
             guard !parts.isEmpty, parts.allSatisfy({ Double($0).map { $0.isFinite && $0 > 0 && $0 <= Double(Int32.max) } == true }) else { throw InvalidValue(key: key) }

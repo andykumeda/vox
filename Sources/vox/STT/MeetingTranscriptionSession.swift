@@ -446,6 +446,17 @@ public final class MeetingTranscriptionSession {
         let micShift = micStartedAt.map { $0.timeIntervalSince(referenceTime) } ?? 0
         let phoneShift = phoneStartedAt.map { $0.timeIntervalSince(referenceTime) } ?? 0
         dlog("Meeting timeline shifts: system=\(systemShift)s mic=\(micShift)s phone=\(phoneShift)s")
+        let availability = [usableSystemURL != nil, micURL != nil, phoneURL != nil]
+        let startTimes = [systemStartedAt, micStartedAt, phoneStartedAt]
+        let alignmentKnown = availability.filter { $0 }.count <= 1 ||
+            zip(availability, startTimes).allSatisfy { !$0.0 || $0.1 != nil }
+        if !alignmentKnown {
+            addCaptureWarning("Source timing was unavailable; the transcript may be misaligned and audio is retained for review.")
+        }
+        updateSession {
+            $0.sourceOffsets = alignmentKnown ? .init(system: systemShift, microphone: micShift, phone: phoneShift) : nil
+            $0.sourceAvailability = availability
+        }
 
         uploadTask = Task { [weak self] in
             await self?.runChunkAndUpload(
@@ -457,6 +468,161 @@ public final class MeetingTranscriptionSession {
                 phoneShift: phoneShift,
                 sessionID: sid
             )
+        }
+    }
+
+    enum RecoveryError: Error, CustomStringConvertible {
+        case unavailable(String)
+        var description: String {
+            switch self { case .unavailable(let message): return message }
+        }
+    }
+
+    /// Retries a preserved meeting in an isolated store; original text and audio
+    /// are changed only after a complete candidate has been saved.
+    func recoverMeeting(id: UUID, attemptedAt: Date = Date()) async throws {
+        guard let previous = store.load(id: id), previous.status == .failed ||
+                (previous.status == .completed && !MeetingTranscriptStore.hasConfirmedTranscript(previous)) else {
+            throw RecoveryError.unavailable("Meeting is not eligible for automatic recovery.")
+        }
+        let transientWarnings = [
+            "One or more audio chunks produced no usable transcript; the recording is retained for review.",
+            "One or more audio sources produced no usable transcript; the recording is retained for review."
+        ]
+        let permanentWarnings = previous.captureWarnings.filter { !transientWarnings.contains($0) }
+        guard permanentWarnings.isEmpty else {
+            throw RecoveryError.unavailable("Capture warnings require review; the existing transcript and audio were preserved.")
+        }
+        let sourceFiles = [store.audioFile(id: id), store.micFile(id: id), store.phoneFile(id: id)]
+        let available = sourceFiles.map { url in
+            FileManager.default.fileExists(atPath: url.appendingPathExtension("enc").path) ||
+            FileManager.default.fileExists(atPath: url.path)
+        }
+        guard available.contains(true) else {
+            throw RecoveryError.unavailable("Original meeting audio is unavailable for automatic recovery.")
+        }
+        guard let expected = previous.sourceAvailability, expected.count == 3,
+              let offsets = previous.sourceOffsets else {
+            throw RecoveryError.unavailable("Original source availability or alignment is unavailable; the existing transcript and audio were preserved for review.")
+        }
+        guard expected == available else {
+            throw RecoveryError.unavailable("Preserved sources do not match the original capture; audio was retained for review.")
+        }
+        guard [offsets.system, offsets.microphone, offsets.phone].allSatisfy({ $0.isFinite && $0 >= 0 }) else {
+            throw RecoveryError.unavailable("Original source alignment is invalid; the existing transcript and audio were preserved.")
+        }
+        let selected = try providerProvider()
+        let key = credentialProvider(selected)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if preflight == nil && key.isEmpty { throw RecoveryError.unavailable("The selected meeting provider has no API key.") }
+        let clients: Clients = clientFactory?(selected, key) ?? (chunk: selected == .openrouter ? openrouterTranscribe : transcribe, stream: deepgramTranscribe)
+        if selected == .deepgram && clients.stream == nil || selected != .deepgram && clients.chunk == nil {
+            throw RecoveryError.unavailable("The selected meeting provider is unavailable.")
+        }
+        try withSessionLock {
+            if let session, [.recording, .chunking, .transcribing].contains(session.status) { throw SessionError.alreadyActive }
+            if unsavedSession != nil { throw RecoveryError.unavailable("Save the previous transcript before recovering another meeting.") }
+            var active = previous
+            active.status = .transcribing
+            session = active
+        }
+        let reserved: TranscriptSession
+        do {
+            guard let saved = try store.updateIfPresent(id: id, matching: { $0.status == .failed || ($0.status == .completed && !MeetingTranscriptStore.hasConfirmedTranscript($0)) }, mutate: { $0.status = .transcribing; $0.recoveryAttemptAt = attemptedAt }) else {
+                throw RecoveryError.unavailable("Meeting changed before recovery started.")
+            }
+            reserved = saved
+        } catch {
+            clearSession(ifMatching: id)
+            throw error
+        }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.runRecovery(previous: reserved, selected: selected, clients: clients, sourceFiles: sourceFiles, available: available, warnings: transientWarnings)
+        }
+        uploadTask = task
+        await withTaskCancellationHandler(operation: { await task.value }, onCancel: { task.cancel() })
+    }
+
+    private func runRecovery(previous: TranscriptSession, selected: MeetingProvider, clients: Clients,
+                             sourceFiles: [URL], available: [Bool], warnings: [String]) async {
+        let id = previous.id
+        let parent = store.rootDirectory.appendingPathComponent(".automatic-recovery", isDirectory: true)
+        let work = parent.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            do { if FileManager.default.fileExists(atPath: work.path) { try FileManager.default.removeItem(at: work) } }
+            catch {
+                dlog("Meeting recovery temporary cleanup failed: \(error)")
+                MeetingRecoveryScheduler.warnAboutScratch()
+            }
+        }
+        do {
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            let scratch = store.recoveryStore(rootDirectory: work)
+            let scratchDirectory = scratch.sessionDirectory(id: id)
+            try FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            let targets = [scratch.audioFile(id: id), scratch.micFile(id: id), scratch.phoneFile(id: id)]
+            for index in sourceFiles.indices where available[index] {
+                try Task.checkCancellation()
+                let archive = sourceFiles[index].appendingPathExtension("enc")
+                if FileManager.default.fileExists(atPath: archive.path) {
+                    try store.decryptRecoveryAudio(archive, to: targets[index])
+                    if FileManager.default.fileExists(atPath: sourceFiles[index].path),
+                       !FileManager.default.contentsEqual(atPath: sourceFiles[index].path, andPath: targets[index].path) {
+                        throw RecoveryError.unavailable("Conflicting original and archived audio require review.")
+                    }
+                } else {
+                    try FileManager.default.copyItem(at: sourceFiles[index], to: targets[index])
+                    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: targets[index].path)
+                }
+            }
+            var candidate = previous
+            candidate.status = .transcribing
+            candidate.failureReason = nil
+            candidate.captureWarnings.removeAll { warnings.contains($0) }
+            candidate.rawSegments = []
+            candidate.segments = []
+            candidate.summary = nil
+            candidate.chunksTotal = 0
+            candidate.chunksCompleted = 0
+            try scratch.save(candidate)
+            let child = MeetingTranscriptionSession(store: scratch, recorder: nil, chunker: chunker, transcribe: transcribe,
+                deepgramTranscribe: deepgramTranscribe, openrouterTranscribe: openrouterTranscribe,
+                provider: providerProvider, apiKey: { nil }, clientFactory: clientFactory,
+                preflight: { .success(()) }, backoffSchedule: backoffSchedule, retryBudget: retryBudget, chunkDuration: chunkDuration)
+            child.session = candidate
+            child.activeProvider = selected
+            child.activeClients = clients
+            let offsets = previous.sourceOffsets
+            await child.runChunkAndUpload(systemURL: available[0] ? targets[0] : nil,
+                micURL: available[1] ? targets[1] : nil, phoneURL: available[2] ? targets[2] : nil,
+                systemShift: offsets?.system ?? 0, micShift: offsets?.microphone ?? 0, phoneShift: offsets?.phone ?? 0, sessionID: id)
+            try Task.checkCancellation()
+            guard let result = scratch.load(id: id), MeetingTranscriptStore.hasConfirmedTranscript(result) else {
+                throw RecoveryError.unavailable("Automatic retranscription did not produce a complete transcript; existing text and audio were preserved.")
+            }
+            guard let saved = try store.updateIfPresent(id: id, matching: { $0.status == .transcribing }, mutate: { original in
+                original.rawSegments = result.rawSegments
+                original.segments = result.segments
+                original.chunksTotal = result.chunksTotal
+                original.chunksCompleted = result.chunksCompleted
+                original.captureWarnings = result.captureWarnings
+                original.failureReason = nil
+                original.summary = nil
+                original.status = .completed
+            }) else { throw RecoveryError.unavailable("Meeting changed during recovery; original audio was preserved.") }
+            withSessionLock { if session?.id == id { session = saved } }
+            store.finalizeAudio(for: id)
+            await runSummarizationIfEnabled(sessionID: id)
+        } catch {
+            let reason = Task.isCancelled ? "Automatic retranscription was cancelled; existing text and audio were preserved." : "Automatic retranscription failed; existing text and audio were preserved: \(error)"
+            if let restored = try? store.updateIfPresent(id: id, matching: { $0.status == .transcribing }, mutate: { original in
+                original.status = Task.isCancelled ? .cancelled : .failed
+                original.failureReason = reason
+            }) {
+                withSessionLock { if session?.id == id { session = restored } }
+            } else {
+                withSessionLock { if session?.id == id { session?.status = .failed; session?.failureReason = reason } }
+            }
         }
     }
 

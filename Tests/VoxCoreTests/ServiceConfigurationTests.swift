@@ -59,6 +59,13 @@ final class ServiceConfigurationTests: XCTestCase {
         }
     }
 
+    func testRecoveryIntervalRejectsUnsafeValues() throws {
+        for value in ["60", "3600", "86400"] { try ServiceConfiguration.validate(value, for: .meetingRecoveryInterval) }
+        for value in ["0", "59", "-1", "NaN", "inf", "1e99"] {
+            XCTAssertThrowsError(try ServiceConfiguration.validate(value, for: .meetingRecoveryInterval))
+        }
+    }
+
     func testInvalidOverridesAreRejectedWithoutProviderFallback() {
         for url in ["http://example.com/chat", "not-a-url", "https://user:password@example.com/chat", "https://example.com/#fragment"] {
             XCTAssertThrowsError(try ServiceConfiguration.validate(url, for: .openaiChatURL))

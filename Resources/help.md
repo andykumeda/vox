@@ -82,6 +82,11 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   interleaves segments by time, and opens the transcript browser.
 - Select a saved meeting and click **Copy Transcript** to put its plain-text
   transcript on the clipboard. Use **Export…** to save plain or timestamped text.
+- Vox automatically retries eligible failed or incomplete meetings with preserved
+  audio at startup, on wake, and periodically (default every hour, configurable as `meetingRecoveryInterval` in seconds under **API and service configuration**). It uses the current meeting provider;
+  re-uploading audio may incur additional charges. The existing transcript remains
+  available during retry, and original audio stays protected until a replacement is
+  saved. Previously deleted audio cannot be recovered.
 - Audio for a complete saved transcript is temporary by default. Under Settings →
   **Recordings storage**, enable **Retain encrypted meeting recordings** to keep it
   for **7 / 30 / 90 days** (default **30 days**). Failed, cancelled, empty or
@@ -96,7 +101,7 @@ the call, mixed by Zoom/Meet/etc) and your local mic in parallel.
   capture/upload files are temporarily unencrypted. Encryption/deletion failures
   preserve files for retry and produce a meeting warning and Settings storage error.
   Unreadable metadata preserves audio until disk/Keychain access is restored.
-  Playback, audio export and retranscription remain unavailable. Raw provider segments,
+  Playback and audio export remain unavailable. Raw provider segments,
   final displayed segments and summaries remain in encrypted transcript files.
 
 ### Permissions for Meetings
