@@ -6,8 +6,9 @@
   derived chunks, independently of normal retention expiry. Complete saved
   transcripts remain subject to normal retention; explicit meeting deletion
   removes audio. Empty or warning-bearing results are marked incomplete.
-- 588 Swift tests and seven dictation fixtures pass. The signed build is ready;
-  MacBook installation, public feed and a real meeting remain to be verified.
+- 588 Swift tests and seven dictation fixtures pass. Signed release installed on
+  Mini and MacBook; public feed and download match. MacBook microphone and hotkey
+  startup pass; a real meeting remains unverified. Hosted CI jobs were canceled.
   Previously purged audio cannot be recovered. Saved audio is not automatically
   retranscribed. See `docs/meeting-transcript-first-protection.md`.
 
