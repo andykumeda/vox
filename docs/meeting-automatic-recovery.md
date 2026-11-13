@@ -6,13 +6,14 @@
 | --- | --- | --- | --- |
 | Silent-source recovery | Codex | Verified | A valid speech result must not fail because a separate source is exact digital silence. Nonzero and unreadable sources must still be processed; all-silent recordings must not be claimed complete. A real-audio regression failed before the fix and passes afterward; 615 Swift tests and seven dictation fixtures pass. |
 | Failure detail | Codex | Verified | Failed recovery reports the candidate failure without replacing the original failure or deleting saved audio. Covered by recovery tests. |
-| Release and MacBook retry | Codex | In progress | Publish and install unique 0.7.92 / 116, then retry the preserved MacBook test and verify the displayed text and audio policy. |
+| Release and MacBook retry | Codex | In progress | Signed 0.7.92 / 116 installed on Mini and MacBook; public feed, release asset, SHA-256 and Sparkle signature match. The preserved MacBook test retried automatically, generated a summary and its temporary audio was removed; visual transcript verification is pending because screen sharing is unavailable. |
 
 On the MacBook's 34-second synthetic test, the initial request was intentionally
 rejected and recovery sent three sources to OpenRouter; the phone source was logged
 below the existing silence threshold. The test reproduced rejection of a silent
-source, but the MacBook recording's exact sample values and the provider output were
-not retained in diagnostics; this is a supported hypothesis pending the live retry.
+source. With 0.7.92 the same archived meeting skipped the phone source and generated
+a summary after processing its other sources. The displayed transcript still needs
+inspection before claiming word-level success.
 Only an entire successfully decoded, nonempty source of zero samples is omitted.
 The silence threshold alone is not used to declare completion.
 
