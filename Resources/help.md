@@ -263,3 +263,5 @@ for OpenAI and OpenRouter as well as Deepgram.
 Advanced service setting `captureHealthTimeout` controls how long missing audio
 is tolerated (default 2 seconds, range 0.25–30); quiet audio still counts as
 healthy. The environment override is `VOX_CAPTURE_HEALTH_TIMEOUT`.
+
+When the microphone returns no words during a meeting, Vox checks the audio locally for speech. Background-only microphone intervals can finish alongside a usable transcript. Vox keeps the original audio encrypted for review until you delete the meeting.

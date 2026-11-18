@@ -72,6 +72,22 @@ final class MeetingRecordingRetentionTests: XCTestCase {
         XCTAssertFalse(AppSettings.meetingRecordingRetention.enabled)
     }
 
+    func testCompletedBackgroundMicrophoneMeetingKeepsAudioWithRetentionDisabled() throws {
+        policy = .init(enabled: false, days: .thirty)
+        var meeting = try session()
+        meeting.backgroundMicrophoneDetected = true
+        try store.save(meeting)
+        let mic = store.micFile(id: meeting.id)
+        try write(Data("mic fixture".utf8), to: mic)
+        try store.finishAudio(for: meeting.id)
+        let saved = try XCTUnwrap(store.load(id: meeting.id))
+        XCTAssertTrue(MeetingTranscriptStore.hasConfirmedTranscript(saved))
+        XCTAssertTrue(saved.backgroundMicrophoneDetected)
+        XCTAssertTrue(saved.audioRetained)
+        try MeetingAudioArchive.verify(archive: archive(mic), key: key)
+        XCTAssertFalse(MeetingBackgroundAudio.matches(mic))
+    }
+
     func testRetainsEncryptedOriginalSourcesWithoutDuplicateChunks() throws {
         let meeting = try session()
         let sources = [store.audioFile(id: meeting.id), store.micFile(id: meeting.id), store.phoneFile(id: meeting.id)]

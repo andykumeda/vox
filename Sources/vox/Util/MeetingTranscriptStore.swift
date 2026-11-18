@@ -21,6 +21,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
     /// Exact provider output before filtering, de-cascading, or timeline shaping.
     public var rawSegments: [TranscriptSegment]
     public var segments: [TranscriptSegment]
+    public var backgroundMicrophoneDetected = false
     public var audioRetained: Bool
     public var failureReason: String?
     public var captureWarnings: [String]
@@ -69,7 +70,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, startedAt, endedAt, status, chunksTotal, chunksCompleted,
+        case backgroundMicrophoneDetected, id, title, startedAt, endedAt, status, chunksTotal, chunksCompleted,
              rawSegments, segments, audioRetained, failureReason, summary, captureWarnings, sourceOffsets, sourceAvailability, recoveryAttemptAt
     }
 
@@ -84,6 +85,7 @@ public struct TranscriptSession: Codable, Equatable, Sendable {
         self.chunksCompleted = try c.decode(Int.self, forKey: .chunksCompleted)
         self.rawSegments = try c.decodeIfPresent([TranscriptSegment].self, forKey: .rawSegments) ?? []
         self.segments = try c.decode([TranscriptSegment].self, forKey: .segments)
+        self.backgroundMicrophoneDetected = try c.decodeIfPresent(Bool.self, forKey: .backgroundMicrophoneDetected) ?? false
         self.audioRetained = try c.decode(Bool.self, forKey: .audioRetained)
         self.failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
         // Pre-summary persisted sessions have no `summary`; treat as nil.
@@ -354,7 +356,7 @@ public final class MeetingTranscriptStore {
                 if policy == nil { throw AudioRetentionError.activeSession }
                 return false
             }
-            let protectIncomplete = policy != nil && !Self.hasConfirmedTranscript(session)
+            let protectIncomplete = policy != nil && (!Self.hasConfirmedTranscript(session) || session.backgroundMicrophoneDetected)
             let retain = policy.map { protectIncomplete || ($0.enabled && $0.expiry(for: session) > now) } ?? false
             let directory = sessionDirectory(id: id)
             var encryptedSources: [URL] = []

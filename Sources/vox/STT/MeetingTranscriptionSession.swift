@@ -586,6 +586,7 @@ public final class MeetingTranscriptionSession {
             candidate.status = .transcribing
             candidate.failureReason = nil
             candidate.captureWarnings.removeAll { warnings.contains($0) || $0.hasPrefix(Self.recoveryNoticePrefix) }
+            candidate.backgroundMicrophoneDetected = false
             candidate.rawSegments = []
             candidate.segments = []
             candidate.summary = nil
@@ -612,6 +613,7 @@ public final class MeetingTranscriptionSession {
                 throw RecoveryError.unavailable("\(detail) Existing text and audio were preserved.")
             }
             guard let saved = try store.updateIfPresent(id: id, matching: { $0.status == .transcribing }, mutate: { original in
+                original.backgroundMicrophoneDetected = result.backgroundMicrophoneDetected
                 original.rawSegments = result.rawSegments
                 original.segments = result.segments
                 original.chunksTotal = result.chunksTotal
@@ -817,7 +819,9 @@ public final class MeetingTranscriptionSession {
                         speakerID: seg.speakerID.flatMap { provider == .openrouter ? speakerLabels[$0] : $0 }
                     )
                 }
-                if shifted.isEmpty {
+                if source == .local && segments.isEmpty && MeetingBackgroundAudio.matches(chunkURL) {
+                    updateSession { $0.backgroundMicrophoneDetected = true }
+                } else if shifted.isEmpty {
                     addCaptureWarning("One or more audio chunks produced no usable transcript; the recording is retained for review.")
                 }
                 updateSession { s in
@@ -1117,7 +1121,9 @@ public final class MeetingTranscriptionSession {
                     speakerID: speakerID
                 )
             }
-            if tagged.isEmpty {
+            if job.source == .local && tagged.isEmpty && MeetingBackgroundAudio.matches(job.url) {
+                updateSession { $0.backgroundMicrophoneDetected = true }
+            } else if tagged.isEmpty {
                 addCaptureWarning("One or more audio sources produced no usable transcript; the recording is retained for review.")
             }
             allSegments.append(contentsOf: tagged)

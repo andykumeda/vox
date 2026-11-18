@@ -1,5 +1,11 @@
 # Vox Handoff
 
+## Listening-only meetings — 0.7.93 / 117
+
+- Verified that two empty microphone responses from a listening-only MacBook meeting contained locally classified background audio. Remote audio in the same meeting served as a speech control. No meeting content was added to the repository.
+- After a successful empty microphone response, Vox checks for background audio with Apple's on-device sound classifier. Missing results, classification errors, possible speech, remote gaps, and wholly empty meetings keep their existing failure handling. A completed meeting using this check protects its audio until explicit deletion.
+- Verified 616 Swift tests, seven dictation fixtures, and the classifier on the affected MacBook. Signed build installed on both Macs. This check does not remove words a provider returned or prove speaker attribution.
+
 ## Silent-source recovery — 0.7.92 / 116 (2026-11-13)
 
 - Mini recovery smoke passed on 0.7.92: a 47-second synthetic meeting was

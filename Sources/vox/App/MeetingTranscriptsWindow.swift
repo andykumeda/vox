@@ -203,6 +203,9 @@ struct MeetingTranscriptsView: View {
                         .disabled([.recording, .chunking, .transcribing].contains(s.status))
                 }.padding()
                 Divider()
+                if s.backgroundMicrophoneDetected {
+                    Text("No speech was detected in part of the microphone recording. Audio is retained for review.").font(.callout).padding()
+                }
                 if !s.captureWarnings.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Label("Partial recording", systemImage: "exclamationmark.triangle.fill")

@@ -492,3 +492,5 @@ See [stabilization status](docs/reliability-stabilization.md) and
 and remaining hardware/comparative checks.
 
 Vox retries temporary meeting provider failures within the configured meeting retry budget, honors OpenRouter Retry-After, and reports persistent failures. Completed Deepgram sources remain visible if a later source fails. If a transcript cannot be saved, Vox alerts you and retries the save before starting another meeting. Available audio for an incomplete meeting is protected across restart, including when recording retention is off.
+
+When the microphone returns no words during a meeting, Vox checks the audio locally for speech. Background-only microphone intervals can finish alongside a usable transcript. Vox keeps the original audio encrypted for review until you delete the meeting.
