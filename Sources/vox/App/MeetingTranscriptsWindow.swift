@@ -8,13 +8,13 @@ enum MeetingTranscriptFormat {
 }
 
 enum MeetingTranscriptFormatter {
-    static func render(_ session: TranscriptSession, format: MeetingTranscriptFormat) -> String {
-        let useSpeakerID = session.segments.contains { $0.speakerID != nil }
-        func label(_ segment: TranscriptSegment) -> String {
-            if useSpeakerID, let id = segment.speakerID { return "Speaker \(id)" }
-            return segment.source == .local ? "You" : "Other"
-        }
+    static func label(_ segment: TranscriptSegment) -> String {
+        if segment.source == .local { return "Microphone" }
+        if let id = segment.speakerID { return "Speaker \(id)" }
+        return "Other"
+    }
 
+    static func render(_ session: TranscriptSession, format: MeetingTranscriptFormat) -> String {
         switch format {
         case .plain:
             var output = ""
@@ -272,7 +272,7 @@ struct MeetingTranscriptsView: View {
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                     .frame(width: 56, alignment: .leading)
-                                Text(speakerLabel(seg))
+                                Text(MeetingTranscriptFormatter.label(seg))
                                     .font(.system(.caption, design: .monospaced).bold())
                                     .foregroundStyle(speakerColor(seg))
                                     .frame(width: 76, alignment: .leading)
@@ -316,14 +316,7 @@ struct MeetingTranscriptsView: View {
         return String(format: "%02d:%02d", total / 60, total % 60)
     }
 
-    private func speakerLabel(_ seg: TranscriptSegment) -> String {
-        if let id = seg.speakerID { return "Speaker \(id)" }
-        return seg.source == .local ? "You" : "Other"
-    }
-
     private func speakerColor(_ seg: TranscriptSegment) -> Color {
-        // Local mic always = you; reserve green so it never collides with a
-        // remote speaker color from the palette below.
         if seg.source == .local { return .green }
         if let id = seg.speakerID {
             let palette: [Color] = [.blue, .purple, .orange, .pink, .teal, .indigo, .brown, .red]

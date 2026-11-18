@@ -1070,7 +1070,7 @@ public final class MeetingTranscriptionSession {
             let prepped = await prepareForChunking(streamURL: url, baseShift: micShift)
             if prepped.audibleDuration > 0 || micShift == 0 {
                 // Mic = you; collapse Deepgram's within-mic speakers to nil so
-                // the renderer shows "You" rather than "Speaker N".
+                // the renderer shows "Microphone" rather than "Speaker N".
                 jobs.append(Job(url: prepped.url, source: .local, shift: prepped.shift, speakerOffset: -1))
             }
         }

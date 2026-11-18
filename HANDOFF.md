@@ -1,5 +1,10 @@
 # Vox Handoff
 
+## Microphone attribution — 0.7.94 / 118
+
+- The transcript window, clipboard and exports use Microphone for local-channel text. Microphone pickup alone cannot identify the person speaking. Existing records use the corrected label without rewriting their text or timestamps.
+- The formatter regression and full suite pass (616 tests), along with seven dictation fixtures. Prior incomplete sessions without retained media can supply only their saved text. A partial export was verified locally on the affected MacBook. Private meeting details are excluded from this release record.
+
 ## Listening-only meetings — 0.7.93 / 117
 
 - Verified that two empty microphone responses from a listening-only MacBook meeting contained locally classified background audio. Remote audio in the same meeting served as a speech control. No meeting content was added to the repository.

@@ -41,8 +41,8 @@ public enum MeetingProvider: String, CaseIterable, Sendable {
     public var displayName: String {
         switch self {
         case .deepgram: return "Deepgram (diarized speakers)"
-        case .openai:   return "OpenAI (You/Other only)"
-        case .openrouter: return "OpenRouter (You/Other; optional diarization)"
+        case .openai:   return "OpenAI (Microphone/Other only)"
+        case .openrouter: return "OpenRouter (Microphone/Other; optional diarization)"
         }
     }
 

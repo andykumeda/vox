@@ -12,7 +12,7 @@ final class MeetingTranscriptFormatterTests: XCTestCase {
 
         XCTAssertEqual(
             MeetingTranscriptFormatter.render(session, format: .plain),
-            "You: First thought. More detail.\n\nOther: Response."
+            "Microphone: First thought. More detail.\n\nOther: Response."
         )
     }
 
