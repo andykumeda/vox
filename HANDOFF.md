@@ -1,5 +1,12 @@
 # Vox Handoff
 
+## Listening-only recovery and automatic meeting controls — 0.7.95 / 119
+
+Vox accepts an isolated weak sound-classifier result when a microphone request
+returns no words and another source has a transcript. The original audio stays
+protected. Meeting detection can also present the controls during recording and
+respects explicit dismissal. See [verification and release status](docs/meeting-listening-and-panel.md).
+
 ## Microphone attribution — 0.7.94 / 118
 
 - The transcript window, clipboard and exports use Microphone for local-channel text. Microphone pickup alone cannot identify the person speaking. Existing records use the corrected label without rewriting their text or timestamps.
