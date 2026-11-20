@@ -39,6 +39,7 @@ public final class MeetingDetector {
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        tick()
     }
 
     public func stop() {
@@ -48,10 +49,12 @@ public final class MeetingDetector {
         missCount = 0
     }
 
-    private func tick() {
-        let runningApps = NSWorkspace.shared.runningApplications
-        let frontmostOwner = NSWorkspace.shared.frontmostApplication?.localizedName
+    func applicationActivated(_ app: NSRunningApplication) {
+        guard timer != nil, !inMeeting else { return }
+        tick(frontmostOwner: app.localizedName)
+    }
 
+    private func tick(frontmostOwner: String? = NSWorkspace.shared.frontmostApplication?.localizedName) {
         // CGWindowListCopyWindowInfo crosses into WindowServer and is much more
         // expensive than inspecting the frontmost application. When auto-show is
         // enabled, do not query every on-screen window on every poll while the user
@@ -65,7 +68,7 @@ public final class MeetingDetector {
         }
 
         let windows = Self.snapshotWindows()
-        let match = Self.firstMatchingWindow(runningApps: runningApps, windows: windows)
+        let match = Self.firstMatchingWindow(runningApps: NSWorkspace.shared.runningApplications, windows: windows)
         let active = (match != nil)
 
         // Diagnostic logging. The empty-title case is the most common false

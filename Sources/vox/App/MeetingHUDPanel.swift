@@ -10,10 +10,16 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
     public static let shared = MeetingHUDPanel()
 
     private var panel: NSPanel?
+    private var dismissedRecordingID: UUID?
+    private let currentRecordingID: () -> UUID?
 
     private static let positionKey = "meetingHUDPosition"
 
-    private override init() {
+    init(currentRecordingID: @escaping () -> UUID? = {
+        let session = MeetingTranscriptionSession.shared
+        return session.isRecording ? session.activeSessionID : nil
+    }) {
+        self.currentRecordingID = currentRecordingID
         super.init()
         NotificationCenter.default.addObserver(
             self, selector: #selector(screensChanged),
@@ -32,7 +38,14 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
         }
     }
 
+    func showForDetectedMeeting() {
+        if let dismissedRecordingID, currentRecordingID() == dismissedRecordingID { return }
+        show()
+        dlog("MeetingDetector: meeting started — showing HUD")
+    }
+
     public func show() {
+        dismissedRecordingID = nil
         if let panel {
             if panel.isMiniaturized { panel.deminiaturize(nil) }
             keepOnScreen(panel)
@@ -104,12 +117,17 @@ public final class MeetingHUDPanel: NSObject, NSWindowDelegate {
     }
 
     public func hide() {
+        dismissedRecordingID = currentRecordingID()
         panel?.orderOut(nil)
     }
 
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)
+        hide()
         return false
+    }
+
+    public func windowWillMiniaturize(_ notification: Notification) {
+        dismissedRecordingID = currentRecordingID()
     }
 
     public func windowDidMove(_ notification: Notification) {

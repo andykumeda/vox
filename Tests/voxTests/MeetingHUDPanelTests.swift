@@ -5,6 +5,29 @@ import XCTest
 final class MeetingHUDPanelTests: XCTestCase {
     private let main = NSRect(x: 0, y: 24, width: 1440, height: 850)
 
+    @MainActor
+    func testDetectionShowsControlsDuringRecordingAndRespectsDismissal() throws {
+        var recordingID: UUID? = UUID()
+        let hud = MeetingHUDPanel(currentRecordingID: { recordingID })
+        hud.showForDetectedMeeting()
+        let panel = try XCTUnwrap(NSApplication.shared.windows.first { $0.delegate === hud })
+        defer { hud.hide() }
+        XCTAssertTrue(panel.isVisible)
+
+        panel.performClose(nil)
+        hud.showForDetectedMeeting()
+        XCTAssertFalse(panel.isVisible)
+
+        recordingID = UUID()
+        hud.showForDetectedMeeting()
+        XCTAssertTrue(panel.isVisible)
+
+        hud.hide()
+        recordingID = nil
+        hud.showForDetectedMeeting()
+        XCTAssertTrue(panel.isVisible)
+    }
+
     func testKeepsRememberedPositionOnItsDisplay() {
         let second = NSRect(x: -1920, y: 0, width: 1920, height: 1080)
         let frame = NSRect(x: -1200, y: 500, width: 270, height: 95)

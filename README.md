@@ -265,7 +265,7 @@ The mic recorder runs a per-second peak-power watchdog so a stalled OS-level aud
 
 ### Auto-show panel when a call starts (opt-in)
 
-Settings → Meeting Transcription (Beta) → **Auto-show meeting panel when a call starts**. Vox checks window titles every few seconds only when a supported meeting app or browser is frontmost, and keeps watching after a meeting is detected. It pops the floating Meeting panel as soon as it sees a known meeting in progress:
+Settings → Meeting Transcription (Beta) → **Auto-show meeting panel when a call starts**. Vox checks window titles when a supported meeting app or browser becomes active and every few seconds while it is frontmost. Detection continues during a recording. If you close or minimize the controls during recording, Vox respects that choice for the rest of that recording. It pops the floating Meeting panel as soon as it sees a known meeting in progress:
 
 - Teams desktop (`Meeting in`, `Meeting with`, `Meeting compact view`, `Call with`, `(Meeting)`)
 - Zoom desktop (`Zoom Meeting`, `Zoom Webinar`)
